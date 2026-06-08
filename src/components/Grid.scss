@@ -1,0 +1,211 @@
+.grid-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    cursor: crosshair;
+    background-color: var(--gray-light);
+
+    &.wiring-mode {
+        cursor: alias;
+        /* or something indicating wiring */
+    }
+}
+
+.zoom-content {
+    /* Ensures the transform origin and size behave correctly */
+    transform-origin: 0 0;
+    width: 100%;
+    height: 100%;
+    /* Keep it potentially large if we had panning, but for scale transform it's fine */
+}
+
+.grid-background {
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    background-image:
+        linear-gradient(var(--gray) 1px, transparent 1px),
+        linear-gradient(90deg, var(--gray) 1px, transparent 1px);
+    background-size: var(--grid-size) var(--grid-size);
+    opacity: 0.5;
+    border: 4px solid var(--black-light);
+    box-sizing: content-box;
+    /* Expand border outside the grid area */
+}
+
+.connections-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.machine-container {
+    z-index: 10;
+}
+
+/* Base styles for all lines */
+.conveyor-line-outline,
+.conveyor-line-fill,
+.conveyor-preview-outline,
+.conveyor-preview-fill {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* OUTLINE / BORDER (Bottom Layer) */
+.conveyor-line-outline {
+    stroke: var(--gray);
+    stroke-width: 20;
+}
+
+.conveyor-preview-outline {
+    stroke: var(--gray);
+    stroke-width: 16;
+    stroke-dasharray: 10 10;
+    opacity: 0.6;
+}
+
+/* FILL / BODY (Top Layer) */
+.conveyor-line-fill {
+    stroke: var(--yellow-light);
+    stroke-width: 16;
+}
+
+.conveyor-preview-fill {
+    stroke: var(--yellow-light);
+    stroke-width: 10;
+    stroke-dasharray: 10 10;
+    animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -20;
+    }
+}
+
+/* Invalid Preview Override */
+.conveyor-preview-outline.invalid.invalid,
+.conveyor-preview-fill.invalid.invalid {
+    stroke: #ff4444;
+}
+
+.machine-ghost {
+    position: absolute;
+    pointer-events: none;
+    z-index: 20;
+    background: repeating-linear-gradient(-45deg,
+            #c4c1c1,
+            #c4c1c1 5px,
+            transparent 5px,
+            transparent 10px);
+    border: 1px solid #c4c1c1;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.machine-ghost.invalid-placement {
+    background: repeating-linear-gradient(-45deg,
+            rgba(255, 0, 0, 0.2),
+            rgba(255, 0, 0, 0.2) 5px,
+            transparent 5px,
+            transparent 10px);
+    border: 4px solid rgba(255, 0, 0, 0.2);
+}
+
+.ghost-arrow {
+    position: absolute;
+    width: var(--grid-size);
+    height: var(--grid-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 25; // Above ghost (20)
+
+    &.input-arrow {
+        color: var(--gray);
+    }
+
+    &.output-arrow {
+        color: var(--gray);
+    }
+}
+
+/* Box Selection */
+.selection-box {
+    position: absolute;
+    background-color: rgba(66, 135, 245, 0.2);
+    border: 1px solid rgba(66, 135, 245, 0.6);
+    pointer-events: none;
+    z-index: 100;
+}
+
+/* Selected Machine Highlight */
+.machine-container.selected .machine-body {
+    outline: 2px solid #4dabf7;
+    box-shadow: 0 0 15px rgba(77, 171, 247, 0.4);
+    z-index: 15;
+    /* Pop up slightly */
+}
+
+/* Selected Conveyor Highlight */
+/* We target the outline/border polyline for highlight */
+.conveyor-line-outline.selected,
+.pipe-line-outline.selected {
+    stroke: #4dadf7;
+    stroke-width: 26;
+    /* Wider than normal 20 */
+    opacity: 0.8;
+}
+
+/* ===== Pipe (Liquid) Line Styles ===== */
+
+.pipe-line-outline,
+.pipe-line-fill,
+.pipe-preview-outline,
+.pipe-preview-fill {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* OUTLINE / BORDER */
+.pipe-line-outline {
+    stroke: var(--gray);
+    stroke-width: 20;
+}
+
+.pipe-preview-outline {
+    stroke: var(--gray);
+    stroke-width: 16;
+    stroke-dasharray: 10 10;
+    opacity: 0.6;
+}
+
+/* FILL / BODY */
+.pipe-line-fill {
+    stroke: #7cc4f0;
+    stroke-width: 16;
+}
+
+.pipe-preview-fill {
+    stroke: #7cc4f0;
+    stroke-width: 10;
+    stroke-dasharray: 10 10;
+    animation: dash 1s linear infinite;
+}
+
+/* Invalid Preview Override */
+.pipe-preview-outline.invalid.invalid,
+.pipe-preview-fill.invalid.invalid {
+    stroke: #ff4444;
+}

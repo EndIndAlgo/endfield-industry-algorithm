@@ -1,0 +1,302 @@
+.machine-container {
+    user-select: none;
+    -webkit-user-select: none;
+    position: absolute;
+    left: calc(var(--x) * var(--grid-size));
+    top: calc(var(--y) * var(--grid-size));
+    width: calc(var(--w) * var(--grid-size));
+    height: calc(var(--h) * var(--grid-size));
+    padding: 3px;
+    /* Shrink body relative to grid cell */
+    z-index: 10;
+
+    &:hover {
+        z-index: 2000;
+    }
+}
+
+.machine-body {
+    width: 100%;
+    height: 100%;
+    background-color: transparent;
+    border: 3px solid var(--gray-dark);
+    border-radius: 1px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none;
+    box-sizing: border-box;
+
+    .machine-label {
+        position: absolute;
+        top: 100%;
+        left: 100%;
+        bottom: auto;
+        right: auto;
+
+        background-color: var(--black);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px 12px 4px 4px;
+        border-top: 4px solid var(--green);
+        font-weight: normal;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s;
+        z-index: 1000;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        font-size: 12px;
+
+        >div:first-child {
+            font-size: 16px;
+        }
+    }
+
+    &:hover .machine-label {
+        opacity: 1;
+    }
+}
+
+.machine-container {
+    border: 2px solid transparent;
+    border-radius: 2px;
+    box-sizing: border-box;
+
+    &:hover {
+        border-color: white;
+        box-shadow: 0 0 8px rgba(45, 45, 45, 0.6);
+    }
+}
+
+
+.port {
+    position: absolute;
+    width: 20px;
+    height: 28px;
+    /* Default square */
+    background-color: #c4c1c1;
+    /* Outer layer bg */
+    border: 1.5px solid var(--gray-dark);
+    /* Outer border #5f5d5d */
+    border-radius: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Gap acts as outer layer thickness */
+
+    /* Reset text styles on outer */
+    font-size: 0;
+}
+
+/* Align inner based on side/direction */
+.port.left {
+    justify-content: flex-start;
+    padding: 3px 4px 3px 0px;
+}
+
+.port.right {
+    justify-content: flex-end;
+    padding: 3px 0px 3px 4px;
+}
+
+.port.top {
+    width: 28px;
+    height: 20px;
+    align-items: flex-start;
+    padding: 0px 3px 4px 3px;
+}
+
+.port.bottom {
+    width: 28px;
+    height: 20px;
+    align-items: flex-end;
+    padding: 4px 3px 0px 3px;
+}
+
+.port-inner {
+    width: 100%;
+    height: 100%;
+    background-color: var(--gray-light);
+    /* Inner layer bg */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 10px;
+    color: var(--gray-dark);
+    font-family: monospace;
+    font-weight: bold;
+    line-height: 1;
+}
+
+/* SVG Arrow Styling */
+.port.input .port-inner svg,
+.port.output .port-inner svg {
+    width: 100%;
+    height: 100%;
+    color: var(--gray);
+    display: block;
+}
+
+/* 混口 (同時有輸入+輸出) — 菱形不參與方向旋轉 */
+.port.mixed .port-inner svg {
+    transform: none !important;
+}
+
+/* COMPACT MODE OVERRIDES */
+/* SMART SIZING OVERRIDES */
+/* Applied directly to .port elements via getPortClasses() in Machine.tsx */
+
+/* Base overrides for any shrunk port to adjust padding/border */
+.port.shrink-depth,
+.port.shrink-length {
+    border-width: 1px;
+    padding: 1px;
+    /* Default tighter padding */
+
+    .port-inner svg {
+        width: 12px;
+        /* Uniform small icon */
+        height: 12px;
+    }
+}
+
+/* 1. SHRINK DEPTH (Opposite port present) */
+/* Depth becomes 8px. Length (along edge) stays 28px unless shrunk. */
+.port.shrink-depth {
+
+    &.left,
+    &.right {
+        width: 8px;
+    }
+
+    &.top,
+    &.bottom {
+        height: 8px;
+    }
+
+    /* Icon needs to fit in 8px depth? user used 10px icon before. */
+    /* If depth is 8px, 12px icon might overflow. Let's use 10px or adjust line-height? */
+    /* Let's stick to user's 10px icon preference for compacts */
+    .port-inner svg {
+        width: 10px;
+        height: 10px;
+    }
+}
+
+/* 2. SHRINK LENGTH (Adjacent port present) */
+/* Length becomes 12px. Depth stays 20px unless shrunk. */
+.port.shrink-length {
+
+    &.left,
+    &.right {
+        height: 12px;
+    }
+
+    &.top,
+    &.bottom {
+        width: 12px;
+    }
+
+    .port-inner svg {
+        width: 10px;
+        height: 10px;
+    }
+}
+
+/* 3. BOTH (Corner case, e.g. Splitter/Merger with 3-4 ports) */
+/* Uses the intersection of above rules automatically, resulting in 8x12 or 12x8 */
+
+/* Correction for padding specificities similar to previous compact-1x1 */
+.port.shrink-depth.shrink-length {
+    &.left {
+        padding: 1px 2px 1px 0px;
+    }
+
+    &.right {
+        padding: 1px 0px 1px 2px;
+    }
+
+    &.top {
+        padding: 0px 1px 2px 1px;
+    }
+
+    &.bottom {
+        padding: 2px 1px 0px 1px;
+    }
+}
+
+/* Padding adjustments for JUST shrink-depth (Flat ports) */
+.port.shrink-depth:not(.shrink-length) {
+    &.left {
+        padding: 1px 2px 1px 0px;
+    }
+
+    &.right {
+        padding: 1px 0px 1px 2px;
+    }
+
+    &.top {
+        padding: 0px 1px 2px 1px;
+    }
+
+    &.bottom {
+        padding: 2px 1px 0px 1px;
+    }
+}
+
+
+/* Input Arrows (Point INTO machine) */
+.port.left.input .port-inner svg {
+    transform: rotate(0deg);
+}
+
+.port.top.input .port-inner svg {
+    transform: rotate(90deg);
+}
+
+.port.right.input .port-inner svg {
+    transform: rotate(180deg);
+}
+
+.port.bottom.input .port-inner svg {
+    transform: rotate(270deg);
+}
+
+/* Output Arrows (Point OUT of machine) */
+.port.right.output .port-inner svg {
+    transform: rotate(0deg);
+}
+
+.port.bottom.output .port-inner svg {
+    transform: rotate(90deg);
+}
+
+.port.left.output .port-inner svg {
+    transform: rotate(180deg);
+}
+
+.port.top.output .port-inner svg {
+    transform: rotate(270deg);
+}
+
+.port.output.clickable {
+    cursor: pointer;
+
+    &:hover {
+        .port-inner {
+            background: var(--yellow-light);
+        }
+    }
+}
+
+.port.output.active {
+    border-color: var(--yellow-light);
+
+    .port-inner {
+        background: var(--yellow-light);
+    }
+}

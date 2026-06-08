@@ -1,0 +1,72 @@
+@font-face {
+  font-family: 'NaikaiFont-Bold';
+  src: url('/fonts/NaikaiFont-Bold.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --grid-size: 40px;
+  --gray-light: #e5e1e1;
+  --gray: #c4c1c1;
+  --gray-dark: #5f5d5d;
+  --yellow-light: #f5f08a;
+  --yellow: #fffa00;
+  --black-light: #3d3d3d;
+  --black: rgb(29, 29, 29, 0.8);
+  --black-dark: #121212;
+  --green: #abcd41;
+  --orange-light: #ffcc00;
+  --orange: #e79c3a;
+  --orange-dark: #d17700;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  background-color: var(--gray-light);
+  color: white;
+  overflow: hidden;
+  /* Prevent scroll */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.gray-btn {
+  background-color: var(--gray-light);
+  border: 2px solid var(--gray-light);
+  box-shadow: inset 0px 0px 2px rgba(0, 0, 0, 0.8), 0px 4px 4px rgba(0, 0, 0, 0.5);
+  border-radius: 999px;
+  min-width: 120px;
+  color: var(--gray-dark);
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.gray-btn:hover {
+  transform: translateY(-2px);
+}
+
+.yellow-btn {
+  background-color: var(--yellow);
+  border: 2px solid var(--yellow);
+  box-shadow: inset 0px 0px 2px rgba(0, 0, 0, 0.8), 0px 4px 4px rgba(0, 0, 0, 0.5);
+  border-radius: 999px;
+  min-width: 120px;
+  color: var(--gray-dark);
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.yellow-btn:hover {
+  transform: translateY(-2px);
+}
+
+/* Simplified Chinese Font Support */
+body[lang="zh-CN"] {
+  font-family: "Microsoft YaHei", "SimHei", "Noto Sans SC", sans-serif !important;
+}

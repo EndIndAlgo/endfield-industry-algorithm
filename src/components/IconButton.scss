@@ -1,0 +1,63 @@
+.icon-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    outline: none;
+    padding: 0;
+    border-radius: 50% !important;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c1bebd;
+    transition: background-color 0.2s, color 0.2s;
+    position: relative; // For tooltip positioning
+
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+        color: #fff;
+
+        .tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+    }
+
+    .icon-svg {
+        transform: scale(3);
+    }
+
+
+    .tooltip {
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%) translateY(-5px);
+        background-color: #333;
+        color: #fff;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.2s ease;
+        pointer-events: none; // Prevent tooltip from interfering with hover
+        z-index: 10;
+        margin-top: 8px; // Spacing from button
+
+        // Optional: Add a little arrow
+        &::before {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 0 4px 4px 4px;
+            border-style: solid;
+            border-color: transparent transparent #333 transparent;
+        }
+    }
+}

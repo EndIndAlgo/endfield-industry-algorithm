@@ -1,0 +1,65 @@
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 60px;
+    padding: 0 36px 0 20px;
+    background-color: var(--gray-light);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
+    z-index: 1000;
+    box-sizing: border-box;
+
+    .logo {
+        font-size: 1.5rem;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+
+        .icon {
+            height: 48px;
+            border-radius: 24%;
+            object-fit: contain;
+        }
+    }
+
+    .center-actions {
+        flex: 1;
+        display: flex;
+        justify-content: flex-end;
+        /* Push to right, near actions */
+        padding-right: 20px;
+        align-items: center;
+
+        /* grid-select styles removed in favor of Chakra UI */
+        button {
+            background: var(--gray-dark) !important;
+        }
+
+        .chakra-select__item {
+            color: var(--black-light) !important;
+        }
+    }
+
+    .actions {
+        display: flex;
+        gap: 16px;
+
+        button {
+            background-color: var(--gray-light);
+            border: 3px solid var(--gray-dark);
+            color: var(--black-light);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s, color 0.2s;
+
+            &:hover {
+                background-color: var(--gray-dark);
+                color: var(--yellow);
+            }
+        }
+    }
+}
