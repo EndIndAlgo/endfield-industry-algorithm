@@ -21,75 +21,75 @@ npm run preview      # 预览生产构建
 ## 技术栈
 
 - **React 19** + **TypeScript 5.9** (strict 模式) + **Vite 7**
-- **Chakra UI v3** 组件库 + **Emotion** CSS-in-JS
-- **Zustand 5** 状态管理（切片模式）
-- **SCSS** 组件级样式 + **lucide-react** 图标库 + **classnames** 辅助
+- **Chakra UI v3** 组件库 + **Emotion** CSS-in-JS + **framer-motion**
+- **Zustand 5** 状态管理（切片模式，无 `useShallow` / selector 优化）
+- **SCSS** 组件级样式 + **lucide-react** + @iconify/react 图标 + **classnames**
 - 路径别名: `@` → `src/`
 
-## 项目结构
+## 完整项目结构（每个文件均经过审查）
 
 ```
 src/
-├── main.tsx                       # 入口，ChakraProvider + StrictMode
-├── App.tsx                        # 根组件，uiView 条件路由 + 键盘快捷键
-├── App.css                        # 根布局样式
-├── index.css                      # 全局 CSS 变量、字体、.gray-btn/.yellow-btn
-├── types.ts                       # 共享类型 + GameMode/Side 常量映射
+├── main.tsx                          # 入口：StrictMode + ChakraProvider(defaultSystem) + <App/>
+├── App.tsx                           # 根组件：uiView 条件路由 + 全局 Ctrl+Z/Y/S 快捷键
+├── App.css                           # #root flex column 布局, .app-content flex:1
+├── index.css                         # @font-face NaikaiFont-Bold, CSS 变量(--grid-size等), .gray-btn/.yellow-btn, 简中字体回退
+├── types.ts                          # 共享类型：Point, Direction(0|1|2|3), Side, PortType, MachineConfig, PlacedMachine, Connection, GameMode, sideToDir 常量
 ├── types/
-│   └── opencc-js.d.ts             # opencc-js 环境类型声明
+│   └── opencc-js.d.ts               # opencc-js 类型声明（Converter, ConverterOptions）
 ├── store/
-│   ├── gameStore.ts               # Zustand store 入口（17 行，组合各切片）
-│   ├── settingsStore.ts           # 语言偏好，persist 到 localStorage
+│   ├── gameStore.ts                  # Zustand thin wrapper (17行)：组合6个切片创建 useGameStore
+│   ├── settingsStore.ts             # 独立 persist store：language ('zh-TW'|'zh-CN'), localStorage key='settings-storage'
 │   └── slices/
-│       ├── types.ts               # 各切片接口定义 + GameState 组合类型
-│       ├── canvasSlice.ts         # 画布缩放/平移/网格尺寸
-│       ├── machinesSlice.ts       # 机器 CRUD、模式切换、取消操作
-│       ├── wiringSlice.ts         # 布线状态、路径预览、提交（含桥梁/分割逻辑）
-│       ├── selectionSlice.ts      # 框选、批量移动、复制选区
-│       ├── historySlice.ts        # 撤销/重做快照
-│       └── blueprintSlice.ts      # UI 视图切换、蓝图加载/插入
+│       ├── types.ts                  # 6个切片接口定义 + HistorySnapshot + GameState 交集类型
+│       ├── canvasSlice.ts           # zoom(默认1), pan({0,0}), gridWidth/Height(默认24), setZoom/setPan/setGridSize
+│       ├── machinesSlice.ts         # machines[], mode, selectedMachineId, previewRotation, movingMachineBackup; CRUD + 长按拾取(pickupMachine) + cancelOperation
+│       ├── wiringSlice.ts           # connections[], isWiring, isWiringValid, wiringSource, wiringPreviewPath; startWiring/updateWiringPreview/commitWiring/cancelWiring + splitConnectionAt(内部)
+│       ├── selectionSlice.ts        # selectionStart/End, selectedMachineIds/ConnectionIds, moveAnchor, movingMachinesSnapshot/ConnectionsSnapshot, isCopying; 框选/批量移动/复制/删除
+│       ├── historySlice.ts          # history: { past: HistorySnapshot[], future: HistorySnapshot[] }, takeSnapshot/undo/redo; 容量无上限
+│       └── blueprintSlice.ts       # uiView, blueprintListMode, currentBlueprintId/Name; loadGame/resetGame/setUiView/startInsertBlueprint/startInsertBlueprintOnNewMap
 ├── config/
-│   ├── machines.ts                # 24 种机器定义（MachineConfig[] + getMachineConfig()）
-│   ├── materials.ts               # 83 种材料定义（Record<string, Material>）
-│   ├── constants.ts               # 网格尺寸预设（24×24 ~ 70×70）
-│   └── memberInfo.ts              # 团队成员信息（关于页面）
+│   ├── machines.ts                   # MACHINES: 24 种机器 MachineConfig[] + getMachineConfig(id) 查找函数
+│   ├── materials.ts                  # MATERIALS: 83 种材料 Record<string, Material>
+│   ├── constants.ts                  # GRID_PRESETS: 6 种网格尺寸 [{label,width,height}]
+│   └── memberInfo.ts                 # memberInfo: 团队成员数组 [{name,avatar,message,tags,mail,...}]
 ├── utils/
-│   ├── gridUtils.ts               # L 形路由寻路、碰撞检测、占用网格、包围盒计算
-│   ├── machineUtils.ts            # 旋转数学、供电范围计算
-│   ├── shareUtils.ts              # V3 二进制分享编码/解析 + html2canvas 截图
-│   ├── storage.ts                 # 蓝图 localStorage CRUD
-│   └── toaster.ts                 # Chakra UI toaster 单例
+│   ├── gridUtils.ts                  # getMachineRect, isOverlapping, buildOccupancyGrid, buildConnectionGrid, checkCollision, getVectorFromSide, routeManhattan(双L形), findPath, getCornerPoints, dirFromPoints, getMachinePortCheckPositions, calculateContentDimensions
+│   ├── machineUtils.ts               # getRotatedDimensions, getRotatedPorts, buildPowerGrid, isMachinePowered
+│   ├── shareUtils.ts                 # toBase64Url/fromBase64Url, encode/decode (V3二进制: 3字节ID+3字节位置), generateShareUrl, parseShareUrl, captureBlueprintScreenshot(html2canvas)
+│   ├── storage.ts                    # Blueprint 接口, getBlueprints/saveBlueprint/deleteBlueprint/loadBlueprint/getLastBlueprintId/setLastBlueprintId
+│   └── toaster.ts                    # createToaster({placement:'bottom-end'}) 单例
 ├── hooks/
-│   └── useChineseConverter.ts     # opencc-js 繁/简热切换（MutationObserver）
+│   └── useChineseConverter.ts        # 繁/简热切换：动态 import('opencc-js') + 遍历文本节点 + MutationObserver 监听增量变更 + cn→tw 回转换
 ├── components/
-│   ├── Grid.tsx                   # 核心画布（鼠标/键盘事件、平移/缩放、SVG 连线层）
-│   ├── Grid.scss
-│   ├── Machine.tsx                # 已放置机器（端口渲染、长按拾取、供电指示）
-│   ├── Machine.scss
-│   ├── Header.tsx                 # 顶部栏（网格尺寸选择、保存、分享、关于）
-│   ├── Header.scss
-│   ├── Toolbar.tsx                # 底部面板（模式切换 + 机器分类标签页）
-│   ├── Toolbar.scss
-│   ├── About.tsx                  # 关于/鸣谢页面
-│   ├── BlueprintList.tsx          # 蓝图管理列表（卡片 + 抽屉详情）
-│   ├── Settings.tsx               # 语言切换设置
-│   ├── ShareModal.tsx             # 分享弹窗（URL 生成 + 截图预览）
-│   ├── SaveDialog.tsx             # 保存命名对话框
-│   ├── IconButton.tsx             # 可复用图标按钮 + CSS tooltip
-│   ├── IconButton.scss
-│   ├── OperationHints.tsx         # 上下文快捷键提示面板
-│   ├── OperationHints.scss
-│   ├── LoadingScreen.tsx          # 资源预加载启动画面（import.meta.glob eager）
-│   ├── LoadingScreen.scss
+│   ├── Grid.tsx                      # 核心画布(~560行)：鼠标事件(点击/中键拖拽/滚轮缩放)、键盘快捷键(E/R/X/F/F1/M/Escape)、SVG连线层(已确认+预览+批量移动预览3处重复extendPoint)、机器预影+供电范围+端口箭头、框选矩形、批量移动虚影
+│   ├── Grid.scss                     # 网格背景(background-image linear-gradient)、连线/管道双线样式(outline+fill)、预影动画(@keyframes dash)、选中高亮、框选样式
+│   ├── Machine.tsx                   # 已放置机器(~277行)：端口渲染(输入/输出/双端口菱形)、长按500ms拾取、供电不足警告图标(@iconify uil:battery-bolt)、hover标签(机器名+操作提示)、端口碰撞检测缩容(getPortClasses: shrink-depth/shrink-length)
+│   ├── Machine.scss                  # 机器容器定位(CSS --x,--y,--w,--h)、端口尺寸/方向/缩容规则(.shrink-depth/.shrink-length)、输入/输出箭头旋转方向、clickable/active状态
+│   ├── Header.tsx                    # 顶部栏：logo、Chakra Select(Root)网格尺寸选择(handleValueChange: takeSnapshot+setGridSize)、保存/蓝图列表/分享/设置/关于5个IconButton
+│   ├── Header.scss                   # flex布局，center-actions右对齐，actions按钮hover效果
+│   ├── Toolbar.tsx                   # 底部面板：Chakra Tabs(6分类: 核心/物流/仓储存取/基础生产/合成制造/电力) + 模式切换(BUILD/WIRE/DEVICE_SELECT) + 机器按钮列表(按分类筛选)
+│   ├── Toolbar.scss                  # 固定底部居中、毛玻璃背景、机器按钮hover上浮动画(translateY(-16px))
+│   ├── About.tsx                     # 关于页面：版权声明 + 成员卡片列表(作者+贡献者，含头像/标签/联系方式复制)
+│   ├── BlueprintList.tsx             # 蓝图管理：新建卡片 + 蓝图网格(名称/日期/尺寸) + Chakra Drawer详情(创建日期/尺寸/标签) + 插入模式(贴到当前/新建地图放置)
+│   ├── Settings.tsx                  # 设置页面：Chakra Tabs语言切换(zh-TW/zh-CN)
+│   ├── ShareModal.tsx                # 分享弹窗：generateShareUrl + captureBlueprintScreenshot(100ms延迟等DOM稳定) + 复制链接/下载图片
+│   ├── SaveDialog.tsx                # Chakra Dialog保存命名(Enter确认)
+│   ├── IconButton.tsx                # 通用IconButton：@iconify/react Icon + CSS tooltip(绝对定位+箭头伪元素)
+│   ├── IconButton.scss              # 圆形36px按钮、tooltip淡入动画、::before箭头
+│   ├── OperationHints.tsx            # 操作提示面板：根据mode/hasSelection/selectedMachineId动态显示快捷键组合(含鼠标图标)
+│   ├── OperationHints.scss          # 绝对定位右侧居中、JetBrains Mono字体、键盘图标样式
+│   ├── LoadingScreen.tsx             # 启动画面：import.meta.glob eager预加载assets/items所有图片→进度条→黄色展开动画→淡出
+│   ├── LoadingScreen.scss           # 暗底+黄色竖条展开动画(cubic-bezier)、左下角百分比+右上角loading图
 │   └── ui/
-│       ├── tooltip.tsx            # Chakra UI Tooltip 封装
-│       └── About.scss             # About/Settings 共享样式
-└── assets/
-    ├── logo.png
-    ├── loading.png
-    ├── members/                   # 团队成员头像
-    ├── machines/                  # 机器图标 .webp
-    └── items/                     # 材料图标（LoadingScreen 预加载，item_0~item_131）
+│       ├── tooltip.tsx               # Chakra Tooltip封装：支持showArrow/portalled/portalRef/contentProps，disabled时直接返回children
+│       └── About.scss               # .member-icon-btn hover变黄
+├── assets/
+│   ├── logo.png                      # 48px logo
+│   ├── loading.png                   # 加载画面右侧图(240px)
+│   ├── members/                      # 团队成员头像 (author.gif, tata.png)
+│   ├── machines/                     # 机器图标 .webp (以machine.id命名, 如pco.webp)
+│   └── items/                        # 材料图标 (item_0~item_131, LoadingScreen eager预加载)
 ```
 
 ## 核心架构
@@ -100,21 +100,21 @@ src/
 main.tsx (ChakraProvider)
 └─ App.tsx (uiView 路由)
     ├─ [editor]
-    │   ├─ Header.tsx          → useGameStore (gridWidth/gridHeight/uiView/save…)
+    │   ├─ Header.tsx          → useGameStore (gridWidth/gridHeight/uiView)
     │   │   └─ ShareModal.tsx  → generateShareUrl + captureBlueprintScreenshot
-    │   ├─ Grid.tsx            → useGameStore（核心画布，约 30 字段）
+    │   ├─ Grid.tsx            → useGameStore（核心画布，解构约30个字段）
     │   │   └─ Machine.tsx ×N  → useGameStore (mode/machines/wiringSource/zoom…)
-    │   ├─ Toolbar.tsx         → useGameStore (mode/machines/selectedMachineId…)
-    │   ├─ OperationHints.tsx  → useGameStore (mode)
-    │   └─ SaveDialog.tsx
-    ├─ [list]     → BlueprintList.tsx
-    ├─ [about]    → About.tsx
-    └─ [settings] → Settings.tsx → useSettingsStore
+    │   ├─ Toolbar.tsx         → useGameStore (mode/machines/selectedMachineId)
+    │   ├─ OperationHints.tsx  → useGameStore (mode + 选区状态)
+    │   └─ SaveDialog.tsx      → 纯UI，回调由App.tsx管理
+    ├─ [list]     → BlueprintList.tsx  → useGameStore (startInsertBlueprint/startInsertBlueprintOnNewMap)
+    ├─ [about]    → About.tsx          → useGameStore (setUiView)
+    └─ [settings] → Settings.tsx       → useSettingsStore (language, setLanguage)
 ```
 
-**数据流方向**: 用户交互 → 组件调用 store action → `set()` 更新状态 → React 重渲染受影响组件。  
-**持久化**: 仅 explicit save → `storage.ts` → localStorage，无自动保存。  
-**分享解析**: URL query param → `parseShareUrl()` → `loadGame()` 或 `startInsertBlueprint*()`。
+**数据流方向**: 用户交互 → 组件调用 store action → `set()` 更新状态 → React 重渲染受影响组件。
+**持久化**: 仅 explicit save → `storage.ts` → localStorage，无自动保存、无云端同步。
+**分享解析**: URL query param `?bp=` → `parseShareUrl()` → decode二进制 → `loadGame()` 或 `startInsertBlueprint*()`。
 
 ### 状态管理：Zustand 切片模式
 
@@ -133,24 +133,25 @@ export const useGameStore = create<GameState>()((...a) => ({
 
 每个切片是一个 `StateCreator<GameState, [], [], SliceName>` 函数，**切片间可跨调用**（通过 `get()` 访问其它切片方法）。
 
-| 切片 | 文件 | 职责 |
-|------|------|------|
-| Canvas | `canvasSlice.ts` | `zoom`, `pan`, `gridWidth/gridHeight`, `setZoom`, `setPan`, `setGridSize` |
-| Machines | `machinesSlice.ts` | `machines`, `mode`, `selectedMachineId`, `previewRotation`, `movingMachineBackup`; CRUD、旋转预览、长按拾取、`cancelOperation` |
-| Wiring | `wiringSlice.ts` | `connections`, `isWiring`, `isWiringValid`, `wiringSource`, `wiringFixedPath`, `wiringPreviewPath`; `startWiring`/`updateWiringPreview`/`addWiringAnchor`/`commitWiring`/`cancelWiring` |
-| Selection | `selectionSlice.ts` | `selectionStart/End`, `selectedMachineIds`, `selectedConnectionIds`, `moveAnchor`, `movingMachinesSnapshot`, `isCopying`; 框选、批量移动、复制选区、删除 |
-| History | `historySlice.ts` | `history: { past: HistorySnapshot[], future: HistorySnapshot[] }`; `takeSnapshot`/`undo`/`redo` |
-| Blueprint | `blueprintSlice.ts` | `uiView`, `blueprintListMode`, `currentBlueprintId/Name`; `loadGame`/`resetGame`/`setUiView`/蓝图插入 |
+| 切片 | 文件 | 状态字段 | 关键方法 |
+|------|------|----------|----------|
+| Canvas | `canvasSlice.ts` | `zoom`, `pan`, `gridWidth`, `gridHeight` | `setZoom`, `setPan`, `setGridSize` |
+| Machines | `machinesSlice.ts` | `machines`, `mode`, `selectedMachineId`, `previewRotation`, `movingMachineBackup` | `addMachine`(含碰撞+连线网格双重检测), `removeMachine`(含级联删除端口连线), `pickupMachine`(长按拾取), `cancelOperation`(统一Escape) |
+| Wiring | `wiringSlice.ts` | `connections`, `isWiring`, `isWiringValid`, `wiringSource`, `wiringPreviewPath` | `startWiring`, `updateWiringPreview`(含多端口同格方向选择), `commitWiring`(110行单体函数: 交叉检测+桥生成+连线分割+状态合并) |
+| Selection | `selectionSlice.ts` | `selectionStart/End`, `selectedMachineIds/ConnectionIds`, `moveAnchor`, `movingMachinesSnapshot/ConnectionsSnapshot`, `isCopying` | `commitBoxSelection`(shift=toggle), `deleteSelected`(含级联删连线), `startBatchMove`, `startCopySelection`, `commitBatchMove` |
+| History | `historySlice.ts` | `history: { past, future }` | `takeSnapshot`, `undo`, `redo` |
+| Blueprint | `blueprintSlice.ts` | `uiView`, `blueprintListMode`, `currentBlueprintId/Name` | `loadGame`, `resetGame`, `startInsertBlueprint`, `startInsertBlueprintOnNewMap`(自选网格尺寸) |
 
 **切片间交互关键路径**：
 - `machinesSlice.cancelOperation()` 调用 `get().cancelWiring()` 和读取 `get().movingMachinesSnapshot`
-- `selectionSlice.commitBatchMove()` 调用 `get().takeSnapshot()` 创建历史快照
+- `selectionSlice.commitBatchMove()` / `deleteSelected()` 内部调用 `get().takeSnapshot()` 创建历史快照
 - `historySlice.undo()/redo()` 调用 `get().cancelOperation()` 清理中间状态
+- `blueprintSlice.startInsertBlueprint*()` 复用 `selectionSlice` 的 `moveAnchor`/`movingMachinesSnapshot`/`movingConnectionsSnapshot` 字段
 
 ### GameMode 状态机
 
 ```typescript
-// src/types.ts
+// src/types.ts:65-73
 export const GameMode = {
   BUILD: 'BUILD',
   WIRE: 'WIRE',
@@ -158,71 +159,78 @@ export const GameMode = {
   MOVE_SELECTION: 'MOVE_SELECTION',
   BLUEPRINT_PLACE: 'BLUEPRINT_PLACE'
 } as const;
-export type GameMode = typeof GameMode[keyof typeof GameMode];
 ```
 
 代码中使用 `GameMode.BUILD`（字面量常量对象）而非裸字符串。
 
 | 模式 | 触发方式 | 鼠标操作 | 渲染差异 |
 |------|----------|----------|----------|
-| BUILD | R 键 / 工具栏 | 单击放置机器、长按拾取 | 机器虚影 + 供电范围 + 端口箭头 |
-| WIRE | E 键 / 工具栏 | 点击输出口开始、点击网格添加锚点、点击输入口完成 | 连线预览 SVG（虚线/实线） |
-| DEVICE_SELECT | X 键 / 工具栏 | 拖拽框选 | 选择矩形 div |
-| MOVE_SELECTION | 拖拽已选中项（或 M 键） | 移动坐标系 | 批量虚影 + 批量连线 SVG |
-| BLUEPRINT_PLACE | 蓝图插入 | 单击确认放置 | 蓝图轮廓虚影 |
+| BUILD | R键/工具栏指针按钮 | 单击放置机器、长按500ms拾取 | 机器虚影(.machine-ghost) + 供电范围虚线框 + 端口箭头 |
+| WIRE | E键/工具栏闪电按钮 | 点击输出口开始、点击输入口完成 | 连线预览SVG(虚线动画/实线)，无效时变红 |
+| DEVICE_SELECT | X键/工具栏框选按钮 | 拖拽框选 | 蓝色选择矩形(.selection-box) + Shift反选 |
+| MOVE_SELECTION | M键(有选区时)/拖拽已选中项 | 移动坐标系 | 批量半透明机器虚影 + 批量连线SVG(0.5透明度) |
+| BLUEPRINT_PLACE | 蓝图插入 | 单击确认放置 | 同MOVE_SELECTION预览效果 |
 
-`cancelOperation()` (Escape) 统一处理各模式返回干净状态。
+`cancelOperation()` (Escape/右键) 统一处理各模式返回干净状态：
+- WIRE模式 → `cancelWiring()`
+- 长按拾取中 → 归还机器到原位置
+- DEVICE_SELECT → 清除选择框+选中的ID列表
+- MOVE_SELECTION → 还原快照(isCopying=false) 或 归还原机器(isCopying=true)
+- BLUEPRINT_PLACE → 同MOVE_SELECTION逻辑
 
 ### 画布系统（基于 DOM，非 `<canvas>`）
 
-| 层 | 实现方式 |
-|----|----------|
-| 网格线 | CSS `background-image` 渐变 |
-| 机器 | 绝对定位 `div`，CSS 自定义属性 `--x`/`--y`/`--w`/`--h` 定位 |
-| 传送带连线 | SVG `<polyline>` 叠加层（描边 + 填充双线效果） |
-| 平移/缩放 | CSS `transform: translate(panX, panY) scale(zoom)` |
-| 坐标转换 | `worldX = floor((screenX - panX) / (GRID_SIZE * zoom))` |
+| 层 | 实现方式 | 关键参数 |
+|----|----------|----------|
+| 网格线 | CSS `background-image` 双渐变 | `var(--grid-size)` = 40px, opacity 0.5 |
+| 机器 | 绝对定位 `div`，CSS 自定义属性 `--x`/`--y`/`--w`/`--h` | 3px padding, border: 3px solid var(--gray-dark) |
+| 传送带连线 | SVG `<polyline>` 双线效果(outline描边+fill填充) | Solid=yellow-light(16px)/Liquid=#7cc4f0(16px), outline统一20px |
+| 平移/缩放 | CSS `transform: translate(panX, panY) scale(zoom)` | zoom范围0.18~3.0, 无平移范围限制 |
+| 坐标转换 | `worldX = floor((screenX - panX) / (GRID_SIZE * zoom))` | GRID_SIZE硬编码为40 |
 
-**缩放锚定鼠标位置**：缩放前后鼠标下的世界坐标保持不变，通过调整 `pan` 补偿。  
-**GRID_SIZE**: 40px（硬编码在 `index.css` 的 `--grid-size` 和 `Grid.tsx` 中保持同步）。
+**缩放锚定鼠标位置**：缩放前后鼠标下的世界坐标保持不变，通过调整 `pan` 补偿。
+**GRID_SIZE**: 40px，需同时在 `index.css:10` 的 `--grid-size` 和 `Grid.tsx:12` 的 `const GRID_SIZE = 40` 中保持同步。
 
 ### 寻路系统（L 形曼哈顿路由）
 
 `routeManhattan()` 不是 A*，而是**双 L 形路由**算法：
-1. 计算 `|dx|` 和 `|dy|`，确定主导轴
+1. 计算 `|dx|` 和 `|dy|`，确定主导轴（`|dx| >= |dy|` → 水平优先）
 2. 尝试主导轴优先的 L 形路径（恰好 1 个转弯）
 3. 若碰撞，尝试另一条 L 形（次轴优先）
 4. 两者均失败则返回 null——用户需手动点击添加锚点绕过障碍
 
-**占用网格**：`Uint8Array` 类型化数组，`buildOccupancyGrid(machines)` + `buildConnectionGrid(connections)` 合并为单一碰撞网格。  
-**性能**：O(path length)，无 open/closed 集合，每次 `findPath` 需重建占用网格 O(n)。
+**占用网格**：
+- `buildOccupancyGrid(machines)` → 机器占用 `Uint8Array`
+- `buildConnectionGrid(connections, portType?)` → 连线占用 `Uint8Array`
+- `findPath()` 中合并规则：同类型连线允许直穿(后续放桥)、异类型连线阻断、拐弯格一律标记阻断
+- 性能：O(path length)，无 open/closed 集合，每次 `findPath` 需重建占用网格 O(n)
 
 ### 撤销/重做
 
 - 快照粒度为完整 `{ machines, connections }` 浅拷贝
-- `takeSnapshot()` 在 mutation 前由各切片内部调用（如 `commitBatchMove`、`addMachine`），推入 `history.past`，清空 `history.future`
+- `takeSnapshot()` 在 mutation 前由各切片内部调用，推入 `history.past`，清空 `history.future`
 - `undo()` 先将当前状态推入 `future`，再恢复 `past.pop()`，同时调用 `cancelOperation()` 清理活跃操作
 - `redo()` 对称处理
-- 容量无上限
+- **容量无上限**，长时间编辑可能积累大量快照占内存
 
 ### 分享编码（V3 二进制格式）
 
-- 自定义紧凑二进制编码：每台机器 3 字节 ID + 3 字节位置/旋转，连线用 2-bit 打包方向
-- base64url 编码为 URL query param，生成的链接极短
-- 第一字节为版本号（`3` = V3），兼容 V1/V2 旧格式（pako 解压 JSON）
-- `captureBlueprintScreenshot()` 使用 html2canvas 克隆 DOM 截图
+- 自定义紧凑二进制编码：每台机器 3 字节 ID(ascii) + 1字节x + 1字节y + 1字节rotation
+- 连线用 2-bit 打包方向(0=Up,1=Right,2=Down,3=Left)，1字节存4步
+- base64url 编码为 URL query param `?bp=`，生成的链接极短
+- `captureBlueprintScreenshot()` 使用 html2canvas 克隆 `.zoom-content` DOM 截图（先设 transform:none 再截）
 
 ### 连线创建流程（完整链路）
 
 1. 切换到 WIRE 模式 → 点击机器输出端口
-2. `startWiring(tailPos, tailFacing, srcMachineId, portIndex)` — 初始化布线状态
-3. 鼠标移动 → `updateWiringPreview(pos)` — 实时计算到鼠标的 L 形路径，检测输入端吸附
-4. 可选点击网格 → `addWiringAnchor(pos)` — 固定路径锚点
+2. `startWiring(tailPos, tailFacing, portType)` — 初始化布线状态
+3. 鼠标移动 → `updateWiringPreview(pos)` — 实时计算到鼠标的 L 形路径，检测输入端吸附（多端口同格时按接近方向选择正确的side）
+4. 可选点击网格 → 添加锚点（当前版本未暴露独立锚点API，由 path 连续段隐式实现）
 5. 点击目标输入端口 → `commitWiring()`:
-   - 计算 headFacing 方向
-   - 检测与已有连线的交叉点
-   - 交叉点自动放置物流桥 (`lbr`)
-   - 分裂被交叉的连线 (`splitConnectionAt`)
+   - 从目标输入端口反推 `headFacing` 方向
+   - 检测与已有同类型连线的交叉点
+   - 交叉点自动放置物流桥 (`lbr` for Solid, `pbr` for Liquid)
+   - 分裂被交叉的连线 (`splitConnectionAt` 内部函数，递归处理多重交叉)
    - 分裂新连线并合并到 store
 
 ### 关键类型（src/types.ts）
@@ -233,62 +241,130 @@ type Point = { x: number; y: number }
 type Direction = 0 | 1 | 2 | 3  // 上右下左（顺时针）
 type Side = 'top' | 'right' | 'bottom' | 'left'
 type PortType = 'Solid' | 'Liquid' | 'Gas'
-type GameMode = 'BUILD' | 'WIRE' | 'DEVICE_SELECT' | 'MOVE_SELECTION' | 'BLUEPRINT_PLACE'
-type PlacedMachine = { id: string; machineId: string; x: number; y: number; rotation: Direction }
-type Connection = { id: string; tailFacing: Direction; path: Point[]; headFacing: Direction }
-type MachineConfig = { id, name, power, width, height, inputs: PortConfig[], outputs: PortConfig[], color, supplyRange?, autoConnect? }
+type GameMode = typeof GameMode[keyof typeof GameMode]
 
-// Side → Direction 映射常量（定义在 types.ts）
+interface MachineConfig {
+  id: string;           // 3字母缩写 e.g. 'pco', 'lbr', 'ref'
+  name: string;         // 中文名
+  power: number;        // 耗电量(0=不耗电)
+  width/height: number; // 原始尺寸(格子数)
+  inputs: PortConfig[]; // 输入端口(相对坐标)
+  outputs: PortConfig[];// 输出端口
+  color: string;        // 背景色(rgba)
+  supplyDistance: number;// 供电延伸格数(0=不供电)
+}
+
+interface PortConfig {
+  x: number; y: number; // 相对机器左上角
+  side: Side;           // 端口所在边
+  type: PortType;       // 物流类型
+  autoConnect: boolean; // 是否自动吸附物流器(桥/分流器等1x1设备)
+}
+
+interface PlacedMachine { id: MachineId; machineId: string; x: number; y: number; rotation: Direction }
+interface Connection { id: string; tailFacing: Direction; path: Point[]; headFacing: Direction; portType: PortType }
+
+// Side → Direction 映射常量
 const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 3 };
 ```
 
-## 已知问题
+## 机器配置完整清单
 
-### 性能
+`config/machines.ts` 定义 24 种机器，`Toolbar.tsx` 的 `MACHINE_GROUPS` 控制工具栏可见性。
 
-- **零组件缓存**：无 `React.memo`、`useMemo`、`useCallback`——每次 store 变更触发 `Grid` 及全部 `Machine` 子组件重渲染
-- **isMachinePowered 重复计算**：每个 `Machine` 渲染时重建整个供电网格 `Uint8Array`，复杂度 O(机器数 × 网格面积)
-- **无空间索引**：`checkCollision` 和 `findPath` 每次遍历全部机器/连线
-- **LoadingScreen eager 预加载全部物品图片**（`import.meta.glob` eager 模式）
+| 分类 | Tab | 已配置 | **缺失(定义了但工具栏中不可见)** |
+|------|-----|--------|----------------------------------|
+| 核心 | core | pco | - |
+| 物流 | logistics | lbr, pbr, spl, mrg, iip | **psp, pmg, pip, cpe, cpx, mce, mcx** (管道分流/汇流/入口/暗管4种) |
+| 仓储存取 | storage | pst, wsp, wpp, wss, wsl | **ltk** (储液罐) |
+| 基础生产 | production | ref, cru, asm, mol, shv, pln | **rfl, pll, wwt** (液体精炼/液体种植/废水处理) |
+| 合成制造 | processing | cas, fil, sel, grn, rea, tyh | **fll, era, pur, dis** (液体灌装/扩容反应/提纯/拆解) |
+| 电力 | power | sup, thp | **xrs, rpt, xrr** (息壤供电桩/中继器/息壤中继器) |
 
-### 代码质量
+**总计：15 种机器在 `machines.ts` 中定义但无法从工具栏选择。** 这些机器可能通过分享链接或蓝图加载进入游戏，但用户无法手动放置。
 
-- **重复代码**：
-  - 包围盒计算（minX/minY/maxX/maxY）在 `App.tsx`、`selectionSlice.ts`、`blueprintSlice.ts`、`shiftUtils.ts`、`gridUtils.ts` 等多处重复
-  - `extendPoint` 函数在 `Grid.tsx` 内联定义 3 次（连接线 SVG、布线预览、批量移动预览）
-  - SVG 连线 polyline 渲染逻辑在 3 处重复
-- **无测试**：零测试文件、零测试依赖
-- **无 Error Boundary**：任何组件崩溃即白屏
+## 已知问题（按严重程度排序）
 
-### 边界情况
+### 🔴 高优先级
 
-- `findPath` 在 `machines` 为空时 `Math.max()` 返回 `-Infinity`，依赖 fallback `|| 60` 兜底
-- `commitBatchMove` 碰撞检测未检查 `connections` 路径
-- 网格尺寸切换不验证是否有机器超出新边界（超出网格的机器不可见但仍在 state 中）
-- 平移无上下限，无"重置视图"按钮
-- 4 种液体材料共用 `icon: 44`（`WATER_BOTTLE`、`JIN_CAO_SOLUTION_BOTTLE` 等）
-- `Machine.tsx` 端口偏移量硬编码 `axisOffset = -4`
+1. ~~**Zustand 大范围解构导致过度重渲染**~~ ✅ **已修复 (2026-06-10)**
+   - `Grid.tsx` 改为细粒度 selector（每个字段独立 `useGameStore(s => s.field)`）+ 事件处理器用 `useCallback(getState)` 模式
+   - `Machine.tsx` 添加 `React.memo` + 细粒度 selector（只订阅 mode/isWiring/wiringSource/zoom）
+   - `App.tsx` 键盘 effect 依赖改为稳定的 Zustand action 引用 + `handleTriggerSaveRef` 模式
 
-## 下一步改进计划
+2. ~~**isMachinePowered 每次渲染重建供电网格**~~ ✅ **已修复 (2026-06-10)**
+   - `Grid.tsx` 用 `useMemo` 一次计算 `poweredMachineIds: Set<string>`，通过 `isPowered` prop 传给 `Machine`
+   - `Machine` 不再订阅 `machines` 字段，减少重渲染触发源
 
-### 第一阶段：性能优化（高优先级）
-- [ ] `Grid` 和 `Machine` 组件添加 `React.memo`
-- [ ] 机器列表渲染用 `useMemo` 缓存
-- [ ] `isMachinePowered` 结果缓存（供电网格仅机器变更时重建）
-- [ ] `Grid.tsx` 中用 `useCallback` 稳定事件处理器引用
+3. **LoadingScreen eager 预加载全部 132 张图片**
+   - `LoadingScreen.tsx` 使用 `import.meta.glob('../assets/items/*', { eager: true })` 阻塞启动
 
-### 第二阶段：代码质量（中优先级）
-- [ ] 提取重复的包围盒计算为 `getBoundingBox(machines, connections)` 工具函数
-- [ ] 提取重复的 `extendPoint` 和 SVG 连线渲染为独立组件/函数
-- [ ] 为核心逻辑添加单元测试（`routeManhattan`、`splitConnectionAt`、`commitWiring`、旋转数学）
-- [ ] 添加 React Error Boundary 组件
-- [ ] 修复 `commitBatchMove` 漏检连线碰撞
-- [ ] 网格尺寸切换时验证机器是否越界
+4. ~~**零 React 缓存：无 `React.memo`、`useMemo`、`useCallback`**~~ ✅ **已修复 (2026-06-10)**
+   - `Grid.tsx`：全部事件处理器用 `useCallback`，`poweredMachineIds` 用 `useMemo`，`extendPoint`/`pathToPoints` 提取为模块级函数
+   - `Machine.tsx`：用 `React.memo` 包裹，事件处理器用 `useCallback` + `getState()`，`getPortStyle`/`getPortClasses` 用 `useCallback`
+   - `App.tsx`：`extractSelectionData`/`handleTriggerSave`/`handleSaveAs` 等用 `useCallback`
 
-### 第三阶段：体验完善（低优先级）
-- [ ] 添加视图重置按钮、平移范围限制
-- [ ] 修复重复材料图标（icon: 44）
-- [ ] 端口偏移量改为 CSS 计算而非魔术数字
+### 🟡 中优先级
+
+5. **包围盒计算重复 7 处**
+   - `App.tsx` extractSelectionData
+   - `selectionSlice.ts` startBatchMove / startCopySelection
+   - `blueprintSlice.ts` startInsertBlueprint / startInsertBlueprintOnNewMap
+   - `gridUtils.ts` calculateContentDimensions
+   - `shareUtils.ts` encode
+
+6. ~~**extendPoint 函数重复 3 次**~~ ✅ **已修复 (2026-06-10)** — 提取为模块级 `extendPoint()` + `pathToPoints()`，3 处 SVG 渲染统一复用
+7. ~~**SVG polyline 渲染逻辑重复 3 次**~~ ✅ **已修复 (2026-06-10)** — 通过 `pathToPoints()` 统一
+
+8. **commitWiring 单体函数过大** — `wiringSlice.ts` 共 110 行，含交叉检测+桥生成+连线分割+状态合并，难以测试和调试
+
+9. **零测试** — 无测试依赖、无测试文件。`routeManhattan`、`splitConnectionAt`、`getRotatedPorts`、旋转数学均为纯函数但无覆盖
+
+10. **无 Error Boundary** — 任何组件崩溃即白屏
+
+11. **15 种机器定义但工具栏不可见** — `MACHINE_GROUPS` 遗漏了液体变体、暗管、储液罐、进阶电力设备等
+
+### 🟢 低优先级
+
+12. **commitBatchMove 未检查连线碰撞** — `selectionSlice.ts` 仅调用 `checkCollision(rect, machines)`，漏检已有连线路径
+13. **网格尺寸切换不验证越界** — 超出新边界的机器不可见但仍在 state 中
+14. **history 快照无容量上限** — 长期编辑可能累积大量内存
+15. **平移无约束** — 无上下限、无"重置视图"按钮
+16. **重复材料图标** — `materials.ts` 中 4 种液体材料共用 `icon: 44`
+17. **端口偏移硬编码** — `Machine.tsx` `axisOffset = -4`
+18. **GRID_SIZE 双重硬编码** — `Grid.tsx` 和 `index.css` 需手动同步
+19. **ShareModal 截图时机不可靠** — `ShareModal.tsx` 100ms setTimeout 无保证DOM已稳定
+20. **BlueprintList 删除后重新读取 localStorage** — `BlueprintList.tsx` 调用 `getBlueprints()` 而非更新本地状态
+
+## 下一步行动计划
+
+### 🔴 Sprint 1：性能止血 ✅ **已完成 (2026-06-10)**
+
+- [x] **Grid.tsx**：细粒度 selector + useCallback 事件处理器 + extendPoint/pathToPoints 模块级提取
+- [x] **Machine.tsx**：`React.memo` + 细粒度 selector + `isPowered` prop 替代 `isMachinePowered` 内部调用
+- [x] **machineUtils.ts**：供电网格在 Grid.tsx 用 `useMemo` 一次计算，通过 `isPowered` prop 下发
+- [x] **App.tsx**：键盘 effect 依赖精简为稳定引用 + `handleTriggerSaveRef` 模式
+- [x] **Grid.tsx**：全部事件处理器 useCallback + useGameStore.getState() 读取最新状态
+
+### 🟡 Sprint 2：消除重复、补测试（预计 2-3 小时）
+
+- [ ] **提取 `getBoundingBox(machines, connections)`** 到 `gridUtils.ts`，替换全部 7 处重复
+- [ ] **提取 `extendPoint`** 到独立工具函数
+- [ ] **提取 `<ConnectionSVG>` 组件**，统一 3 处 SVG polyline 渲染逻辑
+- [ ] **添加测试**：`routeManhattan`(边界/碰撞/退化), `splitConnectionAt`(头/中/尾分割), `getRotatedPorts`(各旋转角度)
+- [ ] **添加 Error Boundary 组件**
+
+### 🟢 Sprint 3：功能修复 + 体验（预计 2-3 小时）
+
+- [ ] **补全 `MACHINE_GROUPS`**：将 15 种缺失机器加入对应分类标签页
+- [ ] **`commitBatchMove`** 增加连线路径碰撞检测
+- [ ] **网格尺寸切换时** 检测并警告/清除越界机器
+- [ ] **history 快照** 设置上限（如 50 步）
+- [ ] 添加视图重置按钮 + 平移范围限制
+- [ ] 修复重复材料图标（为 icon:44 的 4 种液体分配不同图标）
+- [ ] GRID_SIZE 改为从 CSS 变量读取或提取为单一常量文件
+- [ ] `axisOffset` 改为 CSS 计算值
+- [ ] `ShareModal` 截图改用 `requestAnimationFrame` 替代 `setTimeout(100)`
 
 ## 部署
 
@@ -302,3 +378,15 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 - `erasableSyntaxOnly` — 不允许运行时语义的 TS 语法（如 enum、namespace）
 - `verbatimModuleSyntax` — import 必须保留原样（与 ES 模块兼容）
 - `noUncheckedSideEffectImports` — 导入必须有副作用或类型导入标记
+- `noFallthroughCasesInSwitch` — switch 不能穿透
+
+## 编码约定
+
+- **语言**：代码注释、UI 文案、变量命名统一使用**简体中文**。当前代码中存在大量繁体中文，是因为前作者为台湾人——新增代码和修改到的周边代码应顺便改为简体中文。
+- **机器 ID**：3 字母缩写（pco, lbr, ref...）
+- **颜色**：优先使用 CSS 变量（`var(--gray-light)` 等），避免硬编码 hex
+- **样式**：SCSS 嵌套语法，不另建 CSS module
+- **类名拼接**：`classNames()` 辅助动态类名
+- **撤销支持**：store 中 mutation 前调 `get().takeSnapshot()`
+- **非组件取 store**：`useGameStore.getState()` 用于事件回调、非组件函数等 React 上下文之外的场景
+- **import 顺序**：React → 第三方库 → 项目内部（`@/` 别名）

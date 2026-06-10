@@ -1,119 +1,115 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { Machine } from './Machine';
 import { GameMode } from '../types';
-import type { Point } from '../types';
-import { MACHINES } from '../config/machines';
+import type { Point, PortConfig } from '../types';
+import { MACHINES, getMachineConfig } from '../config/machines';
 import classNames from 'classnames';
 import './Grid.scss';
 import { checkCollision } from '../utils/gridUtils';
-import { getRotatedDimensions, getRotatedPorts } from '../utils/machineUtils';
+import { getRotatedDimensions, getRotatedPorts, buildPowerGrid } from '../utils/machineUtils';
 
-const GRID_SIZE = 40; // 需與 CSS 中的 --grid-size 保持一致
+const GRID_SIZE = 40; // 需与 CSS 中的 --grid-size 保持一致
+const EXTEND = 0.45;
+
+/** 将路径端点沿方向延伸，使连线视觉上深入机器内部 */
+const extendPoint = (p: Point, dir: number, amt: number): Point => {
+    switch (dir % 4) {
+        case 0: return { x: p.x, y: p.y - amt };
+        case 1: return { x: p.x + amt, y: p.y };
+        case 2: return { x: p.x, y: p.y + amt };
+        case 3: return { x: p.x - amt, y: p.y };
+        default: return { ...p };
+    }
+};
+
+/** 将路径转为 SVG polyline points 字符串 */
+const pathToPoints = (path: Point[], tailFacing: number, headFacing: number): string => {
+    const renderPath: Point[] = [];
+    renderPath.push(extendPoint(path[0], (tailFacing + 2) % 4, EXTEND));
+    renderPath.push(...path);
+    const last = path[path.length - 1];
+    renderPath.push(extendPoint(last, headFacing, EXTEND));
+    return renderPath.map(p => `${p.x * GRID_SIZE + GRID_SIZE / 2},${p.y * GRID_SIZE + GRID_SIZE / 2}`).join(' ');
+};
 
 export const Grid = () => {
-    const {
-        machines,
-        connections,
-        mode,
-        selectedMachineId,
-        addMachine,
-        isWiring,
-        updateWiringPreview,
-        wiringPreviewPath,
-        isWiringValid,
-        wiringSource,
-        previewRotation,
-        rotatePreview,
-        zoom,
-        gridWidth,
-        gridHeight,
+    // ── 细粒度 store selector：每个字段独立订阅，避免无关变更触发重渲染 ──
+    // 画布（高频：滚轮缩放/平移）
+    const zoom = useGameStore(s => s.zoom);
+    const pan = useGameStore(s => s.pan);
+    const gridWidth = useGameStore(s => s.gridWidth);
+    const gridHeight = useGameStore(s => s.gridHeight);
+    // 机器与连线（中频：编辑操作）
+    const machines = useGameStore(s => s.machines);
+    const connections = useGameStore(s => s.connections);
 
-        setZoom,
-        pan,
-        setPan,
-
-        // 框選 / 批量移動
-        setBoxSelection,
-        commitBoxSelection,
-        selectionStart,
-        selectionEnd,
-        selectedMachineIds,
-        selectedConnectionIds,
-
-        startBatchMove,
-        startCopySelection,
-        commitBatchMove,
-        deleteSelected,
-
-        moveAnchor,
-        movingMachinesSnapshot,
-        movingConnectionsSnapshot,
-        cancelOperation
-    } = useGameStore();
-
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [isPanning, setIsPanning] = React.useState(false);
-    const lastMousePos = useRef<Point>({ x: 0, y: 0 });
-
-    // 快捷鍵 E 和 R
+    // 模式（低频：用户切换）
+    const mode = useGameStore(s => s.mode);
+    const selectedMachineId = useGameStore(s => s.selectedMachineId);
+    const previewRotation = useGameStore(s => s.previewRotation);
     const setMode = useGameStore(s => s.setMode);
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            const isPlacing = !!useGameStore.getState().selectedMachineId;
+    const rotatePreview = useGameStore(s => s.rotatePreview);
 
-            if (e.key.toLowerCase() === 'e') {
-                if (isPlacing) return;
-                setMode(mode === GameMode.WIRE ? GameMode.BUILD : GameMode.WIRE);
-            } else if (e.key.toLowerCase() === 'r') {
-                rotatePreview();
-            } else if (e.key.toLowerCase() === 'x') {
-                if (isPlacing) return;
-                setMode(mode === GameMode.DEVICE_SELECT ? GameMode.BUILD : GameMode.DEVICE_SELECT);
-            } else if (e.key.toLowerCase() === 'f') {
-                useGameStore.getState().takeSnapshot();
-                deleteSelected();
-                // 使用者需求：按 F1 開啟藍圖列表
-                // 注意：F1 通常會開啟說明，我們可能需要阻止預設行為
-            } else if (e.key === 'F1') {
-                e.preventDefault();
-                useGameStore.getState().setBlueprintListMode('insert');
-                useGameStore.getState().setUiView('list');
-            } else if (e.key.toLowerCase() === 'm') {
-                // 我們需要 hoverPos 作為錨點。由於無法在此監聽器中輕鬆存取 react state...
-                // 實際上，如果我們使用 ref 來儲存 hoverPos，是可以運作的。
-                if (hoverPosRef.current) {
-                    startBatchMove(hoverPosRef.current);
-                }
-            } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-                if (hoverPosRef.current) {
-                    startCopySelection(hoverPosRef.current);
-                }
-            } else if (e.key === 'Escape') {
-                cancelOperation();
+    // 布线状态（中频）
+    const isWiring = useGameStore(s => s.isWiring);
+    const wiringPreviewPath = useGameStore(s => s.wiringPreviewPath);
+    const isWiringValid = useGameStore(s => s.isWiringValid);
+    const wiringSource = useGameStore(s => s.wiringSource);
+
+    // 框选（低频）
+    const selectionStart = useGameStore(s => s.selectionStart);
+    const selectionEnd = useGameStore(s => s.selectionEnd);
+    const selectedMachineIds = useGameStore(s => s.selectedMachineIds);
+    const selectedConnectionIds = useGameStore(s => s.selectedConnectionIds);
+
+    // 批量移动（低频）
+    const moveAnchor = useGameStore(s => s.moveAnchor);
+    const movingMachinesSnapshot = useGameStore(s => s.movingMachinesSnapshot);
+    const movingConnectionsSnapshot = useGameStore(s => s.movingConnectionsSnapshot);
+
+    // ── 供电网格：一次计算，所有机器复用 ──
+    const poweredMachineIds = useMemo(() => {
+        const grid = buildPowerGrid(machines, gridWidth, gridHeight, getMachineConfig);
+        const powered = new Set<string>();
+        for (const m of machines) {
+            const cfg = getMachineConfig(m.machineId);
+            if (!cfg || !cfg.power || cfg.power <= 0) {
+                powered.add(m.id); // 无需供电
+                continue;
             }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [mode, setMode, rotatePreview, deleteSelected, startBatchMove, cancelOperation]);
+            const { width, height } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
+            let hasPower = false;
+            for (let y = m.y; y < m.y + height && !hasPower; y++) {
+                for (let x = m.x; x < m.x + width && !hasPower; x++) {
+                    if (x >= 0 && y >= 0 && x < gridWidth && y < gridHeight && grid[y * gridWidth + x]) {
+                        hasPower = true;
+                    }
+                }
+            }
+            if (hasPower) powered.add(m.id);
+        }
+        return powered;
+    }, [machines, gridWidth, gridHeight]);
 
-    const getGridPos = (e: React.MouseEvent): Point => {
-        if (!containerRef.current) return { x: 0, y: 0 };
-        const rect = containerRef.current.getBoundingClientRect();
-        // 調整縮放和平移
-        // 視覺變換順序：scale(zoom) translate(pan)
-        // 螢幕座標 = (世界座標 * zoom) + pan
-        // 世界座標 = (螢幕座標 - pan) / zoom
-
-        const x = Math.floor(((e.clientX - rect.left) - pan.x) / (GRID_SIZE * zoom));
-        const y = Math.floor(((e.clientY - rect.top) - pan.y) / (GRID_SIZE * zoom));
-        return { x, y };
-    };
-
+    // ── 本地状态 ──
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [isPanning, setIsPanning] = useState(false);
+    const lastMousePos = useRef<Point>({ x: 0, y: 0 });
+    const [hoverPos, setHoverPos] = useState<Point | null>(null);
     const hoverPosRef = useRef<Point | null>(null);
 
-    const handleMouseDown = (e: React.MouseEvent) => {
-        // 滑鼠中鍵 (1)
+    // ── 事件处理器（useCallback + getState 减少依赖） ──
+    const getGridPos = useCallback((e: React.MouseEvent): Point => {
+        if (!containerRef.current) return { x: 0, y: 0 };
+        const rect = containerRef.current.getBoundingClientRect();
+        const s = useGameStore.getState();
+        const x = Math.floor(((e.clientX - rect.left) - s.pan.x) / (GRID_SIZE * s.zoom));
+        const y = Math.floor(((e.clientY - rect.top) - s.pan.y) / (GRID_SIZE * s.zoom));
+        return { x, y };
+    }, []);
+
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
         if (e.button === 1) {
             e.preventDefault();
             setIsPanning(true);
@@ -122,60 +118,50 @@ export const Grid = () => {
         }
 
         const pos = getGridPos(e);
+        const s = useGameStore.getState();
 
-        if (mode === GameMode.DEVICE_SELECT && e.button === 0) {
-            setBoxSelection(pos, pos);
+        if (s.mode === GameMode.DEVICE_SELECT && e.button === 0) {
+            s.setBoxSelection(pos, pos);
         }
-    };
+    }, [getGridPos]);
 
-    const handleMouseUp = (e: React.MouseEvent) => {
+    const handleMouseUp = useCallback((e: React.MouseEvent) => {
         setIsPanning(false);
-        if (mode === GameMode.DEVICE_SELECT && selectionStart) {
-            commitBoxSelection(e.shiftKey);
+        const s = useGameStore.getState();
+        if (s.mode === GameMode.DEVICE_SELECT && s.selectionStart) {
+            s.commitBoxSelection(e.shiftKey);
         }
-    };
+    }, []);
 
-    const handleWheel = (e: React.WheelEvent) => {
-        // 僅在我們想要阻止頁面滾動時阻止預設行為 (通常適用於可縮放畫布)
-        if (e.ctrlKey || e.metaKey) {
-            // 瀏覽器縮放交互，也許讓它發生？
-            // 標準地圖行為：僅滾輪縮放
-        }
-
+    const handleWheel = useCallback((e: React.WheelEvent) => {
         if (!containerRef.current) return;
+        const s = useGameStore.getState();
         const rect = containerRef.current.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        // 1. 在縮放前計算滑鼠下的世界座標
-        const worldX = (mouseX - pan.x) / zoom;
-        const worldY = (mouseY - pan.y) / zoom;
+        const worldX = (mouseX - s.pan.x) / s.zoom;
+        const worldY = (mouseY - s.pan.y) / s.zoom;
 
         const delta = -Math.sign(e.deltaY) * 0.1;
-        const newZoom = Math.min(Math.max(zoom + delta, 0.18), 3.0);
+        const newZoom = Math.min(Math.max(s.zoom + delta, 0.18), 3.0);
 
-        // 2. 計算新的平移量以保持世界座標在滑鼠下方
-        // mouseX = worldX * newZoom + newPanX
-        // newPanX = mouseX - worldX * newZoom
         const newPanX = mouseX - worldX * newZoom;
         const newPanY = mouseY - worldY * newZoom;
 
-        setZoom(newZoom);
-        setPan({ x: newPanX, y: newPanY });
-    };
+        s.setZoom(newZoom);
+        s.setPan({ x: newPanX, y: newPanY });
+    }, []);
 
-    const [hoverPos, setHoverPos] = React.useState<Point | null>(null);
-
-    const handleMouseMove = (e: React.MouseEvent) => {
+    const handleMouseMove = useCallback((e: React.MouseEvent) => {
         if (isPanning) {
             const deltaX = e.clientX - lastMousePos.current.x;
             const deltaY = e.clientY - lastMousePos.current.y;
-
-            setPan({
-                x: pan.x + deltaX,
-                y: pan.y + deltaY
+            const s = useGameStore.getState();
+            s.setPan({
+                x: s.pan.x + deltaX,
+                y: s.pan.y + deltaY
             });
-
             lastMousePos.current = { x: e.clientX, y: e.clientY };
             return;
         }
@@ -184,47 +170,87 @@ export const Grid = () => {
         setHoverPos(pos);
         hoverPosRef.current = pos;
 
-        if (isWiring) {
-            updateWiringPreview(pos);
+        const s = useGameStore.getState();
+        if (s.isWiring) {
+            s.updateWiringPreview(pos);
         }
 
-        if (mode === GameMode.DEVICE_SELECT && selectionStart && e.buttons === 1) {
-            setBoxSelection(selectionStart, pos);
+        if (s.mode === GameMode.DEVICE_SELECT && s.selectionStart && e.buttons === 1) {
+            s.setBoxSelection(s.selectionStart, pos);
         }
-    };
+    }, [isPanning, getGridPos]);
 
-    const handleClick = (e: React.MouseEvent) => {
-        if (isPanning) return; // 如果正在平移則阻止點擊 (雖然 mouseUp 會清除它，但在邏輯上可能需要嚴謹一些)
-        // 檢查是否實際拖曳過？目前做簡單檢查。
+    const handleClick = useCallback((e: React.MouseEvent) => {
+        if (isPanning) return;
 
         const pos = getGridPos(e);
+        const s = useGameStore.getState();
 
-        if (mode === GameMode.BUILD && selectedMachineId) {
-            useGameStore.getState().takeSnapshot();
-            addMachine(selectedMachineId, pos.x, pos.y, previewRotation);
-            // 如果未按住 Ctrl，取消選擇機器
+        if (s.mode === GameMode.BUILD && s.selectedMachineId) {
+            s.takeSnapshot();
+            s.addMachine(s.selectedMachineId, pos.x, pos.y, s.previewRotation);
             if (!e.ctrlKey) {
-                useGameStore.getState().selectMachine(null);
+                s.selectMachine(null);
             }
-        } else if (mode === GameMode.MOVE_SELECTION || mode === GameMode.BLUEPRINT_PLACE) {
-            useGameStore.getState().takeSnapshot();
-            commitBatchMove(pos);
-        } else if (mode === GameMode.DEVICE_SELECT) {
-            // 點擊是否清除選取？
+        } else if (s.mode === GameMode.MOVE_SELECTION || s.mode === GameMode.BLUEPRINT_PLACE) {
+            s.takeSnapshot();
+            s.commitBatchMove(pos);
         }
-    };
+    }, [isPanning, getGridPos]);
 
-    const handleContextMenu = (e: React.MouseEvent) => {
+    const handleContextMenu = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         useGameStore.getState().cancelOperation();
-    };
+    }, []);
 
-    // 預覽機器計算
+    const handleMouseLeave = useCallback(() => {
+        setHoverPos(null);
+        setIsPanning(false);
+    }, []);
+
+    // ── 快捷键 E / R / X / F / F1 / M / Ctrl+C / Escape ──
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const s = useGameStore.getState();
+            const isPlacing = !!s.selectedMachineId;
+
+            if (e.key.toLowerCase() === 'e') {
+                if (isPlacing) return;
+                setMode(s.mode === GameMode.WIRE ? GameMode.BUILD : GameMode.WIRE);
+            } else if (e.key.toLowerCase() === 'r') {
+                rotatePreview();
+            } else if (e.key.toLowerCase() === 'x') {
+                if (isPlacing) return;
+                setMode(s.mode === GameMode.DEVICE_SELECT ? GameMode.BUILD : GameMode.DEVICE_SELECT);
+            } else if (e.key.toLowerCase() === 'f') {
+                s.takeSnapshot();
+                s.deleteSelected();
+            } else if (e.key === 'F1') {
+                e.preventDefault();
+                s.setBlueprintListMode('insert');
+                s.setUiView('list');
+            } else if (e.key.toLowerCase() === 'm') {
+                if (hoverPosRef.current) {
+                    s.startBatchMove(hoverPosRef.current);
+                }
+            } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+                if (hoverPosRef.current) {
+                    s.startCopySelection(hoverPosRef.current);
+                }
+            } else if (e.key === 'Escape') {
+                s.cancelOperation();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [setMode, rotatePreview]); // setMode/rotatePreview 是 Zustand action，引用稳定
+
+    // ── 放置预览计算 ──
     const ghostConfig = (mode === GameMode.BUILD && selectedMachineId) ? MACHINES.find(m => m.id === selectedMachineId) : null;
     let isGhostInvalid = false;
     let ghostWidth = 0;
     let ghostHeight = 0;
-    let ghostPorts: any[] = [];
+    let ghostPorts: (PortConfig & { isInput?: boolean })[] = [];
 
     if (ghostConfig && hoverPos) {
         const dims = getRotatedDimensions(ghostConfig.width, ghostConfig.height, previewRotation);
@@ -251,9 +277,30 @@ export const Grid = () => {
             previewRotation
         ).map((p, i) => ({
             ...p,
-            isInput: i < ghostConfig.inputs.length // 保留輸入端口資訊
+            isInput: i < ghostConfig.inputs.length
         }));
     }
+
+    // ── 布线预览方向推导 ──
+    const headDirRef = useRef<number>(1);
+    const tailDirRef = useRef<number>(1);
+    if (isWiring && wiringPreviewPath.length >= 2) {
+        const first = wiringPreviewPath[0];
+        const second = wiringPreviewPath[1];
+        if (second.x > first.x) tailDirRef.current = 1;
+        else if (second.x < first.x) tailDirRef.current = 3;
+        else if (second.y > first.y) tailDirRef.current = 2;
+        else tailDirRef.current = 0;
+
+        const last = wiringPreviewPath[wiringPreviewPath.length - 1];
+        const prev = wiringPreviewPath[wiringPreviewPath.length - 2];
+        if (last.x > prev.x) headDirRef.current = 1;
+        else if (last.x < prev.x) headDirRef.current = 3;
+        else if (last.y > prev.y) headDirRef.current = 2;
+        else headDirRef.current = 0;
+    }
+
+    const showMovePreview = (mode === GameMode.MOVE_SELECTION || mode === GameMode.BLUEPRINT_PLACE) && moveAnchor && hoverPos;
 
     return (
         <div
@@ -262,7 +309,7 @@ export const Grid = () => {
             onMouseMove={handleMouseMove}
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
-            onMouseLeave={() => { setHoverPos(null); setIsPanning(false); }}
+            onMouseLeave={handleMouseLeave}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
             onWheel={handleWheel}
@@ -284,7 +331,7 @@ export const Grid = () => {
                     }}
                 />
 
-                {/* 連線 SVG 圖層 */}
+                {/* 连线 SVG 图层 */}
                 <svg
                     className="connections-layer"
                     style={{
@@ -293,29 +340,9 @@ export const Grid = () => {
                         pointerEvents: 'none',
                     }}
                 >
-                    {/* 已確認連線 */}
+                    {/* 已确认连线 */}
                     {connections.map(conn => {
-                        const renderPath: Point[] = [];
-                        const EXTEND = 0.45;
-
-                        const extendPoint = (p: Point, dir: number, amt: number): Point => {
-                            switch (dir % 4) {
-                                case 0: return { x: p.x, y: p.y - amt };
-                                case 1: return { x: p.x + amt, y: p.y };
-                                case 2: return { x: p.x, y: p.y + amt };
-                                case 3: return { x: p.x - amt, y: p.y };
-                                default: return { ...p };
-                            }
-                        };
-
-                        // 尾端向外延伸 (指向來源機器 = tailFacing 反方向)
-                        renderPath.push(extendPoint(conn.path[0], (conn.tailFacing + 2) % 4, EXTEND));
-                        renderPath.push(...conn.path);
-                        // 頭端向外延伸 (headFacing 方向)
-                        const last = conn.path[conn.path.length - 1];
-                        renderPath.push(extendPoint(last, conn.headFacing, EXTEND));
-
-                        const pts = renderPath.map(p => `${p.x * GRID_SIZE + GRID_SIZE / 2},${p.y * GRID_SIZE + GRID_SIZE / 2}`).join(' ');
+                        const pts = pathToPoints(conn.path, conn.tailFacing, conn.headFacing);
                         const cls = (base: string) => classNames(base, { selected: selectedConnectionIds.includes(conn.id) });
                         const linePrefix = conn.portType === 'Liquid' ? 'pipe' : 'conveyor';
 
@@ -327,71 +354,31 @@ export const Grid = () => {
                         );
                     })}
 
-                    {/* 連線預覽 */}
+                    {/* 连线预览 */}
                     {isWiring && wiringPreviewPath.length > 0 && (() => {
-                        const EXTEND = 0.45;
-                        const extendPoint = (p: Point, dir: number, amt: number): Point => {
-                            switch (dir % 4) {
-                                case 0: return { x: p.x, y: p.y - amt };
-                                case 1: return { x: p.x + amt, y: p.y };
-                                case 2: return { x: p.x, y: p.y + amt };
-                                case 3: return { x: p.x - amt, y: p.y };
-                                default: return { ...p };
-                            }
-                        };
-
-                        const first = wiringPreviewPath[0];
-                        const last = wiringPreviewPath[wiringPreviewPath.length - 1];
-
-                        // 頭端方向
-                        let headDir: number = wiringSource?.tailFacing ?? 1;
-                        if (wiringPreviewPath.length >= 2) {
-                            const prev = wiringPreviewPath[wiringPreviewPath.length - 2];
-                            if (last.x > prev.x) headDir = 1;
-                            else if (last.x < prev.x) headDir = 3;
-                            else if (last.y > prev.y) headDir = 2;
-                            else headDir = 0;
-                        }
-
-                        // 尾端方向 (反推)
-                        let tailDir = headDir;
-                        if (wiringPreviewPath.length >= 2) {
-                            const second = wiringPreviewPath[1];
-                            if (second.x > first.x) tailDir = 1;
-                            else if (second.x < first.x) tailDir = 3;
-                            else if (second.y > first.y) tailDir = 2;
-                            else tailDir = 0;
-                        } else if (wiringSource) {
-                            tailDir = wiringSource.tailFacing;
-                        }
-
-                        const renderPath: Point[] = [];
-                        renderPath.push(extendPoint(first, (tailDir + 2) % 4, EXTEND));
-                        renderPath.push(...wiringPreviewPath);
-                        renderPath.push(extendPoint(last, headDir, EXTEND));
-
-                        const pp = renderPath.map(p => `${p.x * GRID_SIZE + GRID_SIZE / 2},${p.y * GRID_SIZE + GRID_SIZE / 2}`).join(' ');
+                        const pt = pathToPoints(wiringPreviewPath, tailDirRef.current, headDirRef.current);
                         const pcls = (base: string) => classNames(base, { 'invalid': !isWiringValid });
                         const prevPrefix = wiringSource?.portType === 'Liquid' ? 'pipe' : 'conveyor';
                         return (
                             <>
-                                <polyline points={pp} className={pcls(`${prevPrefix}-preview-outline`)} />
-                                <polyline points={pp} className={pcls(`${prevPrefix}-preview-fill`)} />
+                                <polyline points={pt} className={pcls(`${prevPrefix}-preview-outline`)} />
+                                <polyline points={pt} className={pcls(`${prevPrefix}-preview-fill`)} />
                             </>
                         );
                     })()}
                 </svg>
 
-                {/* 機器圖層 */}
+                {/* 机器图层 */}
                 {machines.map(m => (
                     <Machine
                         key={m.id}
                         data={m}
                         isSelected={selectedMachineIds.includes(m.id)}
+                        isPowered={poweredMachineIds.has(m.id)}
                     />
                 ))}
 
-                {/* 選取框 */}
+                {/* 框选矩形 */}
                 {selectionStart && selectionEnd && mode === GameMode.DEVICE_SELECT && (() => {
                     const x1 = Math.min(selectionStart.x, selectionEnd.x);
                     const y1 = Math.min(selectionStart.y, selectionEnd.y);
@@ -413,10 +400,10 @@ export const Grid = () => {
                     );
                 })()}
 
-                {/* 批量移動預覽 - 連線 */}
-                {(mode === GameMode.MOVE_SELECTION || mode === GameMode.BLUEPRINT_PLACE) && moveAnchor && hoverPos && (() => {
-                    const offsetX = hoverPos.x - moveAnchor.x;
-                    const offsetY = hoverPos.y - moveAnchor.y;
+                {/* 批量移动预览 - 连线 */}
+                {showMovePreview && (() => {
+                    const offsetX = hoverPos!.x - moveAnchor!.x;
+                    const offsetY = hoverPos!.y - moveAnchor!.y;
 
                     return (
                         <svg
@@ -430,21 +417,7 @@ export const Grid = () => {
                         >
                             {movingConnectionsSnapshot.map(conn => {
                                 const newPath = conn.path.map(p => ({ x: p.x + offsetX, y: p.y + offsetY }));
-                                const EXTEND = 0.45;
-                                const extendPoint = (p: Point, dir: number, amt: number): Point => {
-                                    switch (dir % 4) {
-                                        case 0: return { x: p.x, y: p.y - amt };
-                                        case 1: return { x: p.x + amt, y: p.y };
-                                        case 2: return { x: p.x, y: p.y + amt };
-                                        case 3: return { x: p.x - amt, y: p.y };
-                                        default: return { ...p };
-                                    }
-                                };
-                                const renderPath: Point[] = [];
-                                renderPath.push(extendPoint(newPath[0], (conn.tailFacing + 2) % 4, EXTEND));
-                                renderPath.push(...newPath);
-                                renderPath.push(extendPoint(newPath[newPath.length - 1], conn.headFacing, EXTEND));
-                                const pointsStr = renderPath.map(p => `${p.x * GRID_SIZE + GRID_SIZE / 2},${p.y * GRID_SIZE + GRID_SIZE / 2}`).join(' ');
+                                const pointsStr = pathToPoints(newPath, conn.tailFacing, conn.headFacing);
                                 const linePrefix = conn.portType === 'Liquid' ? 'pipe' : 'conveyor';
                                 return (
                                     <React.Fragment key={`ghost-conn-${conn.id}`}>
@@ -462,13 +435,13 @@ export const Grid = () => {
                                 );
                             })}
                         </svg>
-                    )
+                    );
                 })()}
 
-                {/* 批量移動預覽 - 機器 */}
-                {(mode === GameMode.MOVE_SELECTION || mode === GameMode.BLUEPRINT_PLACE) && moveAnchor && hoverPos && movingMachinesSnapshot.map(m => {
-                    const offsetX = hoverPos.x - moveAnchor.x;
-                    const offsetY = hoverPos.y - moveAnchor.y;
+                {/* 批量移动预览 - 机器 */}
+                {showMovePreview && movingMachinesSnapshot.map(m => {
+                    const offsetX = hoverPos!.x - moveAnchor!.x;
+                    const offsetY = hoverPos!.y - moveAnchor!.y;
                     const ghostX = m.x + offsetX;
                     const ghostY = m.y + offsetY;
 
@@ -476,13 +449,14 @@ export const Grid = () => {
                         <div key={`ghost-${m.id}`} style={{ opacity: 0.6, pointerEvents: 'none', zIndex: 20 }}>
                             <Machine
                                 data={{ ...m, x: ghostX, y: ghostY }}
-                                isSelected={true} // 高亮顯示
+                                isSelected={true}
+                                isPowered={true}
                             />
                         </div>
                     );
                 })}
 
-                {/* 機器預覽 (單個) */}
+                {/* 单机器放置预览 */}
                 {ghostConfig && hoverPos && (
                     <>
                         {ghostConfig.supplyDistance > 0 && (
@@ -509,21 +483,20 @@ export const Grid = () => {
                                 height: ghostHeight * GRID_SIZE,
                             } as React.CSSProperties}
                         />
-                        {/* 預覽箭頭 */}
+                        {/* 预览端口箭头 */}
                         {ghostPorts.map((p, i) => {
                             let arrowX = hoverPos.x + p.x;
                             let arrowY = hoverPos.y + p.y;
                             let rotation = 0;
                             const isInput = p.isInput;
 
-                            // 根據方向向外延伸 1 格
                             switch (p.side) {
                                 case 'left':
                                     arrowX -= 1;
-                                    rotation = isInput ? 0 : 180; // 輸入：指向機器，輸出：背向機器
+                                    rotation = isInput ? 0 : 180;
                                     break;
                                 case 'right':
-                                    arrowX += 1; // 因為 p.x 是內部座標
+                                    arrowX += 1;
                                     rotation = isInput ? 180 : 0;
                                     break;
                                 case 'top':
@@ -555,7 +528,6 @@ export const Grid = () => {
                     </>
                 )}
             </div>
-
         </div>
     );
 };

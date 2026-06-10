@@ -4,7 +4,7 @@ import { Header } from './components/Header';
 import { LoadingScreen } from './components/LoadingScreen';
 import { OperationHints } from './components/OperationHints';
 import { calculateContentDimensions } from './utils/gridUtils';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from './store/gameStore';
 import { BlueprintList } from './components/BlueprintList';
 
@@ -18,39 +18,35 @@ import { getRotatedDimensions } from './utils/machineUtils';
 import './App.css';
 import { parseShareUrl } from './utils/shareUtils';
 
-// ... imports
 import { Settings } from './components/Settings';
 import { useChineseConverter } from './hooks/useChineseConverter';
 
 export default function App() {
-  const {
-    machines,
-    connections,
-    currentBlueprintId,
-    currentBlueprintName,
-    loadGame,
-    resetGame,
-    setCurrentBlueprint,
-    undo,
-    redo,
-    selectedMachineIds,
-    selectedConnectionIds,
-    uiView,
-    setUiView,
-    blueprintListMode,
-    setBlueprintListMode
-  } = useGameStore();
+  // ── 细粒度 store selector ──
+  const machines = useGameStore(s => s.machines);
+  const connections = useGameStore(s => s.connections);
+  const currentBlueprintId = useGameStore(s => s.currentBlueprintId);
+  const currentBlueprintName = useGameStore(s => s.currentBlueprintName);
+  const loadGame = useGameStore(s => s.loadGame);
+  const resetGame = useGameStore(s => s.resetGame);
+  const setCurrentBlueprint = useGameStore(s => s.setCurrentBlueprint);
+  const undo = useGameStore(s => s.undo);
+  const redo = useGameStore(s => s.redo);
+  const selectedMachineIds = useGameStore(s => s.selectedMachineIds);
+  const selectedConnectionIds = useGameStore(s => s.selectedConnectionIds);
+  const uiView = useGameStore(s => s.uiView);
+  const setUiView = useGameStore(s => s.setUiView);
+  const blueprintListMode = useGameStore(s => s.blueprintListMode);
+  const setBlueprintListMode = useGameStore(s => s.setBlueprintListMode);
 
   useChineseConverter();
 
-  // const [view, setView] = useState<'list' | 'editor'>('list'); // Replaced by store state
   const [isLoading, setIsLoading] = useState(true);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [pendingSaveData, setPendingSaveData] = useState<Blueprint['data'] | null>(null);
 
-  // Initial load logic
+  // ── 初始加载（仅挂载时执行一次） ──
   useEffect(() => { (async () => {
-    // Share URL takes priority over last blueprint
     const sharedData = await parseShareUrl();
     if (sharedData) {
       loadGame(
@@ -64,7 +60,7 @@ export default function App() {
       setUiView('editor');
       setIsLoading(false);
       toaster.create({
-        title: "載入分享藍圖成功",
+        title: "加载分享蓝图成功",
         type: "success",
         duration: 3000,
       });
@@ -81,38 +77,10 @@ export default function App() {
     }
 
     handleCreateNew();
-  })(); }, []); // Run once on mount
+  })(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+Z (Undo)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-        return;
-      }
-      // Ctrl+Y or Ctrl+Shift+Z (Redo)
-      const isY = e.key.toLowerCase() === 'y';
-      const isShiftZ = e.key.toLowerCase() === 'z' && e.shiftKey;
-
-      if ((e.ctrlKey || e.metaKey) && (isY || isShiftZ)) {
-        e.preventDefault();
-        redo();
-        return;
-      }
-
-      // Ctrl+S
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleTriggerSave();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentBlueprintId, currentBlueprintName, machines, connections, selectedMachineIds, selectedConnectionIds]);
-
-  const extractSelectionData = (): Blueprint['data'] | null => {
+  // ── 提取选区数据 ──
+  const extractSelectionData = useCallback((): Blueprint['data'] | null => {
     if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return null;
 
     const selectedMachines = machines.filter(m => selectedMachineIds.includes(m.id));
@@ -120,7 +88,6 @@ export default function App() {
 
     if (selectedMachines.length === 0 && selectedConnections.length === 0) return null;
 
-    // Calculate Bounding Box
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
     selectedMachines.forEach(m => {
@@ -143,20 +110,16 @@ export default function App() {
       });
     });
 
-    // Normalize to (0, 0)
-    // Use a small padding if desired, or just strict 0,0. 
-    // Usually user wants top-leftmost item at 0,0 or 1,1. Let's do 0,0 to be clean.
     const offsetX = minX;
     const offsetY = minY;
 
     const newMachines = selectedMachines.map(m => ({
       ...m,
-      id: crypto.randomUUID(), // New IDs for safe insertion
+      id: crypto.randomUUID(),
       x: m.x - offsetX,
       y: m.y - offsetY
     }));
 
-    // Connections 不再依賴機器 ID → 直接克隆並偏移路徑
     const newConnections = selectedConnections.map(c => ({
       ...c,
       id: crypto.randomUUID(),
@@ -172,10 +135,10 @@ export default function App() {
       actualWidth: width,
       actualHeight: height
     };
-  };
+  }, [machines, connections, selectedMachineIds, selectedConnectionIds]);
 
-  const handleTriggerSave = () => {
-    // Check for selection first
+  // ── 保存逻辑 ──
+  const handleTriggerSave = useCallback(() => {
     if (selectedMachineIds.length > 0 || selectedConnectionIds.length > 0) {
       const selectionData = extractSelectionData();
       if (selectionData) {
@@ -185,9 +148,7 @@ export default function App() {
       }
     }
 
-    // Normal Save
     if (currentBlueprintId && currentBlueprintName) {
-      // Quick Save
       const { width, height } = calculateContentDimensions(machines, connections);
       saveBlueprint(currentBlueprintId, currentBlueprintName, {
         machines,
@@ -201,24 +162,54 @@ export default function App() {
         duration: 2000,
       });
     } else {
-      // Save As
       setIsSaveDialogOpen(true);
     }
-  };
+  }, [machines, connections, currentBlueprintId, currentBlueprintName, selectedMachineIds, selectedConnectionIds, extractSelectionData]);
 
-  const handleSaveAs = (name: string) => {
+  // 用 ref 持有最新 handleTriggerSave，避免键盘 effect 依赖频繁变化的值
+  const handleTriggerSaveRef = useRef(handleTriggerSave);
+  handleTriggerSaveRef.current = handleTriggerSave;
+
+  // ── 全局快捷键（仅注册一次，通过 getState/ref 读取最新状态） ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Z (Undo)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        return;
+      }
+      // Ctrl+Y or Ctrl+Shift+Z (Redo)
+      const isY = e.key.toLowerCase() === 'y';
+      const isShiftZ = e.key.toLowerCase() === 'z' && e.shiftKey;
+
+      if ((e.ctrlKey || e.metaKey) && (isY || isShiftZ)) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      // Ctrl+S
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleTriggerSaveRef.current();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]); // undo/redo 是 Zustand action，引用稳定 → effect 仅执行一次
+
+  const handleSaveAs = useCallback((name: string) => {
     if (pendingSaveData) {
-      // Save Selection
       saveBlueprint(null, name, pendingSaveData);
       toaster.create({
-        title: `已將選取內容另存為 "${name}"`,
+        title: `已将选区另存为 "${name}"`,
         type: "success",
         duration: 3000,
       });
       setPendingSaveData(null);
-      // Do NOT switch to new blueprint
     } else {
-      // Normal Save As
       const { width, height } = calculateContentDimensions(machines, connections);
       const newBp = saveBlueprint(null, name, {
         machines,
@@ -229,34 +220,33 @@ export default function App() {
       setCurrentBlueprint(newBp.id, newBp.name);
       setLastBlueprintId(newBp.id);
       toaster.create({
-        title: "藍圖已建立",
+        title: "蓝图已创建",
         type: "success",
         duration: 2000,
       });
-      // Clear URL params if saving a shared blueprint
       window.history.replaceState({}, '', window.location.pathname);
     }
-  };
+  }, [pendingSaveData, machines, connections, setCurrentBlueprint]);
 
-  const handleLoadBlueprint = (bp: Blueprint) => {
+  const handleLoadBlueprint = useCallback((bp: Blueprint) => {
     const data = bp.data as any;
     const gw = data.gridWidth ?? Math.max(data.actualWidth + 4, 24);
     const gh = data.gridHeight ?? Math.max(data.actualHeight + 4, 24);
     loadGame(bp.data.machines, bp.data.connections, gw, gh, bp.id, bp.name);
     setLastBlueprintId(bp.id);
     setUiView('editor');
-  };
+  }, [loadGame, setUiView]);
 
-  const handleCreateNew = () => {
+  const handleCreateNew = useCallback(() => {
     resetGame();
     setLastBlueprintId(null);
     setUiView('editor');
-  };
+  }, [resetGame, setUiView]);
 
-  const handleOpenList = () => {
+  const handleOpenList = useCallback(() => {
     setBlueprintListMode('manage');
     setUiView('list');
-  };
+  }, [setBlueprintListMode, setUiView]);
 
   return (
     <>
@@ -275,12 +265,10 @@ export default function App() {
         )}
       </Toaster>
 
-      {/* Loading Screen Overlay */}
       {isLoading && (
         <LoadingScreen onComplete={() => setIsLoading(false)} />
       )}
 
-      {/* Main Content Rendered Behind */}
       {uiView === 'list' && (
         <BlueprintList
           onSelect={handleLoadBlueprint}
@@ -302,7 +290,6 @@ export default function App() {
             onClose={() => { setIsSaveDialogOpen(false); setPendingSaveData(null); }}
             onSave={handleSaveAs}
           />
-
         </>
       )}
 
@@ -316,5 +303,3 @@ export default function App() {
     </>
   );
 }
-
-
