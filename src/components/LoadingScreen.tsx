@@ -13,10 +13,13 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onComplete }) => {
 
     useEffect(() => {
         const loadAssets = async () => {
-            // 從 assets/items 獲取所有圖片檔案
-            const imageModules = import.meta.glob('../assets/items/*.{png,jpg,jpeg,svg,webp}', { eager: true, query: '?url', import: 'default' });
-            const imageUrls = Object.values(imageModules) as string[];
-            const totalAssets = imageUrls.length;
+            // 延迟加载 assets/items 所有图片，避免 eager 阻塞启动
+            const imageModules = import.meta.glob<{ default: string }>(
+                '../assets/items/*.{png,jpg,jpeg,svg,webp}',
+                { eager: false, query: '?url', import: 'default' },
+            );
+            const paths = Object.keys(imageModules);
+            const totalAssets = paths.length;
 
             if (totalAssets === 0) {
                 setProgress(100);
@@ -27,17 +30,23 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onComplete }) => {
 
             const updateProgress = () => {
                 loadedCount++;
-                const newProgress = Math.round((loadedCount / totalAssets) * 100);
-                setProgress(newProgress);
+                setProgress(Math.round((loadedCount / totalAssets) * 100));
             };
 
-            // 預加載每張圖片
-            imageUrls.forEach(url => {
-                const img = new Image();
-                img.src = url;
-                img.onload = updateProgress;
-                img.onerror = updateProgress; // 將錯誤計為已加載，以避免卡住
-            });
+            // 逐张异步 import 并通过 new Image() 触发浏览器缓存
+            await Promise.all(paths.map(async (path) => {
+                try {
+                    const url = (await imageModules[path]()) as unknown as string;
+                    await new Promise<void>((resolve) => {
+                        const img = new Image();
+                        img.src = url;
+                        img.onload = () => { updateProgress(); resolve(); };
+                        img.onerror = () => { updateProgress(); resolve(); };
+                    });
+                } catch {
+                    updateProgress();
+                }
+            }));
         };
 
         loadAssets();

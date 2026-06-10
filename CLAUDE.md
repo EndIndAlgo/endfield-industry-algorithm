@@ -79,7 +79,7 @@ src/
 │   ├── IconButton.scss              # 圆形36px按钮、tooltip淡入动画、::before箭头
 │   ├── OperationHints.tsx            # 操作提示面板：根据mode/hasSelection/selectedMachineId动态显示快捷键组合(含鼠标图标)
 │   ├── OperationHints.scss          # 绝对定位右侧居中、JetBrains Mono字体、键盘图标样式
-│   ├── LoadingScreen.tsx             # 启动画面：import.meta.glob eager预加载assets/items所有图片→进度条→黄色展开动画→淡出
+│   ├── LoadingScreen.tsx             # 启动画面：延迟动态 import assets/items 所有图片→进度条→黄色展开动画→淡出
 │   ├── LoadingScreen.scss           # 暗底+黄色竖条展开动画(cubic-bezier)、左下角百分比+右上角loading图
 │   └── ui/
 │       ├── tooltip.tsx               # Chakra Tooltip封装：支持showArrow/portalled/portalRef/contentProps，disabled时直接返回children
@@ -89,7 +89,7 @@ src/
 │   ├── loading.png                   # 加载画面右侧图(240px)
 │   ├── members/                      # 团队成员头像 (author.gif, tata.png)
 │   ├── machines/                     # 机器图标 .webp (以machine.id命名, 如pco.webp)
-│   └── items/                        # 材料图标 (item_0~item_131, LoadingScreen eager预加载)
+│   └── items/                        # 材料图标 (item_0~item_131, 延迟加载不阻塞启动)
 ```
 
 ## 核心架构
@@ -296,8 +296,8 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
    - `Grid.tsx` 用 `useMemo` 一次计算 `poweredMachineIds: Set<string>`，通过 `isPowered` prop 传给 `Machine`
    - `Machine` 不再订阅 `machines` 字段，减少重渲染触发源
 
-3. **LoadingScreen eager 预加载全部 132 张图片**
-   - `LoadingScreen.tsx` 使用 `import.meta.glob('../assets/items/*', { eager: true })` 阻塞启动
+3. ~~**LoadingScreen eager 预加载全部 132 张图片**~~ ✅ **已修复 (2026-06-11)**
+   - `LoadingScreen.tsx` 改用 `{ eager: false }` 延迟动态 import，每张图独立 chunk，不阻塞启动
 
 4. ~~**零 React 缓存：无 `React.memo`、`useMemo`、`useCallback`**~~ ✅ **已修复 (2026-06-10)**
    - `Grid.tsx`：全部事件处理器用 `useCallback`，`poweredMachineIds` 用 `useMemo`，`extendPoint`/`pathToPoints` 提取为模块级函数
