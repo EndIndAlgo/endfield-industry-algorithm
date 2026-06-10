@@ -312,7 +312,7 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 6. ~~**extendPoint 函数重复 3 次**~~ ✅ **已修复 (2026-06-10)** — 提取为模块级 `extendPoint()` + `pathToPoints()`，3 处 SVG 渲染统一复用
 7. ~~**SVG polyline 渲染逻辑重复 3 次**~~ ✅ **已修复 (2026-06-10)** — 通过 `pathToPoints()` 统一
 
-8. ~~**commitWiring 单体函数过大**~~ 🟡 **部分修复 (2026-06-10)** — `splitConnectionAt` 已提取为纯函数移至 `gridUtils.ts`，commitWiring 主体仍较大
+8. **commitWiring 单体函数过大** 🔵 **搁置** — 逻辑会快速变化，`splitConnectionAt` 已提取为纯函数；重构时机未到
 
 9. ~~**零测试**~~ ✅ **已修复 (2026-06-10)** — 添加 vitest，38 个测试覆盖 `getBoundingBox`/`getRotatedDimensions`/`getRotatedPorts`/`routeManhattan`/`getCornerPoints`/`dirFromPoints`/`splitConnectionAt`
 
@@ -361,6 +361,14 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 - [x] GRID_SIZE 提取到 `constants.ts`，`main.tsx` 启动时同步到 CSS 变量 `--grid-size`
 - [x] `axisOffset` 改用 `GRID_SIZE` 常量 + 注释说明偏移来源（补偿 padding+border+port border）
 - [x] `ShareModal` 截图 `setTimeout(100)` → `requestAnimationFrame`
+- [x] **LoadingScreen 延迟加载**：`eager: true` → `eager: false`，132 张图片异步 import，不阻塞启动
+- [x] **BlueprintList 删除优化**：`setBlueprints(prev.filter(...))` 本地过滤，不重读 localStorage
+
+### 🔵 待定
+
+- [ ] **commitWiring 重构** — 搁置：逻辑快速变化，时机未到
+- [ ] **重复材料图标** — 跳过：需游戏数据人工对照
+- [ ] **繁→简中文转换** — 缓慢进行：hook 已覆盖运行时转换，写到哪改到哪
 
 ## 部署
 
