@@ -330,7 +330,7 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 17. ~~**端口偏移硬编码**~~ ✅ **已修复 (2026-06-11)** — `Machine.tsx` 改用 `GRID_SIZE` 常量 + 注释说明偏移来源
 18. ~~**GRID_SIZE 双重硬编码**~~ ✅ **已修复 (2026-06-11)** — 提取到 `constants.ts`，`main.tsx` 启动时同步到 CSS 变量 `--grid-size`
 19. ~~**ShareModal 截图时机不可靠**~~ ✅ **已修复 (2026-06-11)** — `setTimeout(100)` → `requestAnimationFrame`
-20. **BlueprintList 删除后重新读取 localStorage** — `BlueprintList.tsx` 调用 `getBlueprints()` 而非更新本地状态
+20. ~~**BlueprintList 删除后重新读取 localStorage**~~ ✅ **已修复 (2026-06-11)** — 改为 `setBlueprints(prev => prev.filter(...))` 本地过滤
 
 ## 下一步行动计划
 

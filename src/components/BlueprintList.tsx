@@ -27,7 +27,8 @@ export const BlueprintList = ({ onSelect, onCreateNew, mode }: BlueprintListProp
         e.stopPropagation();
         if (confirm('確定要刪除此藍圖嗎?')) {
             deleteBlueprint(id);
-            setBlueprints(getBlueprints());
+            // 直接从本地状态过滤，避免重新读取 localStorage
+            setBlueprints(prev => prev.filter(b => b.id !== id));
             if (selectedBlueprint?.id === id) {
                 setIsDrawerOpen(false);
                 setSelectedBlueprint(null);
