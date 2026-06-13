@@ -3,7 +3,7 @@ import { useGameStore } from '../store/gameStore';
 import { MACHINES } from '../config/machines';
 import { GameMode } from '../types';
 import classNames from 'classnames';
-import { MousePointer2, Zap, BoxSelect } from 'lucide-react';
+import { MousePointer2, ArrowRight, Waves, BoxSelect } from 'lucide-react';
 import { Tabs } from '@chakra-ui/react';
 import './Toolbar.scss';
 
@@ -93,11 +93,18 @@ export const Toolbar = () => {
                         <MousePointer2 size={24} />
                     </button>
                     <button
-                        className={classNames('tool-btn', { active: mode === GameMode.WIRE })}
-                        onClick={() => setMode(mode === GameMode.WIRE ? GameMode.BUILD : GameMode.WIRE)}
-                        title="Wiring Mode (E)"
+                        className={classNames('tool-btn', { active: mode === GameMode.CONVEYOR })}
+                        onClick={() => setMode(mode === GameMode.CONVEYOR ? GameMode.BUILD : GameMode.CONVEYOR)}
+                        title="传送带模式 (E)"
                     >
-                        <Zap size={24} />
+                        <ArrowRight size={24} />
+                    </button>
+                    <button
+                        className={classNames('tool-btn', { active: mode === GameMode.PIPE })}
+                        onClick={() => setMode(mode === GameMode.PIPE ? GameMode.BUILD : GameMode.PIPE)}
+                        title="管道模式 (Q)"
+                    >
+                        <Waves size={24} />
                     </button>
                     <button
                         className={classNames('tool-btn', { active: mode === GameMode.DEVICE_SELECT })}

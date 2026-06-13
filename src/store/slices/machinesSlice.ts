@@ -97,10 +97,18 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
     },
 
     cancelOperation: () => {
-        const { isWiring, movingMachineBackup } = get();
-        if (isWiring) {
-            get().cancelWiring();
-        } else if (movingMachineBackup) {
+        const { isConnecting, movingMachineBackup, mode } = get();
+        if (isConnecting) {
+            get().cancelConnection();
+            return;
+        }
+        // 连接模式（非连线中）→ 回到 BUILD
+        if (mode === GameMode.CONVEYOR || mode === GameMode.PIPE) {
+            set({ mode: GameMode.BUILD });
+            return;
+        }
+
+        if (movingMachineBackup) {
             set(state => ({
                 machines: [...state.machines, movingMachineBackup],
                 movingMachineBackup: null,
@@ -111,7 +119,7 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
             set({ selectedMachineId: null });
         }
 
-        const { mode, movingMachinesSnapshot, movingConnectionsSnapshot } = get();
+        const { movingMachinesSnapshot, movingConnectionsSnapshot } = get();
         if (mode === GameMode.DEVICE_SELECT) {
             set({ selectionStart: null, selectionEnd: null, selectedMachineIds: [], selectedConnectionIds: [], mode: GameMode.BUILD });
         }

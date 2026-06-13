@@ -116,10 +116,16 @@ export const MACHINES: MachineConfig[] = [
         width: 1,
         height: 1,
         inputs: [
-            { x: 0, y: 0, side: 'top', type: 'Liquid', autoConnect: true }
+            { x: 0, y: 0, side: 'top', type: 'Liquid', autoConnect: true },
+            { x: 0, y: 0, side: 'right', type: 'Liquid', autoConnect: true },
+            { x: 0, y: 0, side: 'bottom', type: 'Liquid', autoConnect: true },
+            { x: 0, y: 0, side: 'left', type: 'Liquid', autoConnect: true }
         ],
         outputs: [
-            { x: 0, y: 0, side: 'bottom', type: 'Liquid', autoConnect: true }
+            { x: 0, y: 0, side: 'top', type: 'Liquid', autoConnect: true },
+            { x: 0, y: 0, side: 'right', type: 'Liquid', autoConnect: true },
+            { x: 0, y: 0, side: 'bottom', type: 'Liquid', autoConnect: true },
+            { x: 0, y: 0, side: 'left', type: 'Liquid', autoConnect: true }
         ],
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 管道分流器 pipe-splitter psp

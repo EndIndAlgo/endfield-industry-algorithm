@@ -6,7 +6,7 @@ import type { Point, PortConfig } from '../types';
 import { MACHINES, getMachineConfig } from '../config/machines';
 import classNames from 'classnames';
 import './Grid.scss';
-import { checkCollision } from '../utils/gridUtils';
+import { checkCollision, findPortOuterCellAt, findMachineAt, getPortOuterCells } from '../utils/gridUtils';
 import { getRotatedDimensions, getRotatedPorts, buildPowerGrid } from '../utils/machineUtils';
 import { GRID_SIZE } from '../config/constants';
 const EXTEND = 0.45;
@@ -62,11 +62,11 @@ export const Grid = () => {
     const setMode = useGameStore(s => s.setMode);
     const rotatePreview = useGameStore(s => s.rotatePreview);
 
-    // 布线状态（中频）
-    const isWiring = useGameStore(s => s.isWiring);
-    const wiringPreviewPath = useGameStore(s => s.wiringPreviewPath);
-    const isWiringValid = useGameStore(s => s.isWiringValid);
-    const wiringSource = useGameStore(s => s.wiringSource);
+    // 连线状态（中频）
+    const isConnecting = useGameStore(s => s.isConnecting);
+    const previewPath = useGameStore(s => s.previewPath);
+    const isValidPath = useGameStore(s => s.isValidPath);
+    const connectPortType = useGameStore(s => s.portType);
 
     // 框选（低频）
     const selectionStart = useGameStore(s => s.selectionStart);
@@ -182,8 +182,8 @@ export const Grid = () => {
         hoverPosRef.current = pos;
 
         const s = useGameStore.getState();
-        if (s.isWiring) {
-            s.updateWiringPreview(pos);
+        if (s.isConnecting) {
+            s.updatePreview(pos);
         }
 
         if (s.mode === GameMode.DEVICE_SELECT && s.selectionStart && e.buttons === 1) {
@@ -197,6 +197,43 @@ export const Grid = () => {
         const pos = getGridPos(e);
         const s = useGameStore.getState();
 
+        // ── 连接模式（传送带/管道） ──
+        if (s.mode === GameMode.CONVEYOR || s.mode === GameMode.PIPE) {
+            if (s.isConnecting) {
+                // 正在连线中：有效路径 → 放置，无效 → 无响应
+                if (s.isValidPath) {
+                    s.takeSnapshot();
+                    s.commitConnection();
+                }
+                return;
+            }
+
+            // 未在连线中：启动连线
+            const portType = s.mode === GameMode.CONVEYOR ? 'Solid' : 'Liquid';
+
+            // 检测1：点击位置在机器身体上？（优先，提供全部输出端口）
+            const machine = findMachineAt(pos, s.machines);
+            if (machine) {
+                const ports = getPortOuterCells(machine, portType);
+                if (ports.length > 0) {
+                    s.startConnecting(ports, portType);
+                    if (hoverPosRef.current) s.updatePreview(hoverPosRef.current);
+                }
+                return;
+            }
+
+            // 检测2：点击位置是端口外侧格？（精确匹配单一端口）
+            const outerResult = findPortOuterCellAt(pos, s.machines, portType);
+            if (outerResult) {
+                s.startConnecting([{ pos: outerResult.pos, facing: outerResult.facing }], portType);
+                if (hoverPosRef.current) s.updatePreview(hoverPosRef.current);
+                return;
+            }
+
+            return;
+        }
+
+        // ── 原有模式逻辑 ──
         if (s.mode === GameMode.BUILD && s.selectedMachineId) {
             s.takeSnapshot();
             s.addMachine(s.selectedMachineId, pos.x, pos.y, s.previewRotation);
@@ -219,7 +256,7 @@ export const Grid = () => {
         setIsPanning(false);
     }, []);
 
-    // ── 快捷键 E / R / X / F / F1 / M / Ctrl+C / Escape ──
+    // ── 快捷键 E / Q / R / X / F / F1 / M / Ctrl+C / Escape ──
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const s = useGameStore.getState();
@@ -227,9 +264,27 @@ export const Grid = () => {
 
             if (e.key.toLowerCase() === 'e') {
                 if (isPlacing) return;
-                setMode(s.mode === GameMode.WIRE ? GameMode.BUILD : GameMode.WIRE);
+                if (s.mode === GameMode.CONVEYOR) {
+                    s.cancelConnection();
+                } else {
+                    if (s.isConnecting) s.cancelConnection();
+                    setMode(GameMode.CONVEYOR);
+                }
+            } else if (e.key.toLowerCase() === 'q') {
+                if (isPlacing) return;
+                if (s.mode === GameMode.PIPE) {
+                    s.cancelConnection();
+                } else {
+                    if (s.isConnecting) s.cancelConnection();
+                    setMode(GameMode.PIPE);
+                }
             } else if (e.key.toLowerCase() === 'r') {
-                rotatePreview();
+                if (s.isConnecting) {
+                    s.toggleLShape();
+                    if (hoverPosRef.current) s.updatePreview(hoverPosRef.current);
+                } else {
+                    rotatePreview();
+                }
             } else if (e.key.toLowerCase() === 'x') {
                 if (isPlacing) return;
                 setMode(s.mode === GameMode.DEVICE_SELECT ? GameMode.BUILD : GameMode.DEVICE_SELECT);
@@ -292,30 +347,15 @@ export const Grid = () => {
         }));
     }
 
-    // ── 布线预览方向推导 ──
-    const headDirRef = useRef<number>(1);
-    const tailDirRef = useRef<number>(1);
-    if (isWiring && wiringPreviewPath.length >= 2) {
-        const first = wiringPreviewPath[0];
-        const second = wiringPreviewPath[1];
-        if (second.x > first.x) tailDirRef.current = 1;
-        else if (second.x < first.x) tailDirRef.current = 3;
-        else if (second.y > first.y) tailDirRef.current = 2;
-        else tailDirRef.current = 0;
-
-        const last = wiringPreviewPath[wiringPreviewPath.length - 1];
-        const prev = wiringPreviewPath[wiringPreviewPath.length - 2];
-        if (last.x > prev.x) headDirRef.current = 1;
-        else if (last.x < prev.x) headDirRef.current = 3;
-        else if (last.y > prev.y) headDirRef.current = 2;
-        else headDirRef.current = 0;
-    }
+    // ── 连线预览方向推导 ──
+    const tailFacingForPreview = useGameStore(s => s.activeTailFacing);
+    const headFacingForPreview = useGameStore(s => s.previewHeadFacing);
 
     const showMovePreview = (mode === GameMode.MOVE_SELECTION || mode === GameMode.BLUEPRINT_PLACE) && moveAnchor && hoverPos;
 
     return (
         <div
-            className={classNames('grid-container', { 'wiring-mode': mode === GameMode.WIRE, 'panning': isPanning })}
+            className={classNames('grid-container', { 'wiring-mode': mode === GameMode.CONVEYOR || mode === GameMode.PIPE, 'panning': isPanning })}
             ref={containerRef}
             onMouseMove={handleMouseMove}
             onMouseDown={handleMouseDown}
@@ -366,10 +406,10 @@ export const Grid = () => {
                     })}
 
                     {/* 连线预览 */}
-                    {isWiring && wiringPreviewPath.length > 0 && (() => {
-                        const pt = pathToPoints(wiringPreviewPath, tailDirRef.current, headDirRef.current);
-                        const pcls = (base: string) => classNames(base, { 'invalid': !isWiringValid });
-                        const prevPrefix = wiringSource?.portType === 'Liquid' ? 'pipe' : 'conveyor';
+                    {isConnecting && previewPath.length > 0 && (() => {
+                        const pt = pathToPoints(previewPath, tailFacingForPreview, headFacingForPreview);
+                        const pcls = (base: string) => classNames(base, { 'invalid': !isValidPath });
+                        const prevPrefix = connectPortType === 'Liquid' ? 'pipe' : 'conveyor';
                         return (
                             <>
                                 <polyline points={pt} className={pcls(`${prevPrefix}-preview-outline`)} />

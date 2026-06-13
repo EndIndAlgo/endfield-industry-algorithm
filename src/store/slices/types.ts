@@ -31,17 +31,31 @@ export interface MachinesSlice {
     cancelOperation: () => void;
 }
 
-export interface WiringSlice {
+export interface ConnectionSlice {
     connections: Connection[];
-    isWiring: boolean;
-    isWiringValid: boolean;
-    wiringSource: { tailPos: Point; tailFacing: Direction; portType: PortType } | null;
-    wiringPreviewPath: Point[];
-    startWiring: (tailPos: Point, tailFacing: Direction, portType: PortType) => void;
-    updateWiringPreview: (mouseGridPos: Point) => void;
-
-    commitWiring: () => void;
-    cancelWiring: () => void;
+    isConnecting: boolean;
+    isValidPath: boolean;
+    // 连线源：可用端口列表（点击机器=全部匹配输出端口，点击端口外侧=仅该端口，延续=单元素）
+    availablePorts: { pos: Point; facing: Direction }[];
+    portType: PortType;
+    // 当前帧计算结果
+    activeStartPos: Point;
+    activeTailFacing: Direction;
+    previewPath: Point[];
+    previewHeadFacing: Direction;
+    // L 形策略
+    lShapeMode: 'same-dir' | 'perpendicular';
+    // 续接标记（自动续接或其他触发方式）
+    isContinuing: boolean;
+    continueSourceId: string | null;
+    // 当前预览目标是否为机器（用于判断是否续接）
+    previewTargetIsMachine: boolean;
+    // Actions
+    startConnecting: (ports: { pos: Point; facing: Direction }[], portType: PortType) => void;
+    updatePreview: (mouseGridPos: Point) => void;
+    toggleLShape: () => void;
+    commitConnection: () => void;
+    cancelConnection: () => void;
 }
 
 export interface SelectionSlice {
@@ -83,4 +97,4 @@ export interface BlueprintSlice {
     startInsertBlueprintOnNewMap: (blueprint: { data: { machines: any[], connections: any[] } }) => void;
 }
 
-export interface GameState extends CanvasSlice, MachinesSlice, WiringSlice, SelectionSlice, HistorySlice, BlueprintSlice {}
+export interface GameState extends CanvasSlice, MachinesSlice, ConnectionSlice, SelectionSlice, HistorySlice, BlueprintSlice {}

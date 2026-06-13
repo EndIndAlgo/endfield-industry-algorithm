@@ -64,7 +64,8 @@ export interface Connection {
 
 export const GameMode = {
   BUILD: 'BUILD',
-  WIRE: 'WIRE',
+  CONVEYOR: 'CONVEYOR',
+  PIPE: 'PIPE',
   DEVICE_SELECT: 'DEVICE_SELECT',
   MOVE_SELECTION: 'MOVE_SELECTION',
   BLUEPRINT_PLACE: 'BLUEPRINT_PLACE'

@@ -362,3 +362,140 @@ export const splitConnectionAt = (conn: Connection, point: Point): Connection[] 
 
     return parts;
 };
+
+// ═══════════════════════════════════════════════════════════════
+// 新版连线系统工具函数
+// ═══════════════════════════════════════════════════════════════
+
+/** 尝试单 L 形路径：从 start 沿 firstAxis 走第一段，再垂直走到 end */
+export const trySingleLRoute = (
+    start: Point,
+    end: Point,
+    firstAxis: Direction,
+    grid: Uint8Array,
+    gridW: number,
+    gridH: number
+): Point[] | null => {
+    const path: Point[] = [];
+
+    // firstAxis 水平(1=Right, 3=Left) → corner = (end.x, start.y)
+    // firstAxis 垂直(0=Up, 2=Down) → corner = (start.x, end.y)
+    const horizontalFirst = firstAxis === 1 || firstAxis === 3;
+    const corner: Point = horizontalFirst
+        ? { x: end.x, y: start.y }
+        : { x: start.x, y: end.y };
+
+    // 第一段方向向量
+    const step1 = firstAxis === 1 ? { x: 1, y: 0 }
+        : firstAxis === 3 ? { x: -1, y: 0 }
+        : firstAxis === 2 ? { x: 0, y: 1 }
+        : { x: 0, y: -1 };
+
+    let cx = start.x;
+    let cy = start.y;
+
+    // 第一段：start → corner
+    while (cx !== corner.x || cy !== corner.y) {
+        cx += step1.x;
+        cy += step1.y;
+        if (cx < 0 || cx >= gridW || cy < 0 || cy >= gridH) return null;
+        if (grid[cy * gridW + cx]) return null;
+        path.push({ x: cx, y: cy });
+    }
+
+    // 第二段：corner → end（垂直方向）
+    if (corner.x !== end.x || corner.y !== end.y) {
+        const step2 = end.x > corner.x ? { x: 1, y: 0 }
+            : end.x < corner.x ? { x: -1, y: 0 }
+            : end.y > corner.y ? { x: 0, y: 1 }
+            : { x: 0, y: -1 };
+
+        while (cx !== end.x || cy !== end.y) {
+            cx += step2.x;
+            cy += step2.y;
+            if (cx < 0 || cx >= gridW || cy < 0 || cy >= gridH) return null;
+            if (grid[cy * gridW + cx]) return null;
+            path.push({ x: cx, y: cy });
+        }
+    }
+
+    return path;
+};
+
+/** 计算路径的 headFacing：直路径=路径方向，L 形=第二段方向 */
+export const computeHeadFacing = (path: Point[], tailFacing: Direction): Direction => {
+    if (path.length <= 1) return tailFacing;
+    const n = path.length;
+    return dirFromPoints(path[n - 2], path[n - 1]);
+};
+
+/** 返回机器所有匹配类型的输出端口外侧格及朝向 */
+export const getPortOuterCells = (
+    machine: PlacedMachine,
+    portType?: PortType
+): { pos: Point; facing: Direction }[] => {
+    const config = MACHINES.find(c => c.id === machine.machineId);
+    if (!config) return [];
+    const outputs = getRotatedPorts(config.outputs, config.width, config.height, machine.rotation);
+    return outputs
+        .filter(p => !portType || p.type === portType)
+        .map(p => {
+            const vec = getVectorFromSide(p.side);
+            return {
+                pos: { x: machine.x + p.x + vec.x, y: machine.y + p.y + vec.y },
+                facing: sideToDir[p.side]
+            };
+        });
+};
+
+/** 返回机器所有匹配类型的输入端口外侧格及 side */
+export const getInputPortOuterCells = (
+    machine: PlacedMachine,
+    portType?: PortType
+): { pos: Point; side: 'top' | 'right' | 'bottom' | 'left' }[] => {
+    const config = MACHINES.find(c => c.id === machine.machineId);
+    if (!config) return [];
+    const inputs = getRotatedPorts(config.inputs, config.width, config.height, machine.rotation);
+    return inputs
+        .filter(p => !portType || p.type === portType)
+        .map(p => {
+            const vec = getVectorFromSide(p.side);
+            return {
+                pos: { x: machine.x + p.x + vec.x, y: machine.y + p.y + vec.y },
+                side: p.side
+            };
+        });
+};
+
+/** 检查网格位置是否是某个机器的输出端口外侧格，返回端口信息 */
+export const findPortOuterCellAt = (
+    pos: Point,
+    machines: PlacedMachine[],
+    portType?: PortType
+): { pos: Point; facing: Direction } | null => {
+    for (const m of machines) {
+        const cells = getPortOuterCells(m, portType);
+        for (const cell of cells) {
+            if (cell.pos.x === pos.x && cell.pos.y === pos.y) {
+                return cell;
+            }
+        }
+    }
+    return null;
+};
+
+/** 查找占据指定网格位置的机器 */
+export const findMachineAt = (
+    pos: Point,
+    machines: PlacedMachine[]
+): PlacedMachine | null => {
+    for (const m of machines) {
+        const config = MACHINES.find(c => c.id === m.machineId);
+        if (!config) continue;
+        const { width, height } = getRotatedDimensions(config.width, config.height, m.rotation);
+        if (pos.x >= m.x && pos.x < m.x + width && pos.y >= m.y && pos.y < m.y + height) {
+            return m;
+        }
+    }
+    return null;
+};

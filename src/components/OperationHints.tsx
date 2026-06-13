@@ -15,15 +15,19 @@ export const OperationHints = () => {
                 <>
                     <div className="hint-item">
                         <div className="key-icon">E</div>
-                        <span>傳送帶模式</span>
+                        <span>传送带模式</span>
+                    </div>
+                    <div className="hint-item">
+                        <div className="key-icon">Q</div>
+                        <span>管道模式</span>
                     </div>
                     <div className="hint-item">
                         <div className="key-icon">X</div>
-                        <span>框選模式</span>
+                        <span>框选模式</span>
                     </div>
                     <div className="hint-item">
                         <div className="key-icon">F1</div>
-                        <span>插入藍圖</span>
+                        <span>插入蓝图</span>
                     </div>
                 </>
             )}
@@ -95,20 +99,58 @@ export const OperationHints = () => {
                 </>
             )}
 
-            {/* 連線模式 */}
-            {mode === GameMode.WIRE && (
+            {/* 传送带模式 */}
+            {mode === GameMode.CONVEYOR && (
                 <>
                     <div className="hint-item">
                         <div className="key-icon">
                             <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
                         </div>
-                        <span>確定起點</span>
+                        <span>点击机器/端口外侧 → 启动</span>
+                    </div>
+                    <div className="hint-item">
+                        <div className="key-icon">
+                            <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
+                        </div>
+                        <span>移动后点击 → 放置传送带</span>
+                    </div>
+                    <div className="hint-item">
+                        <div className="key-icon">R</div>
+                        <span>切换L形策略</span>
                     </div>
                     <div className="hint-item">
                         <div className="key-icon">
                             <Icon icon="ph:mouse-right-click-fill" width="24" height="24" />
                         </div>
-                        <span>取消連線</span>
+                        <span>取消/退出</span>
+                    </div>
+                </>
+            )}
+
+            {/* 管道模式 */}
+            {mode === GameMode.PIPE && (
+                <>
+                    <div className="hint-item">
+                        <div className="key-icon">
+                            <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
+                        </div>
+                        <span>点击机器/端口外侧 → 启动</span>
+                    </div>
+                    <div className="hint-item">
+                        <div className="key-icon">
+                            <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
+                        </div>
+                        <span>移动后点击 → 放置管道</span>
+                    </div>
+                    <div className="hint-item">
+                        <div className="key-icon">R</div>
+                        <span>切换L形策略</span>
+                    </div>
+                    <div className="hint-item">
+                        <div className="key-icon">
+                            <Icon icon="ph:mouse-right-click-fill" width="24" height="24" />
+                        </div>
+                        <span>取消/退出</span>
                     </div>
                 </>
             )}

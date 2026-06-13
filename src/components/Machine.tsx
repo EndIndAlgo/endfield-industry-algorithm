@@ -2,7 +2,7 @@ import React, { useRef, useCallback, memo } from 'react';
 import { Icon } from '@iconify/react';
 import classNames from 'classnames';
 import { GameMode } from '../types';
-import type { PlacedMachine, PortType } from '../types';
+import type { PlacedMachine } from '../types';
 import { getMachineConfig } from '../config/machines';
 import { useGameStore } from '../store/gameStore';
 import './Machine.scss';
@@ -19,9 +19,6 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
     const config = getMachineConfig(data.machineId);
 
     // 细粒度 store selector：只订阅本组件需要的字段
-    const mode = useGameStore(s => s.mode);
-    const isWiring = useGameStore(s => s.isWiring);
-    const wiringSource = useGameStore(s => s.wiringSource);
     const zoom = useGameStore(s => s.zoom);
 
     const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,11 +42,18 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
 
     // ── 事件处理器：用 getState() 读取最新状态，避免闭包依赖 ──
     const handleClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
+        const s = useGameStore.getState();
+        // 连接模式下不阻止冒泡，让 Grid 统一处理
+        if (s.mode !== GameMode.CONVEYOR && s.mode !== GameMode.PIPE) {
+            e.stopPropagation();
+        }
     }, []);
 
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         if (e.button !== 0) return;
+        const s = useGameStore.getState();
+        // 连接模式下不启动长按拾取
+        if (s.mode === GameMode.CONVEYOR || s.mode === GameMode.PIPE) return;
 
         pressTimer.current = setTimeout(() => {
             const s = useGameStore.getState();
@@ -69,15 +73,6 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
         if (pressTimer.current) {
             clearTimeout(pressTimer.current);
             pressTimer.current = null;
-        }
-    }, []);
-
-    const handleInputClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        const s = useGameStore.getState();
-        if (s.mode === GameMode.WIRE && s.isWiring) {
-            s.takeSnapshot();
-            s.commitWiring();
         }
     }, []);
 
@@ -143,22 +138,6 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
         return classNames(classes);
     }, [inputs, outputs]);
 
-    const handleOutputClick = useCallback((e: React.MouseEvent, portRel: { x: number; y: number; side: string; type: PortType }) => {
-        e.stopPropagation();
-        const s = useGameStore.getState();
-        if (s.mode === GameMode.WIRE) {
-            const absX = data.x + portRel.x;
-            const absY = data.y + portRel.y;
-            const sideToDir: Record<string, number> = { top: 0, right: 1, bottom: 2, left: 3 };
-            const sideToVec: Record<string, {x:number;y:number}> = { top: {x:0,y:-1}, right: {x:1,y:0}, bottom: {x:0,y:1}, left: {x:-1,y:0} };
-            const side = portRel.side as 'top' | 'right' | 'bottom' | 'left';
-            const tailFacing = sideToDir[side] as import('../types').Direction;
-            const vec = sideToVec[side];
-            const tailPos = { x: absX + vec.x, y: absY + vec.y };
-            s.startWiring(tailPos, tailFacing, portRel.type);
-        }
-    }, [data.x, data.y]);
-
     return (
         <div
             className={classNames('machine-container', {
@@ -208,18 +187,14 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
                     </div>
                 )}
 
-                {/* 输入端口（跳过与输出重叠的） */}
+                {/* 输入端口（纯视觉，交互由 Grid 统一处理） */}
                 {inputs.map((p, i) => {
                     if (mixedKeys.has(`${p.x},${p.y},${p.side}`)) return null;
                     return (
                     <div
                         key={`in-${i}`}
-                        className={classNames(getPortClasses(p), 'input', {
-                            clickable: mode === GameMode.WIRE && isWiring && p.type === wiringSource?.portType
-                        })}
+                        className={classNames(getPortClasses(p), 'input')}
                         style={getPortStyle(p)}
-                        onClick={handleInputClick}
-                        title={mode === GameMode.WIRE && isWiring && p.type === wiringSource?.portType ? "点击连线" : ""}
                     >
                         <div className="port-inner">
                             <Icon icon="octicon:chevron-right-12" width="24" height="24" strokeWidth="3" />
@@ -228,32 +203,16 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
                     );
                 })}
 
-                {/* 输出端口（含合并端口 → 菱形） */}
+                {/* 输出端口（纯视觉，交互由 Grid 统一处理） */}
                 {outputs.map((p, i) => {
                     const isMixed = mixedKeys.has(`${p.x},${p.y},${p.side}`);
-                    const sideToVec: Record<string, {x:number;y:number}> = { top: {x:0,y:-1}, right: {x:1,y:0}, bottom: {x:0,y:1}, left: {x:-1,y:0} };
-                    const vec = sideToVec[p.side];
-                    const isActive = !isMixed && wiringSource
-                        && wiringSource.tailPos.x === data.x + p.x + vec.x
-                        && wiringSource.tailPos.y === data.y + p.y + vec.y
-                        && wiringSource.portType === p.type;
                     return (
                     <div
                         key={`out-${i}`}
                         className={classNames(getPortClasses(p), 'output', {
                             mixed: isMixed,
-                            clickable: mode === GameMode.WIRE && (!isMixed || (isWiring && p.type === wiringSource?.portType)),
-                            active: isActive
                         })}
                         style={getPortStyle(p)}
-                        onClick={(e) => {
-                            if (isMixed && isWiring) {
-                                handleInputClick(e);
-                            } else {
-                                handleOutputClick(e, p);
-                            }
-                        }}
-                        title={isMixed ? "双向端口" : mode === GameMode.WIRE ? "点击开始连线" : ""}
                     >
                         <div className="port-inner">
                             <Icon icon={isMixed ? "lucide:diamond" : "octicon:chevron-right-12"} width={isMixed ? 16 : 24} height={isMixed ? 16 : 24} strokeWidth="3" />
