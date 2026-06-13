@@ -14,13 +14,13 @@ export const Settings = () => {
     return (
         <Box width="100vw" height="100vh" bg="var(--gray-light)" p={8}>
             <Flex justify="space-between" align="center" mb={8} color="var(--gray-dark)">
-                <Heading size="xl">// 設定</Heading>
+                <Heading size="xl">// 设置</Heading>
                 <CloseButton size="sm" onClick={() => setUiView('editor')} />
             </Flex>
 
             <Flex direction="column" gap="16px">
                 <Box mb="16px" p={6} borderRadius="lg" bg="var(--black-light)" border="1px solid var(--gray)" alignSelf="stretch">
-                    <Heading size="md" mb={4} color="var(--gray-light)">語言 / Language</Heading>
+                    <Heading size="md" mb={4} color="var(--gray-light)">语言 / Language</Heading>
                     <Tabs.Root
                         value={language}
                         onValueChange={handleLanguageChange}

@@ -364,11 +364,92 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 - [x] **LoadingScreen 延迟加载**：`eager: true` → `eager: false`，132 张图片异步 import，不阻塞启动
 - [x] **BlueprintList 删除优化**：`setBlueprints(prev.filter(...))` 本地过滤，不重读 localStorage
 
-### 🔵 待定
+### 🔵 搁置 / 跳过
 
-- [ ] **commitWiring 重构** — 搁置：逻辑快速变化，时机未到
-- [ ] **重复材料图标** — 跳过：需游戏数据人工对照
-- [ ] **繁→简中文转换** — 缓慢进行：hook 已覆盖运行时转换，写到哪改到哪
+- [ ] **commitWiring 重构** — 搁置：逻辑仍在快速变化，时机未到
+- [ ] **重复材料图标** — 跳过：需游戏数据人工对照，不可猜测
+- [ ] **蓝图相关 `any` 类型** — 搁置：blueprintSlice(6)、shareUtils(4)、types.ts(2) 共 12 处 `any`，涉及序列化/反序列化边界，蓝图格式仍在演进，暂不锁定类型
+- [ ] **MAX_BLUEPRINTS 常量化** — 搁置：与蓝图模块同批处理
+
+---
+
+## 下一步行动计划（2026-06-13 梳理，蓝图相关搁置）
+
+### 现状总结
+
+| 维度 | 状态 |
+|------|------|
+| 源文件 | 48 个（22 .ts + 16 .tsx + 8 .scss + 2 .css），~7,000 行 |
+| 测试 | 1 个文件 38 个用例，仅覆盖纯工具函数 |
+| `any` 类型 | 12 处（蓝图相关 12 处全部搁置；非蓝图仅 Header.tsx 1 处） |
+| 大文件 | Grid.tsx(584) / gridUtils.ts(501) / connectionSlice.ts(466) |
+| 依赖 | 全部最新，仅 @types/html2canvas 误放在 dependencies |
+| 语言 | 繁→简转换进行中，Settings 页面仍有繁体 UI 文案 |
+| 魔法数字 | `+4` 边距、`999` 上限、旋转角度 0/90/180/270 等未常量化 |
+
+### 🔴 Sprint 4：类型安全 + 语言统一
+
+1. **消除非蓝图的 `any` 类型**（1 处）
+   - `src/components/Header.tsx:27` — `(e: any)` → 具体 Chakra Select 事件类型
+   - **风险**：极低
+
+2. **繁→简中文转换收尾**
+   - `Settings.tsx` UI 文案：`設定`→`设置`、`語言`→`语言`
+   - `connectionSlice.ts` 注释中残留繁体词组（如 `與`→`与`、`為`→`为`）
+   - 其他文件批量检查替换
+   - **风险**：极低。纯文案修改
+
+3. **@types/html2canvas → devDependencies**
+   - `package.json` 中将 `@types/html2canvas` 从 `dependencies` 移到 `devDependencies`
+   - **风险**：极低
+
+### 🟡 Sprint 5：测试覆盖
+
+4. **组件单元测试**
+   - `Machine.test.tsx`：端口渲染、方向旋转、长按拾取、供电警告图标
+   - `Toolbar.test.tsx`：分类切换、模式切换、机器按钮渲染
+   - **风险**：中。需要配置 vitest jsdom 环境 + Chakra UI 测试适配
+
+5. **Store 切片集成测试**
+   - `machinesSlice`：addMachine 碰撞检测、removeMachine 级联删连线、pickupMachine
+   - `connectionSlice`：commitWiring 完整链路（含交叉检测+桥生成+拆分+合并）
+   - `selectionSlice`：框选、批量移动、复制粘贴
+   - `historySlice`：undo/redo 完整流程
+   - **风险**：中。切片间有耦合，测试需完整模拟状态
+
+6. **Hook 测试**
+   - `useChineseConverter`：繁体→简体 DOM 文本节点转换
+   - **风险**：中。依赖动态 import opencc-js 和 DOM MutationObserver
+
+### 🟢 Sprint 6：架构瘦身
+
+7. **拆分 Grid.tsx（584 行）**
+   - 提取 `<ConnectionSVGLayer>` 组件（连线 + 预览 + 批量移动预览的 SVG 渲染）
+   - 提取 `useGridEvents` hook（鼠标事件处理：pointerdown/move/up、wheel 缩放、键盘快捷键）
+   - Grid.tsx 瘦身到 ~200 行，仅保留布局组合
+   - **风险**：中。Grid 是核心组件，拆分需仔细验证行为不变
+
+8. **拆分 gridUtils.ts（501 行）**
+   - `occupancyUtils.ts`：buildOccupancyGrid、buildConnectionGrid
+   - `pathfindingUtils.ts`：routeManhattan、findPath、trySingleLRoute
+   - `collisionUtils.ts`：checkCollision、isOverlapping、getMachineRect
+   - `portUtils.ts`：findPortOuterCellAt、getPortOuterCells、getCornerPoints
+   - gridUtils.ts 变为 barrel export
+   - **风险**：低。纯函数拆分，现有 38 个测试全部保留
+
+9. **魔法数字常量化**（非蓝图部分）
+   - `DEFAULT_PADDING = 4`（Grid/App 中多处 `+ 4`）
+   - `MAX_MEMBERS = 999`（About.tsx 中硬编码）
+   - Port 旋转角度常量 `PORT_ROTATIONS = { top: 0, right: 90, bottom: 180, left: 270 }`
+   - **风险**：极低
+
+### 🔵 长期展望
+
+- [ ] **CI/CD**：GitHub Actions 跑 lint + typecheck + test
+- [ ] **E2E 测试**：Playwright 测试完整用户流程（放置机器→连线→保存蓝图→分享）
+- [ ] **无障碍（a11y）**：键盘导航、ARIA 标签、屏幕阅读器支持
+- [ ] **移动端适配**：工具栏和 Header 的响应式布局
+- [ ] **英文国际化**：useChineseConverter 架构可扩展为完整 i18n
 
 ## 部署
 
