@@ -1,7 +1,7 @@
 
 import { Box, VStack, Text, Button, IconButton, Flex, Drawer, Badge } from '@chakra-ui/react';
 import { FilePlus, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { type Blueprint, deleteBlueprint, getBlueprints } from '../utils/storage';
 
 import { useGameStore } from '../store/gameStore';
@@ -15,13 +15,9 @@ interface BlueprintListProps {
 export const BlueprintList = ({ onSelect, onCreateNew, mode }: BlueprintListProps) => {
     const startInsertBlueprint = useGameStore(s => s.startInsertBlueprint);
     const startInsertBlueprintOnNewMap = useGameStore(s => s.startInsertBlueprintOnNewMap);
-    const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
+    const [blueprints, setBlueprints] = useState<Blueprint[]>(() => getBlueprints());
     const [selectedBlueprint, setSelectedBlueprint] = useState<Blueprint | null>(null);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-
-    useEffect(() => {
-        setBlueprints(getBlueprints());
-    }, []);
 
     const handleDelete = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();

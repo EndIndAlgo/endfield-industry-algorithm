@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, memo } from 'react';
+import React, { useRef, useCallback, useMemo, memo } from 'react';
 import { Icon } from '@iconify/react';
 import classNames from 'classnames';
 import { GameMode } from '../types';
@@ -23,22 +23,23 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
 
     const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    if (!config) return null;
-
-    const { width, height } = getRotatedDimensions(config.width, config.height, data.rotation);
-    const inputs = getRotatedPorts(config.inputs, config.width, config.height, data.rotation);
-    const outputs = getRotatedPorts(config.outputs, config.width, config.height, data.rotation);
+    // ── 预计算派生值（处理 config 为 null 的情况，hooks 必须在条件判断之前） ──
+    const { width, height } = useMemo(
+        () => config ? getRotatedDimensions(config.width, config.height, data.rotation) : { width: 0, height: 0 },
+        [config, data.rotation]
+    );
+    const inputs = useMemo(
+        () => config ? getRotatedPorts(config.inputs, config.width, config.height, data.rotation) : [],
+        [config, data.rotation]
+    );
+    const outputs = useMemo(
+        () => config ? getRotatedPorts(config.outputs, config.width, config.height, data.rotation) : [],
+        [config, data.rotation]
+    );
 
     // 同位置+同方向的输入输出重叠端口（合并为菱形）
     const inputKeySet = new Set(inputs.map(p => `${p.x},${p.y},${p.side}`));
     const mixedKeys = new Set(outputs.map(p => `${p.x},${p.y},${p.side}`).filter(k => inputKeySet.has(k)));
-
-    const style = {
-        '--x': data.x,
-        '--y': data.y,
-        '--w': width,
-        '--h': height,
-    } as React.CSSProperties;
 
     // ── 事件处理器：用 getState() 读取最新状态，避免闭包依赖 ──
     const handleClick = useCallback((e: React.MouseEvent) => {
@@ -137,6 +138,16 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
 
         return classNames(classes);
     }, [inputs, outputs]);
+
+    // ── 早期返回（在所有 hooks 之后） ──
+    if (!config) return null;
+
+    const style = {
+        '--x': data.x,
+        '--y': data.y,
+        '--w': width,
+        '--h': height,
+    } as React.CSSProperties;
 
     return (
         <div

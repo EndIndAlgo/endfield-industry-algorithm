@@ -103,6 +103,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         });
     },
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     startBatchMove: (_anchor) => {
         const { machines, connections, selectedMachineIds, selectedConnectionIds } = get();
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;
@@ -130,6 +131,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         });
     },
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     startCopySelection: (_anchor) => {
         const { machines, connections, selectedMachineIds, selectedConnectionIds } = get();
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;

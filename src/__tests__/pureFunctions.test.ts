@@ -149,7 +149,7 @@ describe('routeManhattan', () => {
     const mkGrid = (w: number, h: number): Uint8Array => new Uint8Array(w * h);
 
     it('水平优先: 起点终点同行(无转弯)', () => {
-        const path = routeManhattan({ x: 2, y: 5 }, { x: 6, y: 5 }, mkGrid(10, 10), 10, 10);
+        const path = routeManhattan({ x: 2, y: 5 }, { x: 6, y: 5 }, mkGrid(10, 10), 10);
         expect(path).not.toBeNull();
         expect(path).toHaveLength(4); // 走4步
         // 全部在 y=5 上
@@ -158,7 +158,7 @@ describe('routeManhattan', () => {
 
     it('垂直优先: |dy| > |dx| 垂直先行', () => {
         const grid = mkGrid(10, 10);
-        const path = routeManhattan({ x: 3, y: 2 }, { x: 4, y: 8 }, grid, 10, 10);
+        const path = routeManhattan({ x: 3, y: 2 }, { x: 4, y: 8 }, grid, 10);
         expect(path).not.toBeNull();
         // 应先垂直再水平 (主导轴=垂直)
         expect(path![0].y).toBe(3); // y+1
@@ -166,14 +166,14 @@ describe('routeManhattan', () => {
 
     it('水平优先: dx绝对值大时水平先行', () => {
         const grid = mkGrid(10, 10);
-        const path = routeManhattan({ x: 1, y: 1 }, { x: 8, y: 2 }, grid, 10, 10);
+        const path = routeManhattan({ x: 1, y: 1 }, { x: 8, y: 2 }, grid, 10);
         expect(path).not.toBeNull();
         // 应先水平再垂直
         expect(path![0].x).toBe(2); // x+1
     });
 
     it('同点退化: 返回空数组(起点=终点)', () => {
-        const path = routeManhattan({ x: 5, y: 5 }, { x: 5, y: 5 }, mkGrid(10, 10), 10, 10);
+        const path = routeManhattan({ x: 5, y: 5 }, { x: 5, y: 5 }, mkGrid(10, 10), 10);
         expect(path).toEqual([]);
     });
 
@@ -181,7 +181,7 @@ describe('routeManhattan', () => {
         const grid = mkGrid(10, 10);
         // 在 (3,3) 放障碍，起点(2,3)→终点(4,3): 水平路径必经(3,3)
         grid[3 * 10 + 3] = 1;
-        const path = routeManhattan({ x: 2, y: 3 }, { x: 4, y: 3 }, grid, 10, 10);
+        const path = routeManhattan({ x: 2, y: 3 }, { x: 4, y: 3 }, grid, 10);
         // 水平路径受阻,(3,3) 被阻挡 → 尝试垂直优先 L: 先走 dy=0, 再 dx=0... 也受阻
         // 最终会尝试另一条 L: 垂直先 → (2,4)... 这也经过不需要的地方
         // 实际上: 水平优先试 (3,3)→受阻; 垂直优先: 先 dy, 但 dy=0 不走; 再 dx, 同样遇到 (3,3)
@@ -195,7 +195,7 @@ describe('routeManhattan', () => {
         // 阻挡(3,2): 水平路径遇障 → 尝试垂直优先 → 先下到(2,5)再向右
         // 阻挡(3,2): 垂直路径: 垂直段: (2,3),(2,4),(2,5), 再水平: (3,5) ✓
         grid[2 * 10 + 3] = 1; // (3,2) blocked
-        const path = routeManhattan({ x: 2, y: 2 }, { x: 3, y: 5 }, grid, 10, 10);
+        const path = routeManhattan({ x: 2, y: 2 }, { x: 3, y: 5 }, grid, 10);
         expect(path).not.toBeNull();
         // 路径: (2,3)→(2,4)→(2,5)→(3,5)
         expect(path).toEqual([
@@ -208,14 +208,14 @@ describe('routeManhattan', () => {
 
     it('边界网格: 大坐标正常工作', () => {
         const grid = mkGrid(100, 100);
-        const path = routeManhattan({ x: 10, y: 10 }, { x: 90, y: 80 }, grid, 100, 100);
+        const path = routeManhattan({ x: 10, y: 10 }, { x: 90, y: 80 }, grid, 100);
         expect(path).not.toBeNull();
         expect(path![path!.length - 1]).toEqual({ x: 90, y: 80 });
     });
 
     it('对角线: dx==dy', () => {
         const grid = mkGrid(10, 10);
-        const path = routeManhattan({ x: 1, y: 1 }, { x: 5, y: 5 }, grid, 10, 10);
+        const path = routeManhattan({ x: 1, y: 1 }, { x: 5, y: 5 }, grid, 10);
         expect(path).not.toBeNull();
         // horizontal dominant (|4| >= |4|), so horizontal first
         expect(path!.length).toBe(8);

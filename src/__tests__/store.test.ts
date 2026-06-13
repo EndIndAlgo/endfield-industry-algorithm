@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useGameStore } from '../store/gameStore';
-import type { PlacedMachine, Connection } from '../types';
+import { GameMode } from '../types';
+import type { PlacedMachine, Connection, Direction } from '../types';
 
 /** 创建一台测试用的 1x1 机器（物流桥，不占大空间） */
 const makeLBR = (overrides: Partial<PlacedMachine> = {}): PlacedMachine => ({
@@ -25,7 +26,7 @@ const resetStore = () => {
   useGameStore.setState({
     machines: [],
     connections: [],
-    mode: 'BUILD' as any,
+    mode: GameMode.BUILD,
     selectedMachineId: null,
     previewRotation: 0,
     movingMachineBackup: null,
@@ -41,9 +42,9 @@ const resetStore = () => {
     availablePorts: [],
     portType: 'Solid',
     activeStartPos: { x: 0, y: 0 },
-    activeTailFacing: 1 as any,
+    activeTailFacing: 1 as Direction,
     previewPath: [],
-    previewHeadFacing: 1 as any,
+    previewHeadFacing: 1 as Direction,
     lShapeMode: 'same-dir',
     previewTargetIsMachine: false,
     selectionStart: null,
@@ -298,7 +299,7 @@ describe('selectionSlice', () => {
         movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
         movingConnectionsSnapshot: [],
         moveAnchor: { x: 0, y: 0 },
-        mode: 'MOVE_SELECTION' as any,
+        mode: GameMode.MOVE_SELECTION,
         gridWidth: 24,
         gridHeight: 24,
       });
@@ -315,7 +316,7 @@ describe('selectionSlice', () => {
         movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
         movingConnectionsSnapshot: [],
         moveAnchor: { x: 0, y: 0 },
-        mode: 'MOVE_SELECTION' as any,
+        mode: GameMode.MOVE_SELECTION,
         gridWidth: 24,
         gridHeight: 24,
       });
@@ -330,7 +331,7 @@ describe('selectionSlice', () => {
         movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
         movingConnectionsSnapshot: [],
         moveAnchor: { x: 0, y: 0 },
-        mode: 'MOVE_SELECTION' as any,
+        mode: GameMode.MOVE_SELECTION,
         gridWidth: 24,
         gridHeight: 24,
       });

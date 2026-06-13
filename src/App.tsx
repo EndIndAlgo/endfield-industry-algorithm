@@ -45,6 +45,22 @@ export default function App() {
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [pendingSaveData, setPendingSaveData] = useState<Blueprint['data'] | null>(null);
 
+  // ── 加载 / 新建回调 ──
+  const handleLoadBlueprint = useCallback((bp: Blueprint) => {
+    const data = bp.data as Blueprint['data'] & { gridWidth?: number; gridHeight?: number };
+    const gw = data.gridWidth ?? Math.max(data.actualWidth + DEFAULT_CONTENT_PADDING, 24);
+    const gh = data.gridHeight ?? Math.max(data.actualHeight + DEFAULT_CONTENT_PADDING, 24);
+    loadGame(bp.data.machines, bp.data.connections, gw, gh, bp.id, bp.name);
+    setLastBlueprintId(bp.id);
+    setUiView('editor');
+  }, [loadGame, setUiView]);
+
+  const handleCreateNew = useCallback(() => {
+    resetGame();
+    setLastBlueprintId(null);
+    setUiView('editor');
+  }, [resetGame, setUiView]);
+
   // ── 初始加载（仅挂载时执行一次） ──
   useEffect(() => { (async () => {
     const sharedData = await parseShareUrl();
@@ -146,6 +162,7 @@ export default function App() {
 
   // 用 ref 持有最新 handleTriggerSave，避免键盘 effect 依赖频繁变化的值
   const handleTriggerSaveRef = useRef(handleTriggerSave);
+  // eslint-disable-next-line react-hooks/refs
   handleTriggerSaveRef.current = handleTriggerSave;
 
   // ── 全局快捷键（仅注册一次，通过 getState/ref 读取最新状态） ──
@@ -205,21 +222,6 @@ export default function App() {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [pendingSaveData, machines, connections, setCurrentBlueprint]);
-
-  const handleLoadBlueprint = useCallback((bp: Blueprint) => {
-    const data = bp.data as Blueprint['data'] & { gridWidth?: number; gridHeight?: number };
-    const gw = data.gridWidth ?? Math.max(data.actualWidth + DEFAULT_CONTENT_PADDING, 24);
-    const gh = data.gridHeight ?? Math.max(data.actualHeight + DEFAULT_CONTENT_PADDING, 24);
-    loadGame(bp.data.machines, bp.data.connections, gw, gh, bp.id, bp.name);
-    setLastBlueprintId(bp.id);
-    setUiView('editor');
-  }, [loadGame, setUiView]);
-
-  const handleCreateNew = useCallback(() => {
-    resetGame();
-    setLastBlueprintId(null);
-    setUiView('editor');
-  }, [resetGame, setUiView]);
 
   const handleOpenList = useCallback(() => {
     setBlueprintListMode('manage');

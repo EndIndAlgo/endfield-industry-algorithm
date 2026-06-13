@@ -28,16 +28,6 @@ export const ShareModal = ({ isOpen, onClose }: ShareModalProps) => {
 
     const { machines, connections, gridWidth, gridHeight } = useGameStore();
 
-    useEffect(() => {
-        if (isOpen) {
-            handleGenerate();
-        } else {
-            // 清理
-            setImageUrl(null);
-            setShareLink('');
-        }
-    }, [isOpen]);
-
     const handleGenerate = async () => {
         setIsGenerating(true);
         try {
@@ -53,7 +43,7 @@ export const ShareModal = ({ isOpen, onClose }: ShareModalProps) => {
             const url = generateShareUrl(data);
             setShareLink(url);
 
-            // 2. 生成截圖 — 等待下一帧确保 DOM 稳定
+            // 2. 生成截图 — 等待下一帧确保 DOM 稳定
             requestAnimationFrame(async () => {
                 const img = await captureBlueprintScreenshot();
                 setImageUrl(img);
@@ -66,6 +56,17 @@ export const ShareModal = ({ isOpen, onClose }: ShareModalProps) => {
             setIsGenerating(false);
         }
     };
+
+    useEffect(() => {
+        if (isOpen) {
+            handleGenerate();
+        } else {
+            // 清理
+            setImageUrl(null);
+            setShareLink('');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
 
     const handleCopyLink = () => {
         navigator.clipboard.writeText(shareLink);

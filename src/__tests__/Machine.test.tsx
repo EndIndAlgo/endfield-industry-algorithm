@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Machine } from '../components/Machine';
 import { TestWrapper } from './testWrapper';
 import { useGameStore } from '../store/gameStore';
+import { GameMode } from '../types';
 import type { PlacedMachine } from '../types';
 
 /** 一个真实存在的机器配置（精炼炉） */
@@ -29,7 +30,7 @@ describe('Machine 组件', () => {
   beforeEach(() => {
     // 重置 store 到默认状态
     useGameStore.setState({
-      mode: 'BUILD' as any,
+      mode: GameMode.BUILD,
       zoom: 1,
       isConnecting: false,
       availablePorts: [],

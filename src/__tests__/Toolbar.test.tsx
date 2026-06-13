@@ -2,11 +2,12 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Toolbar } from '../components/Toolbar';
 import { TestWrapper } from './testWrapper';
+import { GameMode } from '../types';
 import { useGameStore } from '../store/gameStore';
 
 const resetStore = () => {
   useGameStore.setState({
-    mode: 'BUILD' as any,
+    mode: GameMode.BUILD,
     selectedMachineId: null,
     machines: [],
     connections: [],
@@ -46,7 +47,7 @@ describe('Toolbar 组件', () => {
     });
 
     it('再次点击传送带按钮切回 BUILD 模式', () => {
-      useGameStore.setState({ mode: 'CONVEYOR' as any });
+      useGameStore.setState({ mode: GameMode.CONVEYOR });
       render(<TestWrapper><Toolbar /></TestWrapper>);
       fireEvent.click(screen.getByTitle('传送带模式 (E)'));
       expect(useGameStore.getState().mode).toBe('BUILD');
@@ -100,7 +101,7 @@ describe('Toolbar 组件', () => {
 
   describe('工具按钮高亮', () => {
     it('当前模式按钮高亮（active class）', () => {
-      useGameStore.setState({ mode: 'CONVEYOR' as any });
+      useGameStore.setState({ mode: GameMode.CONVEYOR });
       render(<TestWrapper><Toolbar /></TestWrapper>);
       const btn = screen.getByTitle('传送带模式 (E)');
       expect(btn.className).toContain('active');

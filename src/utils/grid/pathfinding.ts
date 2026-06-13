@@ -11,8 +11,7 @@ export const routeManhattan = (
   start: Point,
   end: Point,
   grid: Uint8Array,
-  gridW: number,
-  _gridH: number
+  gridW: number
 ): Point[] | null => {
   const tryRoute = (horizontalFirst: boolean): Point[] | null => {
     const path: Point[] = [];
@@ -125,7 +124,7 @@ export const findPath = (
   // routeManhattan 不检查起点, 独立检查 realStart
   if (grid[realStart.y * gw + realStart.x]) return null;
 
-  const corePath = routeManhattan(realStart, realEnd, grid, gw, gh);
+  const corePath = routeManhattan(realStart, realEnd, grid, gw);
   if (!corePath) return null;
 
   const fullPath = [realStart, ...corePath];

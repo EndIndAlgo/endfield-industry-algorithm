@@ -6,7 +6,7 @@ class ResizeObserverMock {
   unobserve() {}
   disconnect() {}
 }
-window.ResizeObserver = ResizeObserverMock as any;
+window.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
 
 // jsdom 缺少 scrollTo（Chakra Select 使用）
 window.scrollTo = () => {};
