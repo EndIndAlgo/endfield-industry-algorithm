@@ -19,6 +19,7 @@ import { parseShareUrl } from './utils/shareUtils';
 
 import { Settings } from './components/Settings';
 import { useChineseConverter } from './hooks/useChineseConverter';
+import { DEFAULT_CONTENT_PADDING } from './config/constants';
 
 export default function App() {
   // ── 细粒度 store selector ──
@@ -207,8 +208,8 @@ export default function App() {
 
   const handleLoadBlueprint = useCallback((bp: Blueprint) => {
     const data = bp.data as any;
-    const gw = data.gridWidth ?? Math.max(data.actualWidth + 4, 24);
-    const gh = data.gridHeight ?? Math.max(data.actualHeight + 4, 24);
+    const gw = data.gridWidth ?? Math.max(data.actualWidth + DEFAULT_CONTENT_PADDING, 24);
+    const gh = data.gridHeight ?? Math.max(data.actualHeight + DEFAULT_CONTENT_PADDING, 24);
     loadGame(bp.data.machines, bp.data.connections, gw, gh, bp.id, bp.name);
     setLastBlueprintId(bp.id);
     setUiView('editor');

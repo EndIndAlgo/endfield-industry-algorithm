@@ -2,6 +2,7 @@ import { Box, Text, Flex, Heading, CloseButton, IconButton } from '@chakra-ui/re
 import { Tooltip } from "@/components/ui/tooltip"
 import { useGameStore } from '../store/gameStore';
 import { memberInfo } from '../config/memberInfo';
+import { MAX_MEMBERS_DISPLAY } from '../config/constants';
 import { Icon } from '@iconify/react';
 import "@/components/ui/About.scss"
 import AuthorImg from "@/assets/members/author.gif"
@@ -46,7 +47,7 @@ export const About = () => {
                 alignItems={"center"}
             >
                 <Icon icon="tdesign:member-filled" color="var(--gray-dark)" />
-                <Text fontSize="lg" fontWeight="bold" color="var(--gray-dark)">成員 {memberInfo.length + 1} / 999</Text>
+                <Text fontSize="lg" fontWeight="bold" color="var(--gray-dark)">成員 {memberInfo.length + 1} / {MAX_MEMBERS_DISPLAY}</Text>
             </Flex>
 
             <Flex w="100%" direction="column" gap="16px">

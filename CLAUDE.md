@@ -421,27 +421,11 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
    - `useChineseConverter`：繁体→简体 DOM 文本节点转换
    - **风险**：中。依赖动态 import opencc-js 和 DOM MutationObserver
 
-### 🟢 Sprint 6：架构瘦身
+### 🟢 Sprint 6：架构瘦身 ✅ **已完成 (2026-06-13)**
 
-7. **拆分 Grid.tsx（584 行）**
-   - 提取 `<ConnectionSVGLayer>` 组件（连线 + 预览 + 批量移动预览的 SVG 渲染）
-   - 提取 `useGridEvents` hook（鼠标事件处理：pointerdown/move/up、wheel 缩放、键盘快捷键）
-   - Grid.tsx 瘦身到 ~200 行，仅保留布局组合
-   - **风险**：中。Grid 是核心组件，拆分需仔细验证行为不变
-
-8. **拆分 gridUtils.ts（501 行）**
-   - `occupancyUtils.ts`：buildOccupancyGrid、buildConnectionGrid
-   - `pathfindingUtils.ts`：routeManhattan、findPath、trySingleLRoute
-   - `collisionUtils.ts`：checkCollision、isOverlapping、getMachineRect
-   - `portUtils.ts`：findPortOuterCellAt、getPortOuterCells、getCornerPoints
-   - gridUtils.ts 变为 barrel export
-   - **风险**：低。纯函数拆分，现有 38 个测试全部保留
-
-9. **魔法数字常量化**（非蓝图部分）
-   - `DEFAULT_PADDING = 4`（Grid/App 中多处 `+ 4`）
-   - `MAX_MEMBERS = 999`（About.tsx 中硬编码）
-   - Port 旋转角度常量 `PORT_ROTATIONS = { top: 0, right: 90, bottom: 180, left: 270 }`
-   - **风险**：极低
+- [x] **拆分 Grid.tsx**（584 → 276 行，-53%）：提取 `<ConnectionSVGLayer>` + `useGridEvents` hook
+- [x] **拆分 gridUtils.ts**（501 → 15 行 barrel）：按职责分为 5 个模块（direction / collision / occupancy / pathfinding / port）
+- [x] **魔法数字常量化**：`DEFAULT_CONTENT_PADDING=4` / `MAX_MEMBERS_DISPLAY=999` / `PORT_ARROW_ROTATION`
 
 ### 🔵 长期展望
 
