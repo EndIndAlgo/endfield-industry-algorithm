@@ -34,7 +34,7 @@ src/
 ├── App.tsx                           # 根组件：uiView 条件路由 + 全局 Ctrl+Z/Y/S 快捷键
 ├── App.css                           # #root flex column 布局, .app-content flex:1
 ├── index.css                         # @font-face NaikaiFont-Bold, CSS 变量(--grid-size等), .gray-btn/.yellow-btn, 简中字体回退
-├── types.ts                          # 共享类型：Point, Direction(0|1|2|3), Side, PortType, MachineConfig, PlacedMachine, Connection, GameMode, sideToDir 常量
+├── types.ts                          # 共享类型 + 掩码常量: MASK_SOLID/LIQUID, portTypeToMask, MASK_*_MACHINE
 ├── types/
 │   └── opencc-js.d.ts               # opencc-js 类型声明（Converter, ConverterOptions）
 ├── store/
@@ -53,16 +53,16 @@ src/
 │   ├── materials.ts                  # MATERIALS: 76 种材料 Record<string, Material>
 │   ├── constants.ts                  # GRID_SIZE=40, GRID_PRESETS: 6 种网格尺寸, DEFAULT_CONTENT_PADDING, MAX_MEMBERS_DISPLAY, PORT_ARROW_ROTATION
 │   ├── memberInfo.ts                 # memberInfo: 团队成员数组 [{name,avatar,message,tags,mail,...}]
-│   └── zIndex.ts                     # Z_INDEX: 全局 z-index 常量表（渲染图层、UI覆盖层、加载画面）
+│   └── zIndex.ts                     # Z_INDEX: 3段式 z-index 常量表(常态100/批量700/Ghost1300) + connZ()/machineZ()辅助函数
 ├── utils/
 │   ├── gridUtils.ts                  # barrel 文件(15行)：重新导出 grid/ 下全部函数
 │   ├── grid/
 │   │   ├── collision.ts              # getBoundingBox, getMachineRect, isOverlapping, checkCollision, calculateContentDimensions
 │   │   ├── direction.ts              # getVectorFromSide, dirFromPoints, computeHeadFacing
-│   │   ├── occupancy.ts              # buildOccupancyGrid, buildConnectionGrid
+│   │   ├── occupancy.ts              # buildOccupancyGrid, buildConnectionGrid, buildMergedGrid(掩码合并网格)
 │   │   ├── pathfinding.ts            # routeManhattan(双L形), findPath, trySingleLRoute
 │   │   └── port.ts                   # getCornerPoints, getMachinePortCheckPositions, splitConnectionAt, getPortOuterCells, findPortOuterCellAt, findMachineAt
-│   ├── machineUtils.ts               # getRotatedDimensions, getRotatedPorts, buildPowerGrid
+│   ├── machineUtils.ts               # getRotatedDimensions, getRotatedPorts, buildPowerGrid, getMachineMask(物流掩码查表)
 │   ├── portPosition.ts               # getPortStyle(机器端口定位), getGhostArrowPosition, pathToPoints/extendPoint(SVG渲染工具)
 │   ├── shareUtils.ts                 # toBase64Url/fromBase64Url, encode/decode (V3二进制: 3字节ID+3字节位置), generateShareUrl, parseShareUrl, captureBlueprintScreenshot(html2canvas)
 │   ├── storage.ts                    # Blueprint 接口, getBlueprints/saveBlueprint/deleteBlueprint/loadBlueprint/getLastBlueprintId/setLastBlueprintId
@@ -206,15 +206,15 @@ export const GameMode = {
 | 层 | 实现方式 | 关键参数 |
 |----|----------|----------|
 | 网格线 | CSS `background-image` 双渐变 | `var(--grid-size)` = 40px, opacity 0.5 |
-| 机器 | 绝对定位 `div`，CSS 自定义属性 `--x`/`--y`/`--w`/`--h` | 3px padding, border: 3px solid var(--gray-dark) |
-| 传送带连线 | SVG `<polyline>` 双线效果(outline描边+fill填充) | Solid=yellow-light(16px)/Liquid=#7cc4f0(16px), outline统一20px |
-| 平移/缩放 | CSS `transform: translate(panX, panY) scale(zoom)` | zoom范围0.18~3.0, clampPan限制平移范围(-1~+2倍网格) |
+| 机器 | 绝对定位 `div`，CSS 自定义属性 `--x`/`--y`/`--w`/`--h` | z-index = base + mask×2 + 1 (3段: 常态100/批量700/Ghost1300) |
+| 传送带连线 | SVG `<polyline>` 双线效果(outline描边+fill填充)，按 portType 分 SVG 层 | Solid=104, Liquid=108 (base=100) |
+| 平移/缩放 | CSS `transform: translate(panX, panY) scale(zoom)` | zoom范围0.18~3.0 |
 | 坐标转换 | `worldX = floor((screenX - panX) / (GRID_SIZE * zoom))` | GRID_SIZE硬编码为40 |
 
 **缩放锚定鼠标位置**：缩放前后鼠标下的世界坐标保持不变，通过调整 `pan` 补偿。
 **GRID_SIZE**: 40px，定义在 `constants.ts`，`main.tsx` 启动时同步到 CSS 变量 `--grid-size`。
 
-### 寻路系统（L 形曼哈顿路由）
+### 寻路系统（L 形曼哈顿路由 + 掩码碰撞）
 
 `routeManhattan()` 不是 A*，而是**双 L 形路由**算法：
 1. 计算 `|dx|` 和 `|dy|`，确定主导轴（`|dx| >= |dy|` → 水平优先）
@@ -222,11 +222,14 @@ export const GameMode = {
 3. 若碰撞，尝试另一条 L 形（次轴优先）
 4. 两者均失败则返回 null——用户需手动点击添加锚点绕过障碍
 
-**占用网格**：
-- `buildOccupancyGrid(machines)` → 机器占用 `Uint8Array`
-- `buildConnectionGrid(connections, portType?)` → 连线占用 `Uint8Array`
-- `findPath()` 中合并规则：同类型连线允许直穿(后续放桥)、异类型连线阻断、拐弯格一律标记阻断
-- 性能：O(path length)，无 open/closed 集合，每次 `findPath` 需重建占用网格 O(n)
+**占用网格（掩码系统）**：
+- `buildMergedGrid(machines, connections, gw, gh, portType)` — 机器掩码 OR + 异类型连线掩码 OR
+- 同类型连线不进入网格（可通过，交叉点放桥）
+- 阻挡判断：`(grid[i] & connMask) !== 0`
+- 桥冲突判断：`(bridgeMask & cellMask) !== connMask`
+- 拐弯不进网格，作为独立约束在 `updatePreview`/`commitConnection` 中检查
+- `routeManhattan` 和 `trySingleLRoute` 直接接受掩码参数（默认 0xFF 保持向后兼容）
+- 性能：O(path length)，每次 `findPath` 需重建占用网格 O(n)
 
 ### 撤销/重做
 
@@ -324,12 +327,60 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 
 ---
 
-## 当前改进方向（2026-06-14 梳理）
+---
+
+## 掩码系统（2026-06-15 完成）
+
+### 8-bit 掩码
+
+```
+Bit : 7──2   2         1         0
+      │      │         │         └─ 机器实体位
+      │      │         └─ Solid 层
+      │      └─ Liquid 层
+      └─ 普通机器 (全 1)
+```
+
+| 实体 | 掩码 | 值 |
+|------|:---:|:---:|
+| Solid 连线 | `0b00000010` | 2 |
+| Solid 物流器 (lbr,spl,mrg,iip) | `0b00000011` | 3 |
+| Liquid 连线 | `0b00000100` | 4 |
+| Liquid 物流器 (其余物流) | `0b00000111` | 7 |
+| 普通机器 | `0b11111111` | 255 |
+
+### 可通过性
+
+- `(mergedGrid[cell] & connMask) !== 0` → 阻挡
+- Liquid 连线可穿过 Solid 物流器下方（`7 & 4 = 4` ≠0 → 阻挡；`3 & 4 = 0` → 可通过）
+
+### 桥冲突检查
+
+- `(bridgeMask & cellMask) !== connMask` → 冲突，不放桥
+- lbr(3) 可放在 Liquid 线上（`3 & 4 = 0`），pbr(7) 不能放在 Solid 线上（`7 & 2 = 2 ≠ 4`）
+
+### 核心函数
+
+- `buildMergedGrid(machines, connections, gw, gh, portType)` — 机器掩码 OR + 异类型连线掩码 OR，同类型不进网格
+- `getMachineMask(machineId)` — 硬编码 12 种物流器返回 3/7，其余返回 255
+- `connZ(base, mask)` / `machineZ(base, mask)` — 渲染 z-index 计算
+
+### 渲染分层
+
+| 层 | 基底 | 公式 |
+|------|:---:|------|
+| 常态 | 100 | 连线 = 100 + mask×2，机器 = 100 + mask×2 + 1 |
+| 批量移动 | 700 | 同上 |
+| Ghost 放置 | 1300 | 同上 |
+
+---
+
+## 当前改进方向（2026-06-15 更新）
 
 ### 🔴 高优先级（影响正确性 / 可维护性的实际问题）
 
-**1. 占用网格代码重复（3 处）**
-`connectionSlice.updatePreview()`（第 84-103 行）、`pathfinding.findPath()`（第 96-105 行）和 `selectionSlice.commitBatchMove()`（第 203-229 行）各自独立构建相同的 `machineGrid + connGrid + merge + corner marking` 结构。提取为 `buildMergedGrid(machines, connections, portType?)` 利旧函数可消除 ~60 行代码，并保证三处逻辑一致。涉及文件：`connectionSlice.ts` / `pathfinding.ts` / `selectionSlice.ts`。估计工作量：1h。
+**✅ 1. 占用网格代码重复 ~~（3 处）~~ — 已完成 (2026-06-15)**
+掩码系统 + `buildMergedGrid()` 统一三处网格构建，同时修复异类型连线阻断/拐弯漏拦/桥放异类型线上等 Bug。
 
 **2. `useGridEvents`（248 行）承载过多职责**
 一个 hook 处理 6 种游戏模式的 mousedown/move/up/click/wheel/keydown。拆为 `useBuildMode`、`useWireMode`、`useSelectionMode` 等子 hook，由 `useGridEvents` 组合调度。涉及文件：`useGridEvents.ts`。估计工作量：2h。
