@@ -44,7 +44,7 @@ export interface ConnectionSlice {
     previewPath: Point[];
     previewHeadFacing: Direction;
     // L 形策略
-    lShapeMode: 'same-dir' | 'perpendicular';
+    lShapeMode: 'auto' | 'perpendicular' | 'same-dir';
     // 续接标记（自动续接或其他触发方式）
     isContinuing: boolean;
     continueSourceId: string | null;

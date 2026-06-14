@@ -4,7 +4,13 @@ import { GameMode } from '../types';
 import './OperationHints.scss';
 
 export const OperationHints = () => {
-    const { mode, selectedMachineId, selectedMachineIds, selectedConnectionIds } = useGameStore();
+    const { mode, selectedMachineId, selectedMachineIds, selectedConnectionIds, lShapeMode } = useGameStore();
+
+    const STRATEGY_LABELS: Record<string, string> = {
+        'auto': '自动',
+        'perpendicular': '垂直',
+        'same-dir': '同向',
+    };
 
     const hasSelection = (selectedMachineIds && selectedMachineIds.length > 0) || (selectedConnectionIds && selectedConnectionIds.length > 0);
 
@@ -116,7 +122,7 @@ export const OperationHints = () => {
                     </div>
                     <div className="hint-item">
                         <div className="key-icon">R</div>
-                        <span>切换L形策略</span>
+                        <span>切换L形策略：{STRATEGY_LABELS[lShapeMode]}</span>
                     </div>
                     <div className="hint-item">
                         <div className="key-icon">
@@ -144,7 +150,7 @@ export const OperationHints = () => {
                     </div>
                     <div className="hint-item">
                         <div className="key-icon">R</div>
-                        <span>切换L形策略</span>
+                        <span>切换L形策略：{STRATEGY_LABELS[lShapeMode]}</span>
                     </div>
                     <div className="hint-item">
                         <div className="key-icon">

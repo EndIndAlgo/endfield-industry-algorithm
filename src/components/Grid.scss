@@ -31,6 +31,7 @@
         linear-gradient(var(--gray) 1px, transparent 1px),
         linear-gradient(90deg, var(--gray) 1px, transparent 1px);
     background-size: var(--grid-size) var(--grid-size);
+    background-position: -0.5px -0.5px; /* 将1px格子线居中到格边界上 */
     opacity: 0.5;
     border: 4px solid var(--black-light);
     box-sizing: content-box;

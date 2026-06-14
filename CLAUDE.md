@@ -414,16 +414,16 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 - [x] **拆分 gridUtils.ts**（501 → 15 行 barrel）：按职责分为 5 个模块（direction / collision / occupancy / pathfinding / port）
 - [x] **魔法数字常量化**：`DEFAULT_CONTENT_PADDING=4` / `MAX_MEMBERS_DISPLAY=999` / `PORT_ARROW_ROTATION`
 
-### 🔵 长期展望
+### 🔵 长期展望（全部清空）
 
 - [x] **CI/CD**：GitHub Actions 跑 lint + typecheck + test ✅ **已完成 (2026-06-13 Sprint 7)**
 - [x] **繁→简中文转换收尾**：全部 UI 文案已统一为简体中文 ✅ **已完成 (2026-06-13 Sprint 7)**
 - [x] **全部 `any` 类型消除**：非测试代码中 `any` 已清零 ✅ **已完成 (2026-06-13 Sprint 7)**
-- [ ] **E2E 测试**：Playwright 测试完整用户流程（放置机器→连线→保存蓝图→分享）
-- [ ] **无障碍（a11y）**：键盘导航、ARIA 标签、屏幕阅读器支持
-- [ ] **移动端适配**：工具栏和 Header 的响应式布局
-- [ ] **英文国际化**：useChineseConverter 架构可扩展为完整 i18n
 - [x] **Lint 清零**：ESLint 25 → 0 ✅ **已完成 (2026-06-13 Sprint 8)**
+- [~] **E2E 测试**：~~Playwright 测试完整用户流程~~ — **搁置 (2026-06-14)**，等核心逻辑稳定后再补
+- [~] **无障碍（a11y）**：~~键盘导航、ARIA 标签~~ — **不考虑**，专业工具面向重度玩家，桌面端优先
+- [~] **移动端适配**：~~工具栏/Header 响应式~~ — **不考虑**，移动端用户直接用官方编辑器
+- [~] **英文国际化**：~~useChineseConverter 扩展 i18n~~ — **暂不考虑**，目标用户为中文玩家
 
 ### 🟣 Sprint 7：技术债清尾 + CI/CD ✅ **已完成 (2026-06-13)**
 

@@ -38,7 +38,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
     activeTailFacing: 1 as Direction,
     previewPath: [],
     previewHeadFacing: 1 as Direction,
-    lShapeMode: 'same-dir',
+    lShapeMode: 'auto',
     isContinuing: false,
     continueSourceId: null,
     previewTargetIsMachine: false,
@@ -53,7 +53,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             isValidPath: true,
             availablePorts: ports,
             portType,
-            lShapeMode: 'same-dir',
+            lShapeMode: 'auto',
             activeStartPos: first.pos,
             activeTailFacing: first.facing,
             previewPath: [first.pos],
@@ -120,10 +120,10 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             let bestInputDist = Infinity;
 
             for (const ic of inputCells) {
-                // 确定 firstAxis
-                const firstAxis = lShapeMode === 'same-dir'
-                    ? tailFacing
-                    : perpendicularDir(tailFacing, startPos, ic.pos);
+                // 确定 firstAxis（auto 模式与 same-dir 一样先试同向）
+                const firstAxis = lShapeMode === 'perpendicular'
+                    ? perpendicularDir(tailFacing, startPos, ic.pos)
+                    : tailFacing;
 
                 // 检查起点已在同类型连线上的情况（拐弯检测）
                 if (startPos.x === ic.pos.x && startPos.y === ic.pos.y) {
@@ -143,7 +143,10 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
                 // 检查起点是否被阻挡
                 if (grid[startPos.y * gw + startPos.x]) continue;
 
-                const path = trySingleLRoute(startPos, ic.pos, firstAxis, grid, gw, gh);
+                let path = trySingleLRoute(startPos, ic.pos, firstAxis, grid, gw, gh);
+                if (!path && lShapeMode === 'auto') {
+                    path = trySingleLRoute(startPos, ic.pos, perpendicularDir(tailFacing, startPos, ic.pos), grid, gw, gh);
+                }
                 if (!path) continue;
 
                 // 完整路径 = [startPos, ...path]
@@ -187,9 +190,9 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
                         bestVisual = { path: [startPos], headFacing: ((sideToDir[ic.side] + 2) % 4) as Direction, dist: 0 };
                         break;
                     }
-                    const firstAxis = lShapeMode === 'same-dir'
-                        ? tailFacing
-                        : perpendicularDir(tailFacing, startPos, ic.pos);
+                    const firstAxis = lShapeMode === 'perpendicular'
+                        ? perpendicularDir(tailFacing, startPos, ic.pos)
+                        : tailFacing;
                     const p = trySingleLRoute(startPos, ic.pos, firstAxis, emptyGrid, gw, gh);
                     if (p) {
                         const d = Math.abs(ic.pos.x - mouseGridPos.x) + Math.abs(ic.pos.y - mouseGridPos.y);
@@ -210,9 +213,9 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             }
         } else {
             // ── 鼠标在地面 → 终点 = 鼠标位置 ──
-            const firstAxis = lShapeMode === 'same-dir'
-                ? tailFacing
-                : perpendicularDir(tailFacing, startPos, mouseGridPos);
+            const firstAxis = lShapeMode === 'perpendicular'
+                ? perpendicularDir(tailFacing, startPos, mouseGridPos)
+                : tailFacing;
 
             // 检查起点自身 — 被阻挡时仍算 L 形视觉路径（避免跳到斜线）
             if (grid[startPos.y * gw + startPos.x]) {
@@ -228,7 +231,10 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
                 return;
             }
 
-            const path = trySingleLRoute(startPos, mouseGridPos, firstAxis, grid, gw, gh);
+            let path = trySingleLRoute(startPos, mouseGridPos, firstAxis, grid, gw, gh);
+            if (!path && lShapeMode === 'auto') {
+                path = trySingleLRoute(startPos, mouseGridPos, perpendicularDir(tailFacing, startPos, mouseGridPos), grid, gw, gh);
+            }
             if (path) {
                 const fullPath = [startPos, ...path];
                 const headFacing = computeHeadFacing(fullPath, tailFacing);
@@ -264,9 +270,14 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
     },
 
     toggleLShape: () => {
-        set(s => ({
-            lShapeMode: s.lShapeMode === 'same-dir' ? 'perpendicular' : 'same-dir',
-        }));
+        set(s => {
+            const NEXT: Record<string, typeof s.lShapeMode> = {
+                'auto': 'perpendicular',
+                'perpendicular': 'same-dir',
+                'same-dir': 'auto',
+            };
+            return { lShapeMode: NEXT[s.lShapeMode] };
+        });
     },
 
     commitConnection: () => {
@@ -455,7 +466,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             activeTailFacing: 1 as Direction,
             previewPath: [],
             previewHeadFacing: 1 as Direction,
-            lShapeMode: 'same-dir',
+            lShapeMode: 'auto',
             isContinuing: false,
             continueSourceId: null,
             previewTargetIsMachine: false,
