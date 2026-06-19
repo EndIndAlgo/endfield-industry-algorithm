@@ -510,10 +510,8 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 
 ### 🟢 低优先级（锦上添花）
 
-**#7 — `assets/items/` 132 个图标 vs 76 种材料**
-多了 56 个未使用的 webp 文件。`LoadingScreen` 启动时全部预加载。
-- 修法：对比 `config/materials.ts` 的 icon ID → 删除不匹配文件，或收窄预加载列表
-- 预估：20 分钟，减约 150-300KB
+**❌ #7 — `assets/items/` 132 个图标 vs 76 种材料 — 搁置**
+多了 56 个未使用的 webp 文件，但需要游戏数据人工对照才能准确清理，盲目删除风险大于收益。
 
 **✅ #8 — `index.html` 缺 meta 标签 — 已完成 (2026-06-19)**
 已添加 `description`、`og:title/description/image/type`、`theme-color` meta 标签
@@ -537,11 +535,7 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 第二波 质量收尾 ✅ 已完成
   #6  消除 2 处 eslint-disable        30min  ✅
 
-第三波 锦上添花（20 分钟）
-  #7  清理多余图标                    20min
-```
-
-**搁置**：#5（connectionSlice 拆分，等逻辑稳定）
+**搁置**：#5（connectionSlice 拆分，等逻辑稳定）、#7（图标清理，需游戏数据人工对照）
 
 | # | 方向 | 影响范围 | 估计 | 状态 |
 |---|------|----------|------|------|
@@ -549,7 +543,7 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 | 2 | 字体子集化 | public/fonts/ | 30min | ✅ 已完成 |
 | 4 | 删幽灵 Inter | index.css | 30s | ✅ 已完成 |
 | 6 | eslint-disable 消除 | App.tsx + ShareModal.tsx | 30min | ✅ 已完成 |
-| 7 | 多余图标清理 | assets/items/ | 20min | 🔵 待开始 |
+| 7 | 多余图标清理 | assets/items/ | 20min | 🔵 搁置 |
 | 8 | 补 meta 标签 | index.html | 5min | ✅ 已完成 |
 | 9 | vite 分包 | vite.config.ts | 10min | ❌ 不采用 |
 
