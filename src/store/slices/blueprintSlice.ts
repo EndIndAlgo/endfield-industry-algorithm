@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { BlueprintSlice, GameState } from './types';
 import { GameMode } from '../../types';
-import { getBoundingBox } from '../../utils/gridUtils';
+import { getBoundingBox } from '../../utils/grid';
 
 export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlice> = (set) => ({
     uiView: 'editor',

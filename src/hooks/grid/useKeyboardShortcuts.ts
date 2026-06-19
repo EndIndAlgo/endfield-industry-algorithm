@@ -52,11 +52,11 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
         s.setUiView('list');
       } else if (e.key.toLowerCase() === 'm') {
         if (hoverPosRef.current) {
-          s.startBatchMove(hoverPosRef.current);
+          s.startBatchMove();
         }
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
         if (hoverPosRef.current) {
-          s.startCopySelection(hoverPosRef.current);
+          s.startCopySelection();
         }
       } else if (e.key === 'Escape') {
         s.cancelOperation();

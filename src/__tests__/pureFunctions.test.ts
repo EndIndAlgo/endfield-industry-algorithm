@@ -5,7 +5,7 @@ import {
     getCornerPoints,
     splitConnectionAt,
     dirFromPoints,
-} from '../utils/gridUtils';
+} from '../utils/grid';
 import { getRotatedPorts, getRotatedDimensions } from '../utils/machineUtils';
 import type { Connection, Direction, PortConfig, PortType } from '../types';
 

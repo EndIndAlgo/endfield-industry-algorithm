@@ -2,7 +2,7 @@ import html2canvas from 'html2canvas';
 import type { Point, PlacedMachine, Connection, Direction } from '../types';
 import { MACHINES } from '../config/machines';
 import { getRotatedDimensions } from './machineUtils';
-import { getBoundingBox } from './gridUtils';
+import { getBoundingBox } from './grid';
 
 // ===== Base64 =====
 const toBase64Url = (bytes: Uint8Array): string => {

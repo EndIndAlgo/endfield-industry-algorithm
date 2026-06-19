@@ -1,25 +1,24 @@
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { Toaster, Toast } from '@chakra-ui/react';
+import { useGameStore } from './store/gameStore';
+import { useChineseConverter } from './hooks/useChineseConverter';
+import { saveBlueprint, type Blueprint, getLastBlueprintId, loadBlueprint, setLastBlueprintId } from './utils/storage';
+import { parseShareUrl } from './utils/shareUtils';
+import { calculateContentDimensions, getBoundingBox } from './utils/grid';
+import { DEFAULT_CONTENT_PADDING } from './config/constants';
+import { toaster } from './utils/toaster';
 import { Grid } from './components/Grid';
 import { Toolbar } from './components/Toolbar';
 import { Header } from './components/Header';
 import { LoadingScreen } from './components/LoadingScreen';
 import { OperationHints } from './components/OperationHints';
-import { calculateContentDimensions, getBoundingBox } from './utils/gridUtils';
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useGameStore } from './store/gameStore';
-import { BlueprintList } from './components/BlueprintList';
-
-import { About } from './components/About';
 import { SaveDialog } from './components/SaveDialog';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { saveBlueprint, type Blueprint, getLastBlueprintId, loadBlueprint, setLastBlueprintId } from './utils/storage';
-import { Toaster, Toast } from '@chakra-ui/react';
-import { toaster } from './utils/toaster';
 import './App.css';
-import { parseShareUrl } from './utils/shareUtils';
 
-import { Settings } from './components/Settings';
-import { useChineseConverter } from './hooks/useChineseConverter';
-import { DEFAULT_CONTENT_PADDING } from './config/constants';
+const BlueprintList = lazy(() => import('./components/BlueprintList').then(m => ({ default: m.BlueprintList })));
+const About = lazy(() => import('./components/About').then(m => ({ default: m.About })));
+const Settings = lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
 
 export default function App() {
   // ── 细粒度 store selector ──
@@ -250,37 +249,39 @@ export default function App() {
           <LoadingScreen onComplete={() => setIsLoading(false)} />
         )}
 
-        {uiView === 'list' && (
-          <BlueprintList
-            onSelect={handleLoadBlueprint}
-            onCreateNew={handleCreateNew}
-            mode={blueprintListMode}
-          />
-        )}
-
-        {uiView === 'editor' && (
-          <>
-            <Header onSave={handleTriggerSave} onOpen={handleOpenList} />
-            <div className="app-content">
-              <Grid />
-              <Toolbar />
-              <OperationHints />
-            </div>
-            <SaveDialog
-              isOpen={isSaveDialogOpen}
-              onClose={() => { setIsSaveDialogOpen(false); setPendingSaveData(null); }}
-              onSave={handleSaveAs}
+        <Suspense fallback={null}>
+          {uiView === 'list' && (
+            <BlueprintList
+              onSelect={handleLoadBlueprint}
+              onCreateNew={handleCreateNew}
+              mode={blueprintListMode}
             />
-          </>
-        )}
+          )}
 
-        {uiView === 'about' && (
-          <About />
-        )}
+          {uiView === 'editor' && (
+            <>
+              <Header onSave={handleTriggerSave} onOpen={handleOpenList} />
+              <div className="app-content">
+                <Grid />
+                <Toolbar />
+                <OperationHints />
+              </div>
+              <SaveDialog
+                isOpen={isSaveDialogOpen}
+                onClose={() => { setIsSaveDialogOpen(false); setPendingSaveData(null); }}
+                onSave={handleSaveAs}
+              />
+            </>
+          )}
 
-        {uiView === 'settings' && (
-          <Settings />
-        )}
+          {uiView === 'about' && (
+            <About />
+          )}
+
+          {uiView === 'settings' && (
+            <Settings />
+          )}
+        </Suspense>
       </ErrorBoundary>
     </>
   );

@@ -4,7 +4,7 @@ import { useGameStore } from '../store/gameStore';
 import { GameMode } from '../types';
 import type { Point, PortConfig } from '../types';
 import { MACHINES } from '../config/machines';
-import { checkPlacementCollision } from '../utils/gridUtils';
+import { checkPlacementCollision } from '../utils/grid';
 import { getRotatedDimensions, getRotatedPorts } from '../utils/machineUtils';
 import { GRID_SIZE } from '../config/constants';
 import { Z_INDEX, machineZ } from '../config/zIndex';

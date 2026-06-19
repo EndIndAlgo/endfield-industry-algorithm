@@ -13,7 +13,7 @@ import {
     buildMergedGrid,
     buildConnectionGrid,
     getCornerPoints,
-} from '../../utils/gridUtils';
+} from '../../utils/grid';
 import { getRotatedDimensions } from '../../utils/machineUtils';
 
 /** portDir 的垂直方向（取两个垂直方向中与目标更接近的那个） */

@@ -266,7 +266,7 @@ describe('selectionSlice', () => {
   describe('startBatchMove', () => {
     it('移动机器到 snapshot，从 store 移除', () => {
       useGameStore.setState({ machines: [makeLBR()], selectedMachineIds: ['lbr-1'] });
-      useGameStore.getState().startBatchMove({ x: 0, y: 0 });
+      useGameStore.getState().startBatchMove();
       const s = useGameStore.getState();
       expect(s.machines).toHaveLength(0);
       expect(s.movingMachinesSnapshot).toHaveLength(1);
@@ -275,7 +275,7 @@ describe('selectionSlice', () => {
 
     it('无选中时不操作', () => {
       useGameStore.setState({ machines: [makeLBR()] });
-      useGameStore.getState().startBatchMove({ x: 0, y: 0 });
+      useGameStore.getState().startBatchMove();
       expect(useGameStore.getState().movingMachinesSnapshot).toHaveLength(0);
     });
   });
@@ -283,7 +283,7 @@ describe('selectionSlice', () => {
   describe('startCopySelection', () => {
     it('复制选中的机器（ID 重新生成）', () => {
       useGameStore.setState({ machines: [makeLBR()], selectedMachineIds: ['lbr-1'] });
-      useGameStore.getState().startCopySelection({ x: 0, y: 0 });
+      useGameStore.getState().startCopySelection();
       const s = useGameStore.getState();
       expect(s.movingMachinesSnapshot).toHaveLength(1);
       expect(s.movingMachinesSnapshot[0].id).not.toBe('lbr-1'); // 新 ID

@@ -3,7 +3,7 @@ import type { MachinesSlice, GameState } from './types';
 import type { PlacedMachine, Direction } from '../../types';
 import { GameMode } from '../../types';
 import { MACHINES } from '../../config/machines';
-import { checkPlacementCollision, getMachinePortCheckPositions } from '../../utils/gridUtils';
+import { checkPlacementCollision, getMachinePortCheckPositions } from '../../utils/grid';
 import { getRotatedDimensions } from '../../utils/machineUtils';
 
 export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice> = (set, get) => ({

@@ -71,8 +71,8 @@ export interface SelectionSlice {
     commitBoxSelection: (isToggle?: boolean) => void;
     clearSelection: () => void;
     deleteSelected: () => void;
-    startBatchMove: (anchor: Point) => void;
-    startCopySelection: (anchor: Point) => void;
+    startBatchMove: () => void;
+    startCopySelection: () => void;
     commitBatchMove: (targetPos: Point) => void;
 }
 

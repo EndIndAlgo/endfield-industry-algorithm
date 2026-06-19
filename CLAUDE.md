@@ -44,7 +44,7 @@ src/
 │       ├── types.ts                  # 6个切片接口定义 + HistorySnapshot + GameState 交集类型
 │       ├── canvasSlice.ts           # zoom(默认1), pan({0,0}), gridWidth/Height(默认24), setZoom/setPan/setGridSize
 │       ├── machinesSlice.ts         # machines[], mode, selectedMachineId, previewRotation, movingMachineBackup; addMachine(碰撞+连线网格双重检测)/removeMachine(级联删连线)/setMode/selectMachine/rotatePreview + pickupMachine(长按拾取) + cancelOperation(统一Escape)
-│       ├── connectionSlice.ts       # connections[], isConnecting, isValidPath, availablePorts[], previewPath, lShapeMode, portType, activeStartPos, activeTailFacing, previewHeadFacing, isContinuing, continueSourceId; startConnecting/updatePreview/commitConnection/cancelConnection/toggleLShape + splitConnectionAt(从gridUtils导入)
+│       ├── connectionSlice.ts       # connections[], isConnecting, isValidPath, availablePorts[], previewPath, lShapeMode, portType, activeStartPos, activeTailFacing, previewHeadFacing, isContinuing, continueSourceId; startConnecting/updatePreview/commitConnection/cancelConnection/toggleLShape + splitConnectionAt(从grid导入)
 │       ├── selectionSlice.ts        # selectionStart/End, selectedMachineIds/selectedConnectionIds, moveAnchor, movingMachinesSnapshot/ConnectionsSnapshot, isCopying; 框选/批量移动/复制/删除
 │       ├── historySlice.ts          # history: { past: HistorySnapshot[], future: HistorySnapshot[] }, takeSnapshot/undo/redo; 上限50步
 │       └── blueprintSlice.ts       # uiView, blueprintListMode, currentBlueprintId/Name; loadGame/resetGame/setUiView/setBlueprintListMode/setCurrentBlueprint/startInsertBlueprint/startInsertBlueprintOnNewMap
@@ -55,8 +55,8 @@ src/
 │   ├── memberInfo.ts                 # memberInfo: 团队成员数组 [{name,avatar,message,tags,mail,...}]
 │   └── zIndex.ts                     # Z_INDEX: 3段式 z-index 常量表(常态100/批量700/Ghost1300) + connZ()/machineZ()辅助函数
 ├── utils/
-│   ├── gridUtils.ts                  # barrel 文件(15行)：重新导出 grid/ 下全部函数
 │   ├── grid/
+│   │   ├── index.ts                     # barrel 文件(15行)：重新导出 grid/ 下全部函数
 │   │   ├── collision.ts              # getBoundingBox, getMachineRect, isOverlapping, checkCollision, calculateContentDimensions
 │   │   ├── direction.ts              # getVectorFromSide, dirFromPoints, computeHeadFacing
 │   │   ├── occupancy.ts              # buildOccupancyGrid, buildConnectionGrid, buildMergedGrid(掩码合并网格)
@@ -269,7 +269,7 @@ export const GameMode = {
    - 从目标输入端口反推 `headFacing` 方向
    - 检测与已有同类型连线的交叉点
    - 交叉点自动放置物流桥 (`lbr` for Solid, `pbr` for Liquid)
-   - 分裂被交叉的连线 (`splitConnectionAt` 工具函数，从 gridUtils 导入，递归处理多重交叉)
+   - 分裂被交叉的连线 (`splitConnectionAt` 工具函数，从 grid 导入，递归处理多重交叉)
    - 若新连线起点 = 已有连线终点（或反之），合并为一条长连线
    - 若点击地面（非机器输入端口），自动进入续接状态（`isContinuing`），可从终点继续拉线
 6. 按 Escape/右键 → `cancelConnection()` → 回到 BUILD 模式
@@ -404,25 +404,25 @@ Bit : 7──2   2         1         0
 
 ### 🟡 中优先级（质量 / 开发者体验）
 
-**4. 缺少 Zustand devtools 中间件**
-没有 Redux DevTools 集成，调试状态转换依赖 `console.log`。在 `create()` 中包装 `devtools()` 即可获得时间旅行调试能力。涉及文件：`gameStore.ts`。估计工作量：5min。
+**✅ 4. ~~Zustand devtools~~ — 已完成 (2026-06-19)**
+`gameStore.ts` 已包裹 `devtools()` 中间件，支持 Redux DevTools 时间旅行调试。
 
 **5. ~~`findPath()` 签名臃肿~~ — 已删除（2026-06-19）**
 该函数为零调用者死代码，直接移除而非重构。
 
-**6. 桶文件位置不一致**
-`utils/gridUtils.ts` 位于 `utils/` 下却重新导出 `utils/grid/*`。应移为 `utils/grid/index.ts`。涉及文件：`gridUtils.ts` → `grid/index.ts`。估计工作量：5min。
+**✅ 6. ~~桶文件位置不一致~~ — 已完成 (2026-06-19)**
+`utils/gridUtils.ts` 已移为 `utils/grid/index.ts`。
 
-**7. 非编辑器路由未做懒加载**
-BlueprintList、About、Settings 在 `App.tsx` 中同步导入，增加了主 bundle 体积。用 `React.lazy()` + `Suspense` 包裹可减少编辑器首屏加载量。涉及文件：`App.tsx`。估计工作量：15min。
+**✅ 7. ~~非编辑器路由未做懒加载~~ — 已完成 (2026-06-19)**
+BlueprintList、About、Settings 改用 `React.lazy()` + `Suspense`，减少编辑器首屏 bundle 体积。
 
 ### 🟢 低优先级（锦上添花）
 
 **8. 连线时占用网格无缓存**
 连线模式下每帧触发 `updatePreview`，若机器未改变，`machineGrid` 和 `fullConnGrid` 在帧之间不变但每帧重建。缓存 `machineGrid`（在 `machines` 变化时失效）可节省 ~50% 每帧计算量。涉及文件：`connectionSlice.ts`。估计工作量：1h。
 
-**9. `selectionSlice.ts` 中两处 `eslint-disable no-unused-vars`**
-`startBatchMove(_anchor)` 和 `startCopySelection(_anchor)` 用 `_` 前缀忽略未使用参数。可重构调用方避免此抑制注释。涉及文件：`selectionSlice.ts`。估计工作量：10min。
+**✅ 9. ~~`selectionSlice.ts` eslint-disable~~ — 已完成 (2026-06-19)**
+`startBatchMove` 和 `startCopySelection` 移除无用参数，删除 eslint-disable 注释。涉及文件：`selectionSlice.ts`、`types.ts`、`useKeyboardShortcuts.ts`、`store.test.ts`。
 
 **10. 寻路/占用网格边界情况缺少测试**
 `routeManhattan`/`trySingleLRoute` 的网格越界处理、`updatePreview` 的 fallback 路径生成未被单独测试覆盖。涉及文件：`__tests__/pureFunctions.test.ts`。估计工作量：1h。
@@ -439,12 +439,12 @@ BlueprintList、About、Settings 在 `App.tsx` 中同步导入，增加了主 bu
 
 ```
 Phase 1 ─ 零依赖（可并行）
-  #4   Zustand devtools              5min    gameStore.ts，不导入 gridUtils，完全独立
-  #6   桶文件归位                     5min    gridUtils.ts → grid/index.ts，影响 10+ 导入
+  #4   Zustand devtools              5min    gameStore.ts ✅ 已完成 (2026-06-19)
+  #6   桶文件归位                     5min    gridUtils.ts → grid/index.ts ✅ 已完成 (2026-06-19)
 
-Phase 2 ─ 依赖 Phase 1 的导入稳定
-  #7   路由懒加载                    15min    App.tsx 导入 gridUtils，等 #6 落定
-  #9   eslint-disable 清理          10min    selectionSlice.ts 导入 gridUtils，等 #6 落定
+Phase 2 ─ 可开始
+  #7   路由懒加载                    15min    App.tsx ✅ 已完成 (2026-06-19)
+  #9   eslint-disable 清理          10min    selectionSlice.ts ✅ 已完成 (2026-06-19)
 
 Phase 3 ─ 依赖 Phase 2
   #3   updatePreview 拆分             2h     connectionSlice.ts — 最大单函数重构
@@ -456,17 +456,17 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
   #10  寻路/占用网格边界测试          1h     routeManhattan + trySingleLRoute + occupancy
 ```
 
-**关键路径**：`#6 → #3 → #8 → #10` = 3h05m。
+**关键路径**：`#3 → #8 → #10` = 3h。
 
 | # | 方向 | 影响范围 | 估计 | 状态 |
 |---|------|----------|------|------|
 | 1 | 占用网格去重 | connectionSlice + pathfinding + selectionSlice | — | ✅ 已完成 |
 | 2 | useGridEvents 拆分 | hooks/ | — | ✅ 已完成 |
 | 5 | findPath 死代码 | pathfinding.ts | — | ✅ 已删除 |
-| 4 | Zustand devtools | gameStore.ts | 5min | 🔵 待办 |
-| 6 | 桶文件归位 | utils/grid/ | 5min | 🔵 待办 |
-| 7 | 路由懒加载 | App.tsx | 15min | 🔵 待办 |
-| 9 | eslint-disable 清理 | selectionSlice.ts | 10min | 🔵 待办 |
+| 4 | Zustand devtools | gameStore.ts | 5min | ✅ 已完成 |
+| 6 | 桶文件归位 | utils/grid/ | 5min | ✅ 已完成 |
+| 7 | 路由懒加载 | App.tsx | 15min | ✅ 已完成 |
+| 9 | eslint-disable 清理 | selectionSlice.ts | 10min | ✅ 已完成 |
 | 3 | updatePreview 拆分 | connectionSlice | 2h | 🔴 待办 |
 | 8 | 占用网格缓存 | connectionSlice | 1h | 🟢 待办 |
 | 10 | 寻路边界测试 | __tests__/ | 1h | 🟢 待办 |
@@ -495,4 +495,4 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 - **撤销支持**：store 中 mutation 前调 `get().takeSnapshot()`
 - **非组件取 store**：`useGameStore.getState()` 用于事件回调、非组件函数等 React 上下文之外的场景
 - **import 顺序**：React → 第三方库 → 项目内部（`@/` 别名）
-- **Commit 粒度**：一个 commit = 一个可独立理解的变化，git log --oneline 能一眼看懂，git show 能 30 秒审完。多文件同一概念可合为一个，无关改动拆开。不用 "WIP" 类中间态 commit，push 前 rebase squash。
+- **Commit 粒度**：一个 commit = 一个可独立理解的变化，git log --oneline 能一眼看懂，git show 能 30 秒审完。多文件同一概念可合为一个，无关改动拆开。**同类小改进（如多个待办清单项的清理）合为一个 commit**，方便查找回顾。不用 "WIP" 类中间态 commit，push 前 rebase squash。

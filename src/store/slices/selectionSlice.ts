@@ -3,7 +3,7 @@ import type { SelectionSlice, GameState } from './types';
 import type { PlacedMachine, Connection, Point } from '../../types';
 import { GameMode, portTypeToMask } from '../../types';
 import { MACHINES } from '../../config/machines';
-import { getMachinePortCheckPositions, getBoundingBox, getCornerPoints, splitConnectionAt } from '../../utils/gridUtils';
+import { getMachinePortCheckPositions, getBoundingBox, getCornerPoints, splitConnectionAt } from '../../utils/grid';
 import { getRotatedDimensions, getMachineCellMask, getMachineMask } from '../../utils/machineUtils';
 
 export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlice> = (set, get) => ({
@@ -103,8 +103,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         });
     },
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    startBatchMove: (_anchor) => {
+    startBatchMove: () => {
         const { machines, connections, selectedMachineIds, selectedConnectionIds } = get();
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;
 
@@ -131,8 +130,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         });
     },
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    startCopySelection: (_anchor) => {
+    startCopySelection: () => {
         const { machines, connections, selectedMachineIds, selectedConnectionIds } = get();
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;
 

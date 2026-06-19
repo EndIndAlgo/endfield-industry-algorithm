@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { GameMode } from '@/types';
 import type { Point } from '@/types';
-import { findPortOuterCellAt, findMachineAt, getPortOuterCells } from '@/utils/gridUtils';
+import { findPortOuterCellAt, findMachineAt, getPortOuterCells } from '@/utils/grid';
 
 interface UseWireModeDeps {
   getGridPos: (e: { clientX: number; clientY: number }) => Point;
