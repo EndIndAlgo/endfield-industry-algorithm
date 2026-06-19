@@ -1,8 +1,8 @@
 import type { StateCreator } from 'zustand';
 import type { ConnectionSlice, GameState } from './types';
 import type { Connection, Point, Direction, PlacedMachine } from '../../types';
-import { sideToDir, GameMode, portTypeToMask, MASK_SOLID_MACHINE, MASK_LIQUID_MACHINE } from '../../types';
-import { getMachineMask } from '../../utils/machineUtils';
+import { sideToDir, GameMode, portTypeToMask, MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS } from '../../types';
+import { getMachineMask, getMachineCellMask } from '../../utils/machineUtils';
 import { MACHINES } from '../../config/machines';
 import {
     trySingleLRoute,
@@ -85,7 +85,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         const gw = gridWidth || 100;
         const gh = gridHeight || 100;
         const connMask = portTypeToMask[portType];
-        const bridgeMask = portType === 'Solid' ? MASK_SOLID_MACHINE : MASK_LIQUID_MACHINE;
+        const bridgeMask = portType === 'Solid' ? MASK_SOLID_LOGISTICS : MASK_LIQUID_LOGISTICS;
         const sameConnGrid = buildConnectionGrid(connections, gw, gh, portType);
         const mergedGrid = buildMergedGrid(machines, connections, gw, gh, portType);
 
@@ -371,14 +371,15 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         const w3 = gw3 || 100; const h3 = gh3 || 100;
         const fullMaskGrid = new Uint8Array(w3 * h3);
         for (const m of machines) {
-            const mm = getMachineMask(m.machineId);
             const cfg = MACHINES.find(c => c.id === m.machineId);
             if (!cfg) continue;
             const { width, height } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
             const mx2 = Math.min(m.x + width, w3); const my2 = Math.min(m.y + height, h3);
             for (let y = Math.max(m.y, 0); y < my2; y++) {
                 const row = y * w3;
-                for (let x = Math.max(m.x, 0); x < mx2; x++) { fullMaskGrid[row + x] |= mm; }
+                for (let x = Math.max(m.x, 0); x < mx2; x++) {
+                    fullMaskGrid[row + x] |= getMachineCellMask(m.machineId, x - m.x, y - m.y);
+                }
             }
         }
         for (const c of connections) {

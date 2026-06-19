@@ -1,4 +1,5 @@
 import type { MachineConfig } from '../types';
+import { MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS, MASK_REGULAR_MACHINE } from '../types';
 /*顺序：
 协议核心
 物流桥，分流器，汇流器，物品准入口，管道桥，管道分流器，管道汇流器，管道准入口，
@@ -41,6 +42,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 4, y: 8, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 7, y: 8, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 物流桥 logistics-bridge lbr
         id: 'lbr',
@@ -61,6 +63,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 0, y: 0, side: 'bottom', type: 'Solid', autoConnect: true },
             { x: 0, y: 0, side: 'left', type: 'Solid', autoConnect: true }
         ],
+        mask: MASK_SOLID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 分流器 splitter spl
         id: 'spl',
@@ -77,6 +80,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 0, y: 0, side: 'bottom', type: 'Solid', autoConnect: true },
             { x: 0, y: 0, side: 'left', type: 'Solid', autoConnect: true }
         ],
+        mask: MASK_SOLID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 汇流器 merger mrg
         id: 'mrg',
@@ -93,6 +97,7 @@ export const MACHINES: MachineConfig[] = [
         outputs: [
             { x: 0, y: 0, side: 'bottom', type: 'Solid', autoConnect: true }
         ],
+        mask: MASK_SOLID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 物品准入口 item-input-port iip
         id: 'iip',
@@ -107,6 +112,7 @@ export const MACHINES: MachineConfig[] = [
         outputs: [
             { x: 0, y: 0, side: 'bottom', type: 'Solid', autoConnect: true }
         ],
+        mask: MASK_SOLID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 管道桥 pipe-bridge pbr
         id: 'pbr',
@@ -127,6 +133,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 0, y: 0, side: 'bottom', type: 'Liquid', autoConnect: true },
             { x: 0, y: 0, side: 'left', type: 'Liquid', autoConnect: true }
         ],
+        mask: MASK_LIQUID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 管道分流器 pipe-splitter psp
         id: 'psp',
@@ -143,6 +150,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 0, y: 0, side: 'bottom', type: 'Liquid', autoConnect: true },
             { x: 0, y: 0, side: 'left', type: 'Liquid', autoConnect: true }
         ],
+        mask: MASK_LIQUID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 管道汇流器 pipe-merger pmg
         id: 'pmg',
@@ -159,6 +167,7 @@ export const MACHINES: MachineConfig[] = [
         outputs: [
             { x: 0, y: 0, side: 'bottom', type: 'Liquid', autoConnect: true }
         ],
+        mask: MASK_LIQUID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 管道准入口 pipe-input-port pip
         id: 'pip',
@@ -173,6 +182,7 @@ export const MACHINES: MachineConfig[] = [
         outputs: [
             { x: 0, y: 0, side: 'bottom', type: 'Liquid', autoConnect: true }
         ],
+        mask: MASK_LIQUID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 协议储存箱 protocol-storage pst
         id: 'pst',
@@ -191,6 +201,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 2, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 2, y: 2, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 仓库存货口 warehouse-storage-port wsp
         id: 'wsp',
@@ -203,6 +214,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 0, side: 'top', type: 'Solid', autoConnect: false }
         ],
         outputs: [],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 仓库取货口 warehouse-pickup-port wpp
         id: 'wpp',
@@ -215,6 +227,7 @@ export const MACHINES: MachineConfig[] = [
         outputs: [
             { x: 1, y: 0, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 储液罐 liquid-tank ltk
         id: 'ltk',
@@ -229,6 +242,7 @@ export const MACHINES: MachineConfig[] = [
         outputs: [
             { x: 1, y: 2, side: 'bottom', type: 'Liquid', autoConnect: false },
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(170, 221, 255, 0.3)',
     }, { // 仓库存取线基段 warehouse-storage-pickup-line-segment wss
         id: 'wss',
@@ -239,6 +253,7 @@ export const MACHINES: MachineConfig[] = [
         height: 4,
         inputs: [],
         outputs: [],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 仓库存取线源桩 warehouse-storage-pickup-line-source-pile wsl
         id: 'wsl',
@@ -249,6 +264,7 @@ export const MACHINES: MachineConfig[] = [
         height: 4,
         inputs: [],
         outputs: [],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 暗管入口 concealed-pipe-entrance cpe
         id: 'cpe',
@@ -261,6 +277,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 0, side: 'top', type: 'Liquid', autoConnect: false }
         ],
         outputs: [],
+        mask: MASK_LIQUID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 暗管出口 concealed-pipe-exit cpx
         id: 'cpx',
@@ -273,6 +290,7 @@ export const MACHINES: MachineConfig[] = [
         outputs: [
             { x: 1, y: 2, side: 'bottom', type: 'Liquid', autoConnect: false }
         ],
+        mask: MASK_LIQUID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 多口暗管入口 multi-concealed-pipe-entrance mce
         id: 'mce',
@@ -286,6 +304,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 3, y: 0, side: 'top', type: 'Liquid', autoConnect: false }
         ],
         outputs: [],
+        mask: MASK_LIQUID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 多口暗管出口 multi-concealed-pipe-exit mcx
         id: 'mcx',
@@ -299,6 +318,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 2, side: 'bottom', type: 'Liquid', autoConnect: false },
             { x: 3, y: 2, side: 'bottom', type: 'Liquid', autoConnect: false }
         ],
+        mask: MASK_LIQUID_LOGISTICS,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 精炼炉 refinery ref
         id: 'ref',
@@ -317,6 +337,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 2, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 2, y: 2, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(170, 221, 255, 0.3)',
     }, { // 精炼炉（液体） refinery liquid rfl
         id: 'rfl',
@@ -337,6 +358,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 2, y: 2, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 2, y: 1, side: 'right', type: 'Liquid', autoConnect: false },
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(170, 221, 255, 0.3)',
     }, { // 粉碎机 crusher cru
         id: 'cru',
@@ -355,6 +377,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 2, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 2, y: 2, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 170, 136, 0.3)',
     }, { // 配件机 assembler asm
         id: 'asm',
@@ -373,6 +396,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 2, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 2, y: 2, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(204, 136, 255, 0.3)',
     }, { // 塑形机 molder mol
         id: 'mol',
@@ -391,6 +415,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 2, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 2, y: 2, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 136, 136, 0.3)',
     }, { // 采种机 seedHarvester shv
         id: 'shv',
@@ -413,6 +438,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 3, y: 4, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 4, y: 4, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(209, 230, 209, 0.3)',
     }, { // 种植机 planter pln
         id: 'pln',
@@ -435,6 +461,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 3, y: 4, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 4, y: 4, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 136, 136, 0.3)',
     }, { // 种植机（液体） planter liquid pll
         id: 'pll',
@@ -458,6 +485,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 3, y: 4, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 4, y: 4, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 136, 136, 0.3)',
     }, { // 废水处理机 wastewater-treatment wwt
         id: 'wwt',
@@ -468,6 +496,7 @@ export const MACHINES: MachineConfig[] = [
         height: 3,
         inputs: [{ x: 1, y: 0, side: 'top', type: 'Liquid', autoConnect: false }],
         outputs: [],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(136, 204, 170, 0.3)',
     }, { // 装备原件机 component-assembler cas
         id: 'cas',
@@ -492,6 +521,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 4, y: 3, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 5, y: 3, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 136, 204, 0.3)',
     }, { // 灌装机 filler fil
         id: 'fil',
@@ -516,6 +546,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 4, y: 3, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 5, y: 3, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 灌装机（液体） filler liquid fll
         id: 'fll',
@@ -541,6 +572,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 4, y: 3, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 5, y: 3, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 封装机 sealer sel
         id: 'sel',
@@ -565,6 +597,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 4, y: 3, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 5, y: 3, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 研磨机 grinder grn
         id: 'grn',
@@ -589,6 +622,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 4, y: 3, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 5, y: 3, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 反应池 reactor rea
         id: 'rea',
@@ -609,6 +643,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 4, y: 1, side: 'right', type: 'Liquid', autoConnect: false },
             { x: 4, y: 3, side: 'right', type: 'Liquid', autoConnect: false },
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 扩容反应池 expanded-reactor era
         id: 'era',
@@ -633,6 +668,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 5, y: 1, side: 'right', type: 'Liquid', autoConnect: false },
             { x: 5, y: 3, side: 'right', type: 'Liquid', autoConnect: false },
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 天有洪炉 tian-you-hong-furnace tyh
         id: 'tyh',
@@ -656,6 +692,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 3, y: 4, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 4, y: 4, side: 'bottom', type: 'Solid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 提纯机 purifier pur
         id: 'pur',
@@ -672,6 +709,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 4, side: 'bottom', type: 'Liquid', autoConnect: false },
             { x: 3, y: 4, side: 'bottom', type: 'Liquid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 拆解机 disassembler dis
         id: 'dis',
@@ -697,6 +735,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 5, y: 3, side: 'bottom', type: 'Solid', autoConnect: false },
             { x: 5, y: 1, side: 'right', type: 'Liquid', autoConnect: false }
         ],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     }, { // 供电桩 supply-pole sup
         id: 'sup',
@@ -707,6 +746,7 @@ export const MACHINES: MachineConfig[] = [
         height: 2,
         inputs: [],
         outputs: [],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 230, 128, 0.3)',
     }, { // 息壤供电桩 xi-rang-supply-pole xrs
         id: 'xrs',
@@ -717,6 +757,7 @@ export const MACHINES: MachineConfig[] = [
         height: 2,
         inputs: [],
         outputs: [],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 230, 128, 0.3)',
     }, { // 中继器 repeater rpt
         id: 'rpt',
@@ -727,6 +768,7 @@ export const MACHINES: MachineConfig[] = [
         height: 3,
         inputs: [],
         outputs: [],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 230, 128, 0.3)',
     }, { // 息壤中继器 xi-rang-repeater xrr
         id: 'xrr',
@@ -737,6 +779,7 @@ export const MACHINES: MachineConfig[] = [
         height: 3,
         inputs: [],
         outputs: [],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 230, 128, 0.3)',
     }, { // 热能池 thermal-pool thp
         id: 'thp',
@@ -750,6 +793,7 @@ export const MACHINES: MachineConfig[] = [
             { x: 1, y: 0, side: 'top', type: 'Solid', autoConnect: false },
         ],
         outputs: [],
+        mask: MASK_REGULAR_MACHINE,
         color: 'rgba(255, 255, 255, 0.3)',
     },
 ];

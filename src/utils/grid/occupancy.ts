@@ -1,30 +1,7 @@
 import type { PlacedMachine, Connection, PortType } from '../../types';
 import { portTypeToMask } from '../../types';
 import { MACHINES } from '../../config/machines';
-import { getRotatedDimensions, getMachineMask } from '../machineUtils';
-
-/** 构建机器占用矩阵 (0=空, 1=被机器占用), size = gridW × gridH */
-export const buildOccupancyGrid = (
-  machines: PlacedMachine[],
-  gridW: number,
-  gridH: number
-): Uint8Array => {
-  const grid = new Uint8Array(gridW * gridH);
-  for (const m of machines) {
-    const config = MACHINES.find(c => c.id === m.machineId);
-    if (!config) continue;
-    const { width, height } = getRotatedDimensions(config.width, config.height, m.rotation);
-    const mx2 = Math.min(m.x + width, gridW);
-    const my2 = Math.min(m.y + height, gridH);
-    for (let y = Math.max(m.y, 0); y < my2; y++) {
-      const row = y * gridW;
-      for (let x = Math.max(m.x, 0); x < mx2; x++) {
-        grid[row + x] = 1;
-      }
-    }
-  }
-  return grid;
-};
+import { getRotatedDimensions, getMachineCellMask } from '../machineUtils';
 
 /** 构建连线占用矩阵 (0=空, 1=被连线占用), 可选按 portType 过滤 */
 export const buildConnectionGrid = (
@@ -58,12 +35,9 @@ export const buildMergedGrid = (
   portType: PortType
 ): Uint8Array => {
   const grid = new Uint8Array(gridW * gridH);
-  const connMask = portTypeToMask[portType];
 
   // 机器占用
   for (const m of machines) {
-    const machineMask = getMachineMask(m.machineId);
-    if ((machineMask & connMask) === 0) continue; // 此机器不阻挡此类型连线
     const config = MACHINES.find(c => c.id === m.machineId);
     if (!config) continue;
     const { width, height } = getRotatedDimensions(config.width, config.height, m.rotation);
@@ -72,7 +46,7 @@ export const buildMergedGrid = (
     for (let y = Math.max(m.y, 0); y < my2; y++) {
       const row = y * gridW;
       for (let x = Math.max(m.x, 0); x < mx2; x++) {
-        grid[row + x] |= machineMask;
+        grid[row + x] |= getMachineCellMask(m.machineId, x - m.x, y - m.y);
       }
     }
   }

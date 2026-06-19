@@ -4,7 +4,7 @@ import { useGameStore } from '../store/gameStore';
 import { GameMode } from '../types';
 import type { Point, PortConfig } from '../types';
 import { MACHINES } from '../config/machines';
-import { checkCollision } from '../utils/gridUtils';
+import { checkPlacementCollision } from '../utils/gridUtils';
 import { getRotatedDimensions, getRotatedPorts } from '../utils/machineUtils';
 import { GRID_SIZE } from '../config/constants';
 import { Z_INDEX, machineZ } from '../config/zIndex';
@@ -22,6 +22,7 @@ export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => 
   const selectedMachineId = useGameStore(s => s.selectedMachineId);
   const previewRotation = useGameStore(s => s.previewRotation);
   const machines = useGameStore(s => s.machines);
+  const connections = useGameStore(s => s.connections);
   const gridWidth = useGameStore(s => s.gridWidth);
   const gridHeight = useGameStore(s => s.gridHeight);
 
@@ -41,7 +42,10 @@ export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => 
     const isOutOfBounds = candidate.x < 0 || candidate.y < 0 ||
       candidate.x + candidate.width > gridWidth ||
       candidate.y + candidate.height > gridHeight;
-    const isGhostInvalid = isOutOfBounds || checkCollision(candidate, machines);
+    const isGhostInvalid = isOutOfBounds || checkPlacementCollision(
+      ghostConfig.id, candidate.x, candidate.y, ghostWidth, ghostHeight,
+      machines, connections, gridWidth, gridHeight,
+    );
 
     const ghostPorts = getRotatedPorts(
       [...ghostConfig.inputs, ...ghostConfig.outputs],
@@ -49,7 +53,7 @@ export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => 
     ).map((p, i) => ({ ...p, isInput: i < ghostConfig.inputs.length }));
 
     return { ghostWidth, ghostHeight, isGhostInvalid, ghostPorts };
-  }, [ghostConfig, hoverPos, previewRotation, machines, gridWidth, gridHeight]);
+  }, [ghostConfig, hoverPos, previewRotation, machines, connections, gridWidth, gridHeight]);
 
   if (!ghostConfig || !hoverPos || !ghostData) return null;
 

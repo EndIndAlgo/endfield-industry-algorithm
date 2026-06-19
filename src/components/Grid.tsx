@@ -10,7 +10,7 @@ import { GameMode } from '../types';
 import { getMachineConfig } from '../config/machines';
 import classNames from 'classnames';
 import './Grid.scss';
-import { getRotatedDimensions, buildPowerGrid, getMachineMask } from '../utils/machineUtils';
+import { getRotatedDimensions, buildPowerGrid } from '../utils/machineUtils';
 import { GRID_SIZE } from '../config/constants';
 
 export const Grid = () => {
@@ -89,11 +89,11 @@ export const Grid = () => {
           style={{ width: gridWidth * GRID_SIZE, height: gridHeight * GRID_SIZE }}
         />
 
-        {/* Solid 连线层 (掩码=2, 最底层) */}
+        {/* Solid 连线层 */}
         <ConnectionSVGLayer portType="Solid" />
 
-        {/* Solid 物流器 (掩码=3, 连线之上) */}
-        {machines.filter(m => getMachineMask(m.machineId) === 3).map(m => (
+        {/* 所有机器（z-index 由 machineZ 按掩码自动分层） */}
+        {machines.map(m => (
           <Machine
             key={m.id}
             data={m}
@@ -102,28 +102,8 @@ export const Grid = () => {
           />
         ))}
 
-        {/* Liquid 连线层 (掩码=4) */}
+        {/* Liquid 连线层 */}
         <ConnectionSVGLayer portType="Liquid" />
-
-        {/* Liquid 物流器 (掩码=7) */}
-        {machines.filter(m => getMachineMask(m.machineId) === 7).map(m => (
-          <Machine
-            key={m.id}
-            data={m}
-            isSelected={selectedMachineIds.includes(m.id)}
-            isPowered={poweredMachineIds.has(m.id)}
-          />
-        ))}
-
-        {/* 普通机器 (掩码=255, 最顶层) */}
-        {machines.filter(m => getMachineMask(m.machineId) >= 255).map(m => (
-          <Machine
-            key={m.id}
-            data={m}
-            isSelected={selectedMachineIds.includes(m.id)}
-            isPowered={poweredMachineIds.has(m.id)}
-          />
-        ))}
 
         {/* 框选矩形 */}
         <SelectionBox />

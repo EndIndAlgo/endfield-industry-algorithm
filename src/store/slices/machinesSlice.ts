@@ -3,7 +3,7 @@ import type { MachinesSlice, GameState } from './types';
 import type { PlacedMachine, Direction } from '../../types';
 import { GameMode } from '../../types';
 import { MACHINES } from '../../config/machines';
-import { checkCollision, buildConnectionGrid, getMachinePortCheckPositions } from '../../utils/gridUtils';
+import { checkPlacementCollision, getMachinePortCheckPositions } from '../../utils/gridUtils';
 import { getRotatedDimensions } from '../../utils/machineUtils';
 
 export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice> = (set, get) => ({
@@ -42,16 +42,7 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
             return;
         }
 
-        if (checkCollision(candidateRect, machines)) return;
-
-        const connGrid = buildConnectionGrid(connections, gridWidth, gridHeight);
-        for (let cy = y; cy < y + height; cy++) {
-            for (let cx = x; cx < x + width; cx++) {
-                if (cx >= 0 && cx < gridWidth && cy >= 0 && cy < gridHeight && connGrid[cy * gridWidth + cx]) {
-                    return;
-                }
-            }
-        }
+        if (checkPlacementCollision(machineId, x, y, width, height, machines, connections, gridWidth, gridHeight)) return;
 
         const { movingMachineBackup } = get();
         let finalId: string = crypto.randomUUID();

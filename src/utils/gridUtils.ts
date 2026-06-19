@@ -1,9 +1,9 @@
 // ── 碰撞检测 / 包围盒 ──
-export { getBoundingBox, getMachineRect, isOverlapping, checkCollision, calculateContentDimensions } from './grid/collision';
+export { getBoundingBox, getMachineRect, checkPlacementCollision, calculateContentDimensions } from './grid/collision';
 export type { BoundingBox } from './grid/collision';
 
 // ── 占用网格 ──
-export { buildOccupancyGrid, buildConnectionGrid, buildMergedGrid } from './grid/occupancy';
+export { buildConnectionGrid, buildMergedGrid } from './grid/occupancy';
 
 // ── 方向工具 ──
 export { getVectorFromSide, dirFromPoints, computeHeadFacing } from './grid/direction';

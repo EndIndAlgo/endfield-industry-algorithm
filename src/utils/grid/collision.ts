@@ -1,6 +1,7 @@
 import type { PlacedMachine, Point } from '../../types';
+import { portTypeToMask } from '../../types';
 import { MACHINES } from '../../config/machines';
-import { getRotatedDimensions } from '../machineUtils';
+import { getRotatedDimensions, getMachineCellMask } from '../machineUtils';
 
 /** 获取机器旋转后的矩形 */
 export const getMachineRect = (machine: PlacedMachine) => {
@@ -49,29 +50,53 @@ export const getBoundingBox = (
   return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
 };
 
-/** 矩形重叠检测 */
-export const isOverlapping = (
-  rectA: { x: number; y: number; w: number; h: number },
-  rectB: { x: number; y: number; w: number; h: number }
+/** 掩码级放置碰撞检测：逐格 AND 候选机器掩码与已有实体掩码，统一预检和放置逻辑 */
+export const checkPlacementCollision = (
+  machineId: string,
+  x: number, y: number,
+  width: number, height: number,
+  machines: PlacedMachine[],
+  connections: { path: Point[]; portType: string }[],
+  gridW: number,
+  gridH: number
 ): boolean => {
-  return (
-    rectA.x < rectB.x + rectB.w &&
-    rectA.x + rectA.w > rectB.x &&
-    rectA.y < rectB.y + rectB.h &&
-    rectA.y + rectA.h > rectB.y
-  );
-};
+  const grid = new Uint8Array(gridW * gridH);
 
-/** 检测候选位置是否与已有机器碰撞 */
-export const checkCollision = (
-  candidate: { x: number; y: number; width: number; height: number },
-  machines: PlacedMachine[]
-): boolean => {
-  const candidateRect = { x: candidate.x, y: candidate.y, w: candidate.width, h: candidate.height };
+  // 已有机器掩码
   for (const m of machines) {
-    const r = getMachineRect(m);
-    if (r && isOverlapping(candidateRect, r)) return true;
+    const cfg = MACHINES.find(c => c.id === m.machineId);
+    if (!cfg) continue;
+    const { width: mw, height: mh } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
+    const mx2 = Math.min(m.x + mw, gridW);
+    const my2 = Math.min(m.y + mh, gridH);
+    for (let my = Math.max(m.y, 0); my < my2; my++) {
+      const row = my * gridW;
+      for (let mx = Math.max(m.x, 0); mx < mx2; mx++) {
+        grid[row + mx] |= getMachineCellMask(m.machineId, mx - m.x, my - m.y);
+      }
+    }
   }
+
+  // 已有连线掩码 (所有类型)
+  for (const c of connections) {
+    const cm = portTypeToMask[c.portType as keyof typeof portTypeToMask] ?? 0;
+    for (const p of c.path) {
+      if (p.x >= 0 && p.x < gridW && p.y >= 0 && p.y < gridH) {
+        grid[p.y * gridW + p.x] |= cm;
+      }
+    }
+  }
+
+  // 候选机器每格掩码 vs 已有掩码
+  for (let cy = y; cy < y + height; cy++) {
+    if (cy < 0 || cy >= gridH) continue;
+    const row = cy * gridW;
+    for (let cx = x; cx < x + width; cx++) {
+      if (cx < 0 || cx >= gridW) continue;
+      if (getMachineCellMask(machineId, cx - x, cy - y) & grid[row + cx]) return true;
+    }
+  }
+
   return false;
 };
 

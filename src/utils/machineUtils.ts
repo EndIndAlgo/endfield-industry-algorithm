@@ -1,17 +1,28 @@
 import type { Direction, PortConfig, PlacedMachine, MachineConfig } from '../types';
-import { MASK_SOLID_MACHINE, MASK_LIQUID_MACHINE, MASK_REGULAR_MACHINE } from '../types';
+import { MASK_REGULAR_MACHINE } from '../types';
+import { MACHINES } from '../config/machines';
 
-/** Solid 物流器 ID 集合 */
-const SOLID_LOGISTICS = new Set(['lbr', 'spl', 'mrg', 'iip']);
-
-/** Liquid 物流器 ID 集合 */
-const LIQUID_LOGISTICS = new Set(['pbr', 'psp', 'pmg', 'pip', 'cpe', 'cpx', 'mce', 'mcx']);
-
-/** 根据机器 ID 返回其物理高度掩码 */
+/** 从配置读取机器渲染掩码（全同模式返回原值，差异模式返回 max） */
 export const getMachineMask = (machineId: string): number => {
-    if (SOLID_LOGISTICS.has(machineId)) return MASK_SOLID_MACHINE;
-    if (LIQUID_LOGISTICS.has(machineId)) return MASK_LIQUID_MACHINE;
-    return MASK_REGULAR_MACHINE;
+    const cfg = MACHINES.find(c => c.id === machineId);
+    if (!cfg) return MASK_REGULAR_MACHINE;
+    const m = cfg.mask;
+    if (typeof m === 'number') return m;
+    let max = 0;
+    for (const row of m) for (const v of row) if (v > max) max = v;
+    return max;
+};
+
+/** 从配置读取机器指定格的碰撞掩码 */
+export const getMachineCellMask = (machineId: string, relX: number, relY: number): number => {
+    const cfg = MACHINES.find(c => c.id === machineId);
+    if (!cfg) return 0;
+    const m = cfg.mask;
+    if (typeof m === 'number') return m;
+    if (relY < 0 || relY >= m.length) return 0;
+    const row = m[relY];
+    if (relX < 0 || relX >= row.length) return 0;
+    return row[relX];
 };
 
 export const getRotatedDimensions = (width: number, height: number, rotation: Direction) => {

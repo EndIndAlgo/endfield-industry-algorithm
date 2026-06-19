@@ -1,10 +1,10 @@
 import type { StateCreator } from 'zustand';
 import type { SelectionSlice, GameState } from './types';
-import type { PlacedMachine, Connection } from '../../types';
+import type { PlacedMachine, Connection, Point } from '../../types';
 import { GameMode, portTypeToMask } from '../../types';
 import { MACHINES } from '../../config/machines';
-import { checkCollision, getMachinePortCheckPositions, getBoundingBox, buildMergedGrid, buildConnectionGrid, getCornerPoints } from '../../utils/gridUtils';
-import { getRotatedDimensions } from '../../utils/machineUtils';
+import { getMachinePortCheckPositions, getBoundingBox, getCornerPoints, splitConnectionAt } from '../../utils/gridUtils';
+import { getRotatedDimensions, getMachineCellMask, getMachineMask } from '../../utils/machineUtils';
 
 export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlice> = (set, get) => ({
     selectionStart: null,
@@ -183,99 +183,250 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
             y: m.y + offsetY
         }));
 
-        for (const m of placedMachines) {
-            const config = MACHINES.find(c => c.id === m.machineId);
-            if (!config) continue;
-            const { width, height } = getRotatedDimensions(config.width, config.height, m.rotation);
-            const rect = { x: m.x, y: m.y, width, height };
+        // ── 构建剩余实体的掩码网格 ──
+        const baseGrid = new Uint8Array(gridWidth * gridHeight);
 
-            if (rect.x < 0 || rect.y < 0 || rect.x + width > gridWidth || rect.y + height > gridHeight) {
-                collision = true;
-                break;
-            }
-
-            if (checkCollision(rect, machines)) {
-                collision = true;
-                break;
+        // 剩余机器掩码
+        for (const m of machines) {
+            const cfg = MACHINES.find(c => c.id === m.machineId);
+            if (!cfg) continue;
+            const { width: mw, height: mh } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
+            const mx2 = Math.min(m.x + mw, gridWidth);
+            const my2 = Math.min(m.y + mh, gridHeight);
+            for (let my = Math.max(m.y, 0); my < my2; my++) {
+                const row = my * gridWidth;
+                for (let mx = Math.max(m.x, 0); mx < mx2; mx++) {
+                    baseGrid[row + mx] |= getMachineCellMask(m.machineId, mx - m.x, my - m.y);
+                }
             }
         }
 
-        // 连线路径碰撞检测 (掩码系统: 机器 + 异类型连线)
+        // 剩余连线掩码 (所有类型)
+        for (const c of connections) {
+            const cm = portTypeToMask[c.portType];
+            for (const p of c.path) {
+                if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight) {
+                    baseGrid[p.y * gridWidth + p.x] |= cm;
+                }
+            }
+        }
+
+        // ── 逐机检测 + 累积掩码 ──
+        for (const m of placedMachines) {
+            const cfg = MACHINES.find(c => c.id === m.machineId);
+            if (!cfg) continue;
+            const { width: mw, height: mh } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
+
+            // 越界
+            if (m.x < 0 || m.y < 0 || m.x + mw > gridWidth || m.y + mh > gridHeight) {
+                collision = true;
+                break;
+            }
+
+            // 掩码逐格 AND
+            let maskHit = false;
+            for (let cy = m.y; cy < m.y + mh && !maskHit; cy++) {
+                const row = cy * gridWidth;
+                for (let cx = m.x; cx < m.x + mw && !maskHit; cx++) {
+                    if (getMachineCellMask(m.machineId, cx - m.x, cy - m.y) & baseGrid[row + cx]) {
+                        maskHit = true;
+                    }
+                }
+            }
+            if (maskHit) { collision = true; break; }
+
+            // 无冲突 → 累积掩码（后续机器可见）
+            for (let cy = m.y; cy < m.y + mh; cy++) {
+                const row = cy * gridWidth;
+                for (let cx = m.x; cx < m.x + mw; cx++) {
+                    baseGrid[row + cx] |= getMachineCellMask(m.machineId, cx - m.x, cy - m.y);
+                }
+            }
+        }
+
+        // ── 连线交叉检测 + 桥生成 ──
         if (!collision) {
+            const allMachines = machines.concat(placedMachines);
             const placedConns = movingConnectionsSnapshot.map(c => ({
                 ...c,
                 path: c.path.map(p => ({ x: p.x + offsetX, y: p.y + offsetY }))
             }));
 
-            // 按 portType 缓存网格
-            const mergedCache = new Map<string, Uint8Array>();
-            const sameCache = new Map<string, Uint8Array>();
-            const cornerCache = new Map<string, Uint8Array>();
+            const bridgesToCreate: PlacedMachine[] = [];
+            const connsToRemove = new Set<string>();
+            const connsToAdd: Connection[] = [];
+            const splitPlaced = new Map<string, Connection[]>();
 
-            connCheck: for (const conn of placedConns) {
-                // 合并网格 (机器 + 异类型连线)
-                let mergedGrid = mergedCache.get(conn.portType);
-                if (!mergedGrid) {
-                    mergedGrid = buildMergedGrid(machines, connections, gridWidth, gridHeight, conn.portType);
-                    mergedCache.set(conn.portType, mergedGrid);
+            // 按 portType 分组 (Solid 先, Liquid 后, bridgeMask 自然排斥同格)
+            const portTypes = [...new Set(placedConns.map(c => c.portType))];
+
+            for (const pt of portTypes) {
+                const bridgeId = pt === 'Liquid' ? 'pbr' : 'lbr';
+                const bridgeMask = getMachineMask(bridgeId);
+                const connMask = portTypeToMask[pt];
+
+                // pointToConns: 剩余同类型路径格 → 连线
+                const pointToConns = new Map<string, Connection[]>();
+                for (const c of connections) {
+                    if (c.portType !== pt) continue;
+                    for (const p of c.path) {
+                        const key = `${p.x},${p.y}`;
+                        const list = pointToConns.get(key) || [];
+                        list.push(c);
+                        pointToConns.set(key, list);
+                    }
                 }
-                // 同类型连线网格
-                let sameTypeGrid = sameCache.get(conn.portType);
-                if (!sameTypeGrid) {
-                    sameTypeGrid = buildConnectionGrid(connections, gridWidth, gridHeight, conn.portType);
-                    sameCache.set(conn.portType, sameTypeGrid);
+
+                // 剩余同类型连线 corner (桥不能放在已有线的拐弯上)
+                const cornerGrid = new Uint8Array(gridWidth * gridHeight);
+                for (const c of connections) {
+                    if (c.portType !== pt) continue;
+                    for (const cp of getCornerPoints(c.path, c.tailFacing, c.headFacing)) {
+                        if (cp.x >= 0 && cp.x < gridWidth && cp.y >= 0 && cp.y < gridHeight) {
+                            cornerGrid[cp.y * gridWidth + cp.x] = 1;
+                        }
+                    }
                 }
-                // 已有同类型连线的拐弯点 (不能放桥)
-                let cornerGrid = cornerCache.get(conn.portType);
-                if (!cornerGrid) {
-                    cornerGrid = new Uint8Array(gridWidth * gridHeight);
-                    for (const c of connections) {
-                        if (c.portType !== conn.portType) continue;
-                        for (const cp of getCornerPoints(c.path, c.tailFacing, c.headFacing)) {
-                            if (cp.x >= 0 && cp.x < gridWidth && cp.y >= 0 && cp.y < gridHeight) {
-                                cornerGrid[cp.y * gridWidth + cp.x] = 1;
+
+                // fullMaskGrid: 全部机器 + 全部剩余连线 + 已生成的桥
+                const fullMaskGrid = new Uint8Array(gridWidth * gridHeight);
+                for (const m of allMachines) {
+                    const c2 = MACHINES.find(c => c.id === m.machineId);
+                    if (!c2) continue;
+                    const { width: mw, height: mh } = getRotatedDimensions(c2.width, c2.height, m.rotation);
+                    const mx2 = Math.min(m.x + mw, gridWidth);
+                    const my2 = Math.min(m.y + mh, gridHeight);
+                    for (let my = Math.max(m.y, 0); my < my2; my++) {
+                        const row = my * gridWidth;
+                        for (let mx = Math.max(m.x, 0); mx < mx2; mx++) {
+                            fullMaskGrid[row + mx] |= getMachineCellMask(m.machineId, mx - m.x, my - m.y);
+                        }
+                    }
+                }
+                for (const c of connections) {
+                    const cm = portTypeToMask[c.portType];
+                    for (const p of c.path) {
+                        if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight) {
+                            fullMaskGrid[p.y * gridWidth + p.x] |= cm;
+                        }
+                    }
+                }
+                for (const b of bridgesToCreate) {
+                    const bm = getMachineMask(b.machineId);
+                    if (b.x >= 0 && b.x < gridWidth && b.y >= 0 && b.y < gridHeight) {
+                        fullMaskGrid[b.y * gridWidth + b.x] |= bm;
+                    }
+                }
+
+                // 逐条处理此类型的移动连线
+                for (const conn of placedConns) {
+                    if (conn.portType !== pt) continue;
+
+                    // 收集交叉点
+                    const intersectionPoints: Point[] = [];
+                    for (const p of conn.path) {
+                        const key = `${p.x},${p.y}`;
+                        if (!pointToConns.has(key)) continue;
+
+                        // 交叉点不能是剩余线拐弯（桥不能放拐弯上）
+                        if (cornerGrid[p.y * gridWidth + p.x]) { collision = true; break; }
+
+                        // 桥掩码验证：bridgeMask 不能与 cellMask 的异类型位冲突
+                        const cellMask = fullMaskGrid[p.y * gridWidth + p.x];
+                        if ((bridgeMask & cellMask) !== connMask) { collision = true; break; }
+
+                        intersectionPoints.push(p);
+                    }
+                    if (collision) break;
+
+                    // 自身拐弯不能落在剩余同类型线上
+                    for (const cp of getCornerPoints(conn.path, conn.tailFacing, conn.headFacing)) {
+                        if (cp.x >= 0 && cp.x < gridWidth && cp.y >= 0 && cp.y < gridHeight) {
+                            if (pointToConns.has(`${cp.x},${cp.y}`)) { collision = true; break; }
+                        }
+                    }
+                    if (collision) break;
+
+                    if (intersectionPoints.length === 0) continue;
+
+                    // 创建桥
+                    for (const p of intersectionPoints) {
+                        bridgesToCreate.push({
+                            id: crypto.randomUUID(),
+                            machineId: bridgeId,
+                            x: p.x, y: p.y,
+                            rotation: 0,
+                        });
+                        fullMaskGrid[p.y * gridWidth + p.x] |= bridgeMask;
+                    }
+
+                    // 拆分被穿越的剩余连线 + 递归拆碎片
+                    for (const p of intersectionPoints) {
+                        const key = `${p.x},${p.y}`;
+                        const crossed = pointToConns.get(key) || [];
+                        for (const orig of crossed) {
+                            if (connsToRemove.has(orig.id)) continue;
+                            connsToRemove.add(orig.id);
+                            connsToAdd.push(...splitConnectionAt(orig, p));
+                        }
+                        const pending = [...connsToAdd];
+                        connsToAdd.length = 0;
+                        for (const part of pending) {
+                            if (part.path.some(pt => pt.x === p.x && pt.y === p.y)) {
+                                connsToAdd.push(...splitConnectionAt(part, p));
+                            } else {
+                                connsToAdd.push(part);
                             }
                         }
                     }
-                    cornerCache.set(conn.portType, cornerGrid);
-                }
 
-                const connMask = portTypeToMask[conn.portType];
-
-                for (const p of conn.path) {
-                    const idx = p.y * gridWidth + p.x;
-                    if (p.x < 0 || p.y < 0 || p.x >= gridWidth || p.y >= gridHeight) { collision = true; break connCheck; }
-                    if ((mergedGrid[idx] & connMask) !== 0) { collision = true; break connCheck; }
-                    if (sameTypeGrid[idx] && cornerGrid[idx]) { collision = true; break connCheck; }
-                }
-                // 移动连线自身的拐弯点不能落在已有同类型连线上
-                for (const cp of getCornerPoints(conn.path, conn.tailFacing, conn.headFacing)) {
-                    if (cp.x >= 0 && cp.x < gridWidth && cp.y >= 0 && cp.y < gridHeight) {
-                        if (sameTypeGrid[cp.y * gridWidth + cp.x]) { collision = true; break connCheck; }
+                    // 碎片注册回 pointToConns（后续移动连线可见）
+                    for (const part of connsToAdd) {
+                        for (const pp of part.path) {
+                            const pk = `${pp.x},${pp.y}`;
+                            const list = pointToConns.get(pk) || [];
+                            list.push(part);
+                            pointToConns.set(pk, list);
+                        }
                     }
+
+                    // 拆分移动连线自身
+                    let parts = [conn];
+                    for (const p of intersectionPoints) {
+                        parts = parts.flatMap(c => splitConnectionAt(c, p));
+                    }
+                    splitPlaced.set(conn.id, parts);
                 }
+                if (collision) break;
             }
+
+            if (collision) return;
+
+            const finalPlacedConns = placedConns.flatMap(c =>
+                splitPlaced.get(c.id) ?? [c]
+            );
+
+            get().takeSnapshot();
+
+            set({
+                machines: [...machines, ...placedMachines, ...bridgesToCreate],
+                connections: [
+                    ...connections.filter(c => !connsToRemove.has(c.id)),
+                    ...connsToAdd,
+                    ...finalPlacedConns,
+                ],
+                movingMachinesSnapshot: [],
+                movingConnectionsSnapshot: [],
+                moveAnchor: null,
+                mode: GameMode.BUILD,
+                selectedMachineIds: placedMachines.map(m => m.id),
+                selectedConnectionIds: finalPlacedConns.map(c => c.id),
+                isCopying: false
+            });
+
+            return;
         }
 
         if (collision) return;
-
-        const placedConnections = movingConnectionsSnapshot.map(c => ({
-            ...c,
-            path: c.path.map(p => ({ x: p.x + offsetX, y: p.y + offsetY }))
-        }));
-
-        get().takeSnapshot();
-
-        set({
-            machines: [...machines, ...placedMachines],
-            connections: [...connections, ...placedConnections],
-            movingMachinesSnapshot: [],
-            movingConnectionsSnapshot: [],
-            moveAnchor: null,
-            mode: GameMode.BUILD,
-            selectedMachineIds: placedMachines.map(m => m.id),
-            selectedConnectionIds: placedConnections.map(c => c.id),
-            isCopying: false
-        });
     },
 });
