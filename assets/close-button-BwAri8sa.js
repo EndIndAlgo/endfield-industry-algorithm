@@ -1,0 +1,1 @@
+import{c as a,r as s,j as e,I as n,W as r}from"./index-6e7Zd3FC.js";const{withContext:i}=a({key:"heading"}),c=i("h2");c.displayName="Heading";const l=s.forwardRef(function(t,o){return e.jsx(n,{variant:"ghost","aria-label":"Close",ref:o,...t,children:t.children??e.jsx(r,{})})});l.displayName="CloseButton";export{l as C,c as H};
