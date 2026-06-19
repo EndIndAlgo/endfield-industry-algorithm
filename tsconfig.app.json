@@ -13,7 +13,7 @@
       "vite/client"
     ],
     "skipLibCheck": true,
-    // "baseUrl": ".",
+    // tsconfig 自身目录即为 baseUrl，bundler 模式下 paths 自动相对解析，无需显式指定
     "paths": {
       "@/*": [
         "./src/*"

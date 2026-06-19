@@ -33,7 +33,7 @@ src/
 ├── main.tsx                          # 入口：StrictMode + ChakraProvider(defaultSystem) + <App/>
 ├── App.tsx                           # 根组件：uiView 条件路由 + 全局 Ctrl+Z/Y/S 快捷键
 ├── App.css                           # #root flex column 布局, .app-content flex:1
-├── index.css                         # @font-face NaikaiFont-Bold, CSS 变量(--grid-size等), .gray-btn/.yellow-btn, 简中字体回退
+├── index.css                         # CSS 变量(--grid-size等), .gray-btn/.yellow-btn, 简中系统字体栈
 ├── types.ts                          # 共享类型 + 掩码常量: MASK_SOLID/LIQUID, portTypeToMask, MASK_*_MACHINE
 ├── types/
 │   └── opencc-js.d.ts               # opencc-js 类型声明（Converter, ConverterOptions）
@@ -118,7 +118,7 @@ src/
 ├── assets/
 │   ├── logo-header.png               # Header 用的 96px 高 logo（2x retina）
 │   ├── loading.png                   # 加载画面右侧图(240px)
-│   ├── members/                      # 团队成员头像 (author.gif, tata.png)
+│   ├── members/                      # 团队成员头像 (eddy3721.gif, tata.png)
 │   ├── machines/                     # 机器图标 .webp (以machine.id命名, 如pco.webp)
 │   └── items/                        # 材料图标 (item_0~item_131, 延迟加载不阻塞启动)
 ```
@@ -486,12 +486,14 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 - `src/assets/logo-header.png` 7.8KB（96px高，2x retina）
 - `public/logo.svg` 156KB（从 git 历史恢复，LoadingScreen 使用）
 - 附带修复 `index.html`：`lang="en"` → `lang="zh"`、`type="image/svg+xml"` 指向 PNG 的 MIME 矛盾
+- 2026-06-19：`public/logo.png`（遗留死文件，无引用）移至 `_archive/`
 
 **✅ #2 — NaikaiFont-Bold.woff2 17MB — 已完成 (2026-06-19)**
 `public/fonts/NaikaiFont-Bold.woff2` 完整 CJK 字体，实际只用于 LoadingScreen 一句装饰文案（5 个汉字"终末地牛逼"）。
 - 采用方案B：移除 `@font-face` 声明，`.sub-text` 改用系统字体栈，woff2 文件保留备用
 - 改动：`src/index.css`（删 @font-face）、`src/components/LoadingScreen.scss`（改 font-family）
 - 效果：首次加载免去 17MB 字体下载，LoadingScreen 文字用系统中文字体渲染
+- 2026-06-19：woff2 移至 `_archive/fonts/`，dist 从 24MB → 5MB
 
 ### 🟡 中优先级（质量 / 开发者体验）
 
