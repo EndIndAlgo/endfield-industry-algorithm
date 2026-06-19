@@ -2,6 +2,7 @@ import type { PlacedMachine, Connection, PortType } from '../../types';
 import { portTypeToMask } from '../../types';
 import { MACHINES } from '../../config/machines';
 import { getRotatedDimensions, getMachineCellMask } from '../machineUtils';
+import { getCornerPoints } from './port';
 
 /** 构建连线占用矩阵 (0=空, 1=被连线占用), 可选按 portType 过滤 */
 export const buildConnectionGrid = (
@@ -62,5 +63,27 @@ export const buildMergedGrid = (
     }
   }
 
+  return grid;
+};
+
+/**
+ * 构建已有同类型连线拐弯点网格
+ * 桥不能放在已有线的拐弯上
+ */
+export const buildExistingCornerGrid = (
+  connections: Connection[],
+  gw: number,
+  gh: number,
+  portType: PortType
+): Uint8Array => {
+  const grid = new Uint8Array(gw * gh);
+  for (const conn of connections) {
+    if (conn.portType !== portType) continue;
+    for (const cp of getCornerPoints(conn.path, conn.tailFacing, conn.headFacing)) {
+      if (cp.x >= 0 && cp.x < gw && cp.y >= 0 && cp.y < gh) {
+        grid[cp.y * gw + cp.x] = 1;
+      }
+    }
+  }
   return grid;
 };

@@ -1,33 +1,21 @@
 import type { StateCreator } from 'zustand';
 import type { ConnectionSlice, GameState } from './types';
 import type { Connection, Point, Direction, PlacedMachine } from '../../types';
-import { sideToDir, GameMode, portTypeToMask, MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS } from '../../types';
+import { GameMode, portTypeToMask, MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS } from '../../types';
 import { getMachineMask, getMachineCellMask } from '../../utils/machineUtils';
 import { MACHINES } from '../../config/machines';
 import {
-    trySingleLRoute,
-    computeHeadFacing,
-    getInputPortOuterCells,
     findMachineAt,
     splitConnectionAt,
     buildMergedGrid,
     buildConnectionGrid,
+    buildExistingCornerGrid,
+    pickClosestPort,
+    findRouteForMachine,
+    findRouteToGround,
     getCornerPoints,
 } from '../../utils/grid';
 import { getRotatedDimensions } from '../../utils/machineUtils';
-
-/** portDir 的垂直方向（取两个垂直方向中与目标更接近的那个） */
-const perpendicularDir = (dir: Direction, start: Point, end: Point): Direction => {
-    // 垂直方向有两个候选，取能让第一步更接近目标的方向
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
-    if (dir === 0 || dir === 2) {
-        // 垂直端口(上/下)，垂直方向是水平
-        return dx > 0 ? 1 : dx < 0 ? 3 : 1;
-    }
-    // 水平端口(左/右)，垂直方向是垂直
-    return dy > 0 ? 2 : dy < 0 ? 0 : 2;
-};
 
 export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSlice> = (set, get) => ({
     connections: [],
@@ -67,234 +55,55 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             isContinuing } = get();
         if (availablePorts.length === 0) return;
 
-        // ── 第1步：从可用端口中选离鼠标最近的一个 ──
-        let bestPort = availablePorts[0];
-        let bestDist = Math.abs(bestPort.pos.x - mouseGridPos.x) + Math.abs(bestPort.pos.y - mouseGridPos.y);
-        for (let i = 1; i < availablePorts.length; i++) {
-            const p = availablePorts[i];
-            const d = Math.abs(p.pos.x - mouseGridPos.x) + Math.abs(p.pos.y - mouseGridPos.y);
-            if (d < bestDist) {
-                bestDist = d;
-                bestPort = p;
-            }
-        }
+        // ── 选最近端口 ──
+        const bestPort = pickClosestPort(availablePorts, mouseGridPos);
         const startPos = bestPort.pos;
         const tailFacing = bestPort.facing;
 
-        // ── 构建占用网格 (掩码系统) ──
+        // ── 构建占用网格 ──
         const gw = gridWidth || 100;
         const gh = gridHeight || 100;
         const connMask = portTypeToMask[portType];
         const bridgeMask = portType === 'Solid' ? MASK_SOLID_LOGISTICS : MASK_LIQUID_LOGISTICS;
-        const sameConnGrid = buildConnectionGrid(connections, gw, gh, portType);
         const mergedGrid = buildMergedGrid(machines, connections, gw, gh, portType);
+        const sameConnGrid = buildConnectionGrid(connections, gw, gh, portType);
+        const existingCornerGrid = buildExistingCornerGrid(connections, gw, gh, portType);
 
-        // 已有同类型连线的拐弯点 (桥不能放在已有线的拐弯上)
-        const existingCornerGrid = new Uint8Array(gw * gh);
-        for (const conn of connections) {
-            if (conn.portType !== portType) continue;
-            for (const cp of getCornerPoints(conn.path, conn.tailFacing, conn.headFacing)) {
-                if (cp.x >= 0 && cp.x < gw && cp.y >= 0 && cp.y < gh) {
-                    existingCornerGrid[cp.y * gw + cp.x] = 1;
-                }
-            }
-        }
-
-        // ── 检查起点自身 ──
+        // ── 边界检查 ──
         if (startPos.x < 0 || startPos.x >= gw || startPos.y < 0 || startPos.y >= gh) {
-            set({ activeStartPos: startPos, activeTailFacing: tailFacing, previewPath: [startPos, mouseGridPos], previewHeadFacing: tailFacing, isValidPath: false, previewTargetIsMachine: false });
+            set({
+                activeStartPos: startPos, activeTailFacing: tailFacing,
+                previewPath: [startPos, mouseGridPos], previewHeadFacing: tailFacing,
+                isValidPath: false, previewTargetIsMachine: false,
+            });
             return;
         }
 
-        // ── 第2步：判断鼠标下方是什么 ──
+        // ── 查找目标机器 → 委托纯函数计算路径 ──
         const targetMachine = findMachineAt(mouseGridPos, machines);
-        const targetPortType = portType;
 
         if (targetMachine) {
-            // 鼠标在机器上 → 找匹配输入端口
-            const inputCells = getInputPortOuterCells(targetMachine, targetPortType);
-
-            let bestInput: { pos: Point; side: 'top' | 'right' | 'bottom' | 'left'; path: Point[] } | null = null;
-            let bestInputDist = Infinity;
-
-            for (const ic of inputCells) {
-                // 确定 firstAxis（auto 模式与 same-dir 一样先试同向）
-                const firstAxis = lShapeMode === 'perpendicular'
-                    ? perpendicularDir(tailFacing, startPos, ic.pos)
-                    : tailFacing;
-
-                // 检查起点已在同类型连线上的情况（拐弯检测）
-                if (startPos.x === ic.pos.x && startPos.y === ic.pos.y) {
-                    // 起终点相同：检查该格是否被阻
-                    if ((mergedGrid[startPos.y * gw + startPos.x] & connMask) === 0) {
-                        const entryDir = ((sideToDir[ic.side] + 2) % 4) as Direction;
-                        if (!isContinuing && sameConnGrid[startPos.y * gw + startPos.x] && tailFacing !== entryDir) {
-                            continue; // 非续接时拐弯在同类型线上 → 不放桥（续接首格豁免）
-                        }
-                        // 桥掩码冲突检查
-                        if (sameConnGrid[startPos.y * gw + startPos.x]) {
-                            const cellMask = mergedGrid[startPos.y * gw + startPos.x] | connMask;
-                            if ((bridgeMask & cellMask) !== connMask) continue;
-                            if (existingCornerGrid[startPos.y * gw + startPos.x]) continue;
-                        }
-                        bestInput = { pos: ic.pos, side: ic.side, path: [startPos] };
-                        bestInputDist = 0;
-                        break;
-                    }
-                    continue;
-                }
-
-                // 检查起点是否被阻挡
-                if ((mergedGrid[startPos.y * gw + startPos.x] & connMask) !== 0) continue;
-
-                let path = trySingleLRoute(startPos, ic.pos, firstAxis, mergedGrid, gw, gh, connMask);
-                if (!path && lShapeMode === 'auto') {
-                    path = trySingleLRoute(startPos, ic.pos, perpendicularDir(tailFacing, startPos, ic.pos), mergedGrid, gw, gh, connMask);
-                }
-                if (!path) continue;
-
-                // 完整路径 = [startPos, ...path]
-                const fullPath = [startPos, ...path];
-
-                // 检查新路径拐弯点是否在同类型连线上（自动续接时豁免起点格）
-                const entryDir = ((sideToDir[ic.side] + 2) % 4) as Direction;
-                let cornerOnSame = false;
-                for (const cp of getCornerPoints(fullPath, tailFacing, entryDir)) {
-                    if (isContinuing && cp.x === startPos.x && cp.y === startPos.y) continue;
-                    if (cp.x >= 0 && cp.x < gw && cp.y >= 0 && cp.y < gh && sameConnGrid[cp.y * gw + cp.x]) {
-                        cornerOnSame = true;
-                        break;
-                    }
-                }
-                if (cornerOnSame) continue;
-
-                // 桥掩码冲突检查 (物理冲突 + 拐弯约束)
-                let bridgeConflict = false;
-                for (const p of fullPath) {
-                    if (isContinuing && p.x === startPos.x && p.y === startPos.y) continue;
-                    const idx = p.y * gw + p.x;
-                    if (!sameConnGrid[idx]) continue;  // 非交叉点，不放桥
-                    // 物理冲突: (bridgeMask & cellMask) 不能超出同类型连线层
-                    const cellMask = mergedGrid[idx] | connMask;
-                    if ((bridgeMask & cellMask) !== connMask) { bridgeConflict = true; break; }
-                    // 拐弯约束: 桥不能放在已有线的拐弯上
-                    if (existingCornerGrid[idx]) { bridgeConflict = true; break; }
-                }
-                if (bridgeConflict) continue;
-
-                const dist = Math.abs(ic.pos.x - mouseGridPos.x) + Math.abs(ic.pos.y - mouseGridPos.y);
-                if (dist < bestInputDist) {
-                    bestInputDist = dist;
-                    bestInput = { pos: ic.pos, side: ic.side, path: fullPath };
-                }
-            }
-
-            if (bestInput) {
-                const headFacing = ((sideToDir[bestInput.side] + 2) % 4) as Direction;
-                set({
-                    activeStartPos: startPos,
-                    activeTailFacing: tailFacing,
-                    previewPath: bestInput.path,
-                    previewHeadFacing: headFacing,
-                    isValidPath: true,
-                    previewTargetIsMachine: true,
-                });
-            } else {
-                // 无合法路径到机器输入端 → 忽略障碍计算 L 形路径用于视觉预览
-                const emptyGrid = new Uint8Array(gw * gh);
-                let bestVisual: { path: Point[]; headFacing: Direction; dist: number } | null = null;
-                for (const ic of inputCells) {
-                    if (startPos.x === ic.pos.x && startPos.y === ic.pos.y) {
-                        bestVisual = { path: [startPos], headFacing: ((sideToDir[ic.side] + 2) % 4) as Direction, dist: 0 };
-                        break;
-                    }
-                    const firstAxis = lShapeMode === 'perpendicular'
-                        ? perpendicularDir(tailFacing, startPos, ic.pos)
-                        : tailFacing;
-                    const p = trySingleLRoute(startPos, ic.pos, firstAxis, emptyGrid, gw, gh);
-                    if (p) {
-                        const d = Math.abs(ic.pos.x - mouseGridPos.x) + Math.abs(ic.pos.y - mouseGridPos.y);
-                        const hf = ((sideToDir[ic.side] + 2) % 4) as Direction;
-                        if (!bestVisual || d < bestVisual.dist) {
-                            bestVisual = { path: [startPos, ...p], headFacing: hf, dist: d };
-                        }
-                    }
-                }
-                set({
-                    activeStartPos: startPos,
-                    activeTailFacing: tailFacing,
-                    previewPath: bestVisual?.path ?? [startPos, mouseGridPos],
-                    previewHeadFacing: bestVisual?.headFacing ?? tailFacing,
-                    isValidPath: false,
-                    previewTargetIsMachine: false,
-                });
-            }
+            const result = findRouteForMachine(
+                startPos, tailFacing, targetMachine, portType, lShapeMode,
+                mergedGrid, sameConnGrid, existingCornerGrid, bridgeMask, connMask,
+                gw, gh, isContinuing, mouseGridPos
+            );
+            set({
+                activeStartPos: startPos, activeTailFacing: tailFacing,
+                previewPath: result.path, previewHeadFacing: result.headFacing,
+                isValidPath: result.isValid, previewTargetIsMachine: result.targetIsMachine,
+            });
         } else {
-            // ── 鼠标在地面 → 终点 = 鼠标位置 ──
-            const firstAxis = lShapeMode === 'perpendicular'
-                ? perpendicularDir(tailFacing, startPos, mouseGridPos)
-                : tailFacing;
-
-            // 检查起点自身 — 被阻挡时仍算 L 形视觉路径（避免跳到斜线）
-            if ((mergedGrid[startPos.y * gw + startPos.x] & connMask) !== 0) {
-                const emptyGrid = new Uint8Array(gw * gh);
-                const visualPath = trySingleLRoute(startPos, mouseGridPos, firstAxis, emptyGrid, gw, gh);
-                if (visualPath) {
-                    const visualFullPath = [startPos, ...visualPath];
-                    const visualHeadFacing = computeHeadFacing(visualFullPath, tailFacing);
-                    set({ activeStartPos: startPos, activeTailFacing: tailFacing, previewPath: visualFullPath, previewHeadFacing: visualHeadFacing, isValidPath: false, previewTargetIsMachine: false });
-                } else {
-                    set({ activeStartPos: startPos, activeTailFacing: tailFacing, previewPath: [startPos, mouseGridPos], previewHeadFacing: tailFacing, isValidPath: false, previewTargetIsMachine: false });
-                }
-                return;
-            }
-
-            let path = trySingleLRoute(startPos, mouseGridPos, firstAxis, mergedGrid, gw, gh, connMask);
-            if (!path && lShapeMode === 'auto') {
-                path = trySingleLRoute(startPos, mouseGridPos, perpendicularDir(tailFacing, startPos, mouseGridPos), mergedGrid, gw, gh, connMask);
-            }
-            if (path) {
-                const fullPath = [startPos, ...path];
-                const headFacing = computeHeadFacing(fullPath, tailFacing);
-                // 地面目标：检查新路径拐弯点（自动续接时豁免起点格）
-                let valid = true;
-                const corners = getCornerPoints(fullPath, tailFacing, headFacing);
-                for (const cp of corners) {
-                    if (isContinuing && cp.x === startPos.x && cp.y === startPos.y) continue;
-                    if (cp.x >= 0 && cp.x < gw && cp.y >= 0 && cp.y < gh && sameConnGrid[cp.y * gw + cp.x]) {
-                        valid = false;
-                        break;
-                    }
-                }
-                // 桥掩码冲突检查 (物理冲突 + 拐弯约束)
-                if (valid) {
-                    for (const p of fullPath) {
-                        if (isContinuing && p.x === startPos.x && p.y === startPos.y) continue;
-                        const idx = p.y * gw + p.x;
-                        if (!sameConnGrid[idx]) continue;
-                        const cellMask = mergedGrid[idx] | connMask;
-                        if ((bridgeMask & cellMask) !== connMask) { valid = false; break; }
-                        if (existingCornerGrid[idx]) { valid = false; break; }
-                    }
-                }
-                if (valid) {
-                    set({ activeStartPos: startPos, activeTailFacing: tailFacing, previewPath: fullPath, previewHeadFacing: headFacing, isValidPath: true, previewTargetIsMachine: false });
-                } else {
-                    // 路径被拐弯规则阻挡 → 仍显示 L 形路径，标红标记不合法
-                    set({ activeStartPos: startPos, activeTailFacing: tailFacing, previewPath: fullPath, previewHeadFacing: headFacing, isValidPath: false, previewTargetIsMachine: false });
-                }
-            } else {
-                // 真实路径被阻挡 → 忽略障碍计算 L 形路径用于视觉预览（避免突变到直线）
-                const emptyGrid = new Uint8Array(gw * gh);
-                const visualPath = trySingleLRoute(startPos, mouseGridPos, firstAxis, emptyGrid, gw, gh);
-                if (visualPath) {
-                    const visualFullPath = [startPos, ...visualPath];
-                    const visualHeadFacing = computeHeadFacing(visualFullPath, tailFacing);
-                    set({ activeStartPos: startPos, activeTailFacing: tailFacing, previewPath: visualFullPath, previewHeadFacing: visualHeadFacing, isValidPath: false, previewTargetIsMachine: false });
-                } else {
-                    set({ activeStartPos: startPos, activeTailFacing: tailFacing, previewPath: [startPos, mouseGridPos], previewHeadFacing: tailFacing, isValidPath: false, previewTargetIsMachine: false });
-                }
-            }
+            const result = findRouteToGround(
+                startPos, tailFacing, mouseGridPos, lShapeMode,
+                mergedGrid, sameConnGrid, existingCornerGrid, bridgeMask, connMask,
+                gw, gh, isContinuing
+            );
+            set({
+                activeStartPos: startPos, activeTailFacing: tailFacing,
+                previewPath: result.path, previewHeadFacing: result.headFacing,
+                isValidPath: result.isValid, previewTargetIsMachine: false,
+            });
         }
     },
 

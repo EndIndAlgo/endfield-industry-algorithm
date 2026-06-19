@@ -56,12 +56,13 @@ src/
 │   └── zIndex.ts                     # Z_INDEX: 3段式 z-index 常量表(常态100/批量700/Ghost1300) + connZ()/machineZ()辅助函数
 ├── utils/
 │   ├── grid/
-│   │   ├── index.ts                     # barrel 文件(15行)：重新导出 grid/ 下全部函数
+│   │   ├── index.ts                     # barrel 文件(20行)：重新导出 grid/ 下全部函数
 │   │   ├── collision.ts              # getBoundingBox, getMachineRect, isOverlapping, checkCollision, calculateContentDimensions
 │   │   ├── direction.ts              # getVectorFromSide, dirFromPoints, computeHeadFacing
-│   │   ├── occupancy.ts              # buildOccupancyGrid, buildConnectionGrid, buildMergedGrid(掩码合并网格)
+│   │   ├── occupancy.ts              # buildConnectionGrid, buildMergedGrid(掩码合并网格), buildExistingCornerGrid
 │   │   ├── pathfinding.ts            # routeManhattan(双L形), trySingleLRoute
-│   │   └── port.ts                   # getCornerPoints, getMachinePortCheckPositions, splitConnectionAt, getPortOuterCells, findPortOuterCellAt, findMachineAt
+│   │   ├── port.ts                   # getCornerPoints, getMachinePortCheckPositions, splitConnectionAt, getPortOuterCells, getInputPortOuterCells, findPortOuterCellAt, findMachineAt, pickClosestPort
+│   │   └── routeValidation.ts        # validateRouteConflicts, findRouteForMachine, findRouteToGround — updatePreview 拆分出的纯函数
 │   ├── machineUtils.ts               # getRotatedDimensions, getRotatedPorts, buildPowerGrid, getMachineMask(物流掩码查表)
 │   ├── portPosition.ts               # getPortStyle(机器端口定位), getGhostArrowPosition, pathToPoints/extendPoint(SVG渲染工具)
 │   ├── shareUtils.ts                 # toBase64Url/fromBase64Url, encode/decode (V3二进制: 3字节ID+3字节位置), generateShareUrl, parseShareUrl, captureBlueprintScreenshot(html2canvas)
@@ -399,8 +400,8 @@ Bit : 7──2   2         1         0
 **✅ 2. `useGridEvents`（248 行）承载过多职责 — 已完成 (2026-06-19)**
 拆为 `usePanZoom` / `useWireMode` / `useSelectionMode` / `useKeyboardShortcuts` 四个子 hook + 调度层，`Grid.tsx` 零改动。
 
-**3. `connectionSlice.updatePreview()`（206 行）难以独立测试**
-代码库中最大的单函数，混合网格构建、寻路、输入吸附、L 形切换、垂直方向选择、视觉 fallback 路径。寻路逻辑无法不走完整连线流程单独测试。涉及文件：`connectionSlice.ts`。估计工作量：2h。
+**3. `connectionSlice.updatePreview()`（206 行）难以独立测试 — ✅ 已完成 (2026-06-19)**
+已拆分为 5 个纯函数：`pickClosestPort`(port.ts)、`buildExistingCornerGrid`(occupancy.ts)、`validateRouteConflicts`/`findRouteForMachine`/`findRouteToGround`(新建 routeValidation.ts)，updatePreview 瘦身为 50 行编排函数。
 
 ### 🟡 中优先级（质量 / 开发者体验）
 
@@ -447,7 +448,7 @@ Phase 2 ─ 可开始
   #9   eslint-disable 清理          10min    selectionSlice.ts ✅ 已完成 (2026-06-19)
 
 Phase 3 ─ 依赖 Phase 2
-  #3   updatePreview 拆分             2h     connectionSlice.ts — 最大单函数重构
+  #3   updatePreview 拆分             2h     connectionSlice.ts — 最大单函数重构 ✅ 已完成 (2026-06-19)
 
 Phase 4 ─ 依赖 Phase 3（同文件，等模块边界划清再加缓存）
   #8   占用网格缓存                   1h     connectionSlice.ts 内部优化
@@ -467,7 +468,7 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 | 6 | 桶文件归位 | utils/grid/ | 5min | ✅ 已完成 |
 | 7 | 路由懒加载 | App.tsx | 15min | ✅ 已完成 |
 | 9 | eslint-disable 清理 | selectionSlice.ts | 10min | ✅ 已完成 |
-| 3 | updatePreview 拆分 | connectionSlice | 2h | 🔴 待办 |
+| 3 | updatePreview 拆分 | connectionSlice | 2h | ✅ 已完成 |
 | 8 | 占用网格缓存 | connectionSlice | 1h | 🟢 待办 |
 | 10 | 寻路边界测试 | __tests__/ | 1h | 🟢 待办 |
 

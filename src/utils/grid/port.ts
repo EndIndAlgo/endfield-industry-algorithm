@@ -133,6 +133,20 @@ export const findPortOuterCellAt = (
   return null;
 };
 
+/** 从可用端口列表中选出离目标曼哈顿距离最近的一个 */
+export const pickClosestPort = (
+  availablePorts: { pos: Point; facing: Direction }[],
+  target: Point
+): { pos: Point; facing: Direction } => {
+  let best = availablePorts[0];
+  let bestDist = Math.abs(best.pos.x - target.x) + Math.abs(best.pos.y - target.y);
+  for (let i = 1; i < availablePorts.length; i++) {
+    const d = Math.abs(availablePorts[i].pos.x - target.x) + Math.abs(availablePorts[i].pos.y - target.y);
+    if (d < bestDist) { bestDist = d; best = availablePorts[i]; }
+  }
+  return best;
+};
+
 /** 查找占据指定网格位置的机器 */
 export const findMachineAt = (
   pos: Point,
