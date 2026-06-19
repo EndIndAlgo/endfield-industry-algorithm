@@ -495,3 +495,4 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 - **撤销支持**：store 中 mutation 前调 `get().takeSnapshot()`
 - **非组件取 store**：`useGameStore.getState()` 用于事件回调、非组件函数等 React 上下文之外的场景
 - **import 顺序**：React → 第三方库 → 项目内部（`@/` 别名）
+- **Commit 粒度**：一个 commit = 一个可独立理解的变化，git log --oneline 能一眼看懂，git show 能 30 秒审完。多文件同一概念可合为一个，无关改动拆开。不用 "WIP" 类中间态 commit，push 前 rebase squash。
