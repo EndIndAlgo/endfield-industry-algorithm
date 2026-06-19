@@ -1,10 +1,4 @@
-import type { Point, PlacedMachine, Connection, Direction, PortType } from '../../types';
-import { sideToDir, portTypeToMask } from '../../types';
-import { MACHINES } from '../../config/machines';
-import { getRotatedDimensions } from '../machineUtils';
-import { getVectorFromSide } from './direction';
-import { getCornerPoints } from './port';
-import { buildMergedGrid, buildConnectionGrid } from './occupancy';
+import type { Point, Direction } from '../../types';
 
 /** 8 分区曼哈顿路由: L 形直角折线，遇障碍自动换另一条路 */
 export const routeManhattan = (
@@ -47,91 +41,6 @@ export const routeManhattan = (
   const horizontalDominant = Math.abs(dx) >= Math.abs(dy);
 
   return tryRoute(horizontalDominant) ?? tryRoute(!horizontalDominant) ?? null;
-};
-
-/** 寻找从 start 到 end 的布线路径 (8 分区 L 形路由, 含机器+连线碰撞检测) */
-export const findPath = (
-  start: Point,
-  end: Point,
-  machines: PlacedMachine[],
-  entryDir?: Direction,
-  endSide?: 'top' | 'right' | 'bottom' | 'left',
-  gridW?: number,
-  gridH?: number,
-  connections?: Connection[],
-  portType?: PortType
-): Point[] | null => {
-  // 端口向外偏移 (endSide)
-  const realStart = { ...start };
-  let realEnd = { ...end };
-  if (endSide) {
-    const v = getVectorFromSide(endSide);
-    realEnd = { x: end.x + v.x, y: end.y + v.y };
-  }
-
-  // 计算网格范围
-  const conns = connections ?? [];
-  const gw = gridW ?? Math.max(
-    ...machines.map(m => {
-      const cfg = MACHINES.find(c => c.id === m.machineId);
-      if (!cfg) return 0;
-      const { width } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
-      return m.x + width;
-    }),
-    realStart.x + 2,
-    realEnd.x + 2,
-    50
-  ) + 10;
-  const gh = gridH ?? Math.max(
-    ...machines.map(m => {
-      const cfg = MACHINES.find(c => c.id === m.machineId);
-      if (!cfg) return 0;
-      const { height } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
-      return m.y + height;
-    }),
-    realStart.y + 2,
-    realEnd.y + 2,
-    50
-  ) + 10;
-
-  // 机器 + 连线占用矩阵 (掩码系统)
-  const mergedGrid = portType
-    ? buildMergedGrid(machines, conns, gw, gh, portType)
-    : buildMergedGrid(machines, conns, gw, gh, 'Solid'); // 无 portType 时默认 Solid
-  const connMask = portType ? portTypeToMask[portType] : portTypeToMask['Solid'];
-
-  // 同类型连线网格 (仅拐弯检查用)
-  const sameConnGrid = portType
-    ? buildConnectionGrid(conns, gw, gh, portType)
-    : buildConnectionGrid(conns, gw, gh);
-
-  // 一段路径: routeManhattan 不走任何格, 独立检查落点
-  if (realStart.x === realEnd.x && realStart.y === realEnd.y) {
-    if ((mergedGrid[realStart.y * gw + realStart.x] & connMask) !== 0) return null;
-    if (portType && sameConnGrid[realStart.y * gw + realStart.x]) {
-      const exitDir: Direction | undefined = endSide ? ((sideToDir[endSide] + 2) % 4) as Direction : undefined;
-      if (entryDir !== undefined && exitDir !== undefined && entryDir !== exitDir) return null;
-    }
-    return [realStart];
-  }
-
-  // routeManhattan 不检查起点, 独立检查 realStart
-  if ((mergedGrid[realStart.y * gw + realStart.x] & connMask) !== 0) return null;
-
-  const corePath = routeManhattan(realStart, realEnd, mergedGrid, gw, connMask);
-  if (!corePath) return null;
-
-  const fullPath = [realStart, ...corePath];
-
-  // 新路径自身的拐弯格不得落在同类型连线上
-  if (portType) {
-    const exitDir: Direction | undefined = endSide ? ((sideToDir[endSide] + 2) % 4) as Direction : undefined;
-    for (const cp of getCornerPoints(fullPath, entryDir, exitDir)) {
-      if (cp.x >= 0 && cp.x < gw && cp.y >= 0 && cp.y < gh && sameConnGrid[cp.y * gw + cp.x]) return null;
-    }
-  }
-
-  return [realStart, ...corePath];
 };
 
 /** 尝试单 L 形路径：从 start 沿 firstAxis 走第一段，再垂直走到 end */

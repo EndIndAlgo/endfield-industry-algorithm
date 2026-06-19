@@ -60,7 +60,7 @@ src/
 │   │   ├── collision.ts              # getBoundingBox, getMachineRect, isOverlapping, checkCollision, calculateContentDimensions
 │   │   ├── direction.ts              # getVectorFromSide, dirFromPoints, computeHeadFacing
 │   │   ├── occupancy.ts              # buildOccupancyGrid, buildConnectionGrid, buildMergedGrid(掩码合并网格)
-│   │   ├── pathfinding.ts            # routeManhattan(双L形), findPath, trySingleLRoute
+│   │   ├── pathfinding.ts            # routeManhattan(双L形), trySingleLRoute
 │   │   └── port.ts                   # getCornerPoints, getMachinePortCheckPositions, splitConnectionAt, getPortOuterCells, findPortOuterCellAt, findMachineAt
 │   ├── machineUtils.ts               # getRotatedDimensions, getRotatedPorts, buildPowerGrid, getMachineMask(物流掩码查表)
 │   ├── portPosition.ts               # getPortStyle(机器端口定位), getGhostArrowPosition, pathToPoints/extendPoint(SVG渲染工具)
@@ -242,7 +242,7 @@ export const GameMode = {
 - 桥冲突判断：`(bridgeMask & cellMask) !== connMask`
 - 拐弯不进网格，作为独立约束在 `updatePreview`/`commitConnection` 中检查
 - `routeManhattan` 和 `trySingleLRoute` 直接接受掩码参数（默认 0xFF 保持向后兼容）
-- 性能：O(path length)，每次 `findPath` 需重建占用网格 O(n)
+- 性能：O(path length)，每次寻路需重建占用网格 O(n)
 
 ### 撤销/重做
 
@@ -407,8 +407,8 @@ Bit : 7──2   2         1         0
 **4. 缺少 Zustand devtools 中间件**
 没有 Redux DevTools 集成，调试状态转换依赖 `console.log`。在 `create()` 中包装 `devtools()` 即可获得时间旅行调试能力。涉及文件：`gameStore.ts`。估计工作量：5min。
 
-**5. `findPath()` 签名臃肿（8 参数，4 可选）**
-`findPath(start, end, machines, entryDir?, endSide?, gridW?, gridH?, connections?, portType?)` 已到重构为 `{ start, end, machines, ...opts }` 选项对象的时候。涉及文件：`pathfinding.ts`。估计工作量：30min。
+**5. ~~`findPath()` 签名臃肿~~ — 已删除（2026-06-19）**
+该函数为零调用者死代码，直接移除而非重构。
 
 **6. 桶文件位置不一致**
 `utils/gridUtils.ts` 位于 `utils/` 下却重新导出 `utils/grid/*`。应移为 `utils/grid/index.ts`。涉及文件：`gridUtils.ts` → `grid/index.ts`。估计工作量：5min。
@@ -425,7 +425,7 @@ BlueprintList、About、Settings 在 `App.tsx` 中同步导入，增加了主 bu
 `startBatchMove(_anchor)` 和 `startCopySelection(_anchor)` 用 `_` 前缀忽略未使用参数。可重构调用方避免此抑制注释。涉及文件：`selectionSlice.ts`。估计工作量：10min。
 
 **10. 寻路/占用网格边界情况缺少测试**
-`findPath` 的自动网格尺寸推导、网格越界处理、`updatePreview` 的 fallback 路径生成未被单独测试覆盖。涉及文件：`__tests__/pureFunctions.test.ts`。估计工作量：1h。
+`routeManhattan`/`trySingleLRoute` 的网格越界处理、`updatePreview` 的 fallback 路径生成未被单独测试覆盖。涉及文件：`__tests__/pureFunctions.test.ts`。估计工作量：1h。
 
 ### 🔵 搁置
 
@@ -435,20 +435,41 @@ BlueprintList、About、Settings 在 `App.tsx` 中同步导入，增加了主 bu
 - **`Gas` 端口类型** — 为游戏未来内容保留，暂不实现渲染路径。
 - **`UseSelectionModeDeps` 中 `hoverPosRef` 未使用** — `useSelectionMode` 接口声明了 `hoverPosRef` 但实现仅解构 `getGridPos`，为未来扩展预留，暂不清理。
 
-### 建议执行顺序
+### 建议执行顺序（按依赖关系，2026-06-19 更新）
 
-| # | 方向 | 影响范围 | 估计工作量 |
-|---|------|----------|-----------|
-| 1 | 占用网格去重 | connectionSlice + pathfinding + selectionSlice | ✅ 已完成 |
-| 4 | Zustand devtools | gameStore.ts | 5min |
-| 6 | 桶文件归位 | utils/grid/ | 5min |
-| 2 | useGridEvents 拆分 | hooks/ | ✅ 已完成 |
-| 3 | updatePreview 拆分 | connectionSlice | 2h |
-| 5 | findPath 参数对象化 | pathfinding.ts | 30min |
-| 7 | 路由懒加载 | App.tsx | 15min |
-| 8 | 占用网格缓存 | connectionSlice | 1h |
-| 9 | eslint-disable 清理 | selectionSlice.ts | 10min |
-| 10 | 寻路边界测试 | __tests__/ | 1h |
+```
+Phase 1 ─ 零依赖（可并行）
+  #4   Zustand devtools              5min    gameStore.ts，不导入 gridUtils，完全独立
+  #6   桶文件归位                     5min    gridUtils.ts → grid/index.ts，影响 10+ 导入
+
+Phase 2 ─ 依赖 Phase 1 的导入稳定
+  #7   路由懒加载                    15min    App.tsx 导入 gridUtils，等 #6 落定
+  #9   eslint-disable 清理          10min    selectionSlice.ts 导入 gridUtils，等 #6 落定
+
+Phase 3 ─ 依赖 Phase 2
+  #3   updatePreview 拆分             2h     connectionSlice.ts — 最大单函数重构
+
+Phase 4 ─ 依赖 Phase 3（同文件，等模块边界划清再加缓存）
+  #8   占用网格缓存                   1h     connectionSlice.ts 内部优化
+
+Phase 5 ─ 依赖 Phase 3+4 代码稳定
+  #10  寻路/占用网格边界测试          1h     routeManhattan + trySingleLRoute + occupancy
+```
+
+**关键路径**：`#6 → #3 → #8 → #10` = 3h05m。
+
+| # | 方向 | 影响范围 | 估计 | 状态 |
+|---|------|----------|------|------|
+| 1 | 占用网格去重 | connectionSlice + pathfinding + selectionSlice | — | ✅ 已完成 |
+| 2 | useGridEvents 拆分 | hooks/ | — | ✅ 已完成 |
+| 5 | findPath 死代码 | pathfinding.ts | — | ✅ 已删除 |
+| 4 | Zustand devtools | gameStore.ts | 5min | 🔵 待办 |
+| 6 | 桶文件归位 | utils/grid/ | 5min | 🔵 待办 |
+| 7 | 路由懒加载 | App.tsx | 15min | 🔵 待办 |
+| 9 | eslint-disable 清理 | selectionSlice.ts | 10min | 🔵 待办 |
+| 3 | updatePreview 拆分 | connectionSlice | 2h | 🔴 待办 |
+| 8 | 占用网格缓存 | connectionSlice | 1h | 🟢 待办 |
+| 10 | 寻路边界测试 | __tests__/ | 1h | 🟢 待办 |
 
 ## 部署
 

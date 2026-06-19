@@ -9,7 +9,7 @@ export { buildConnectionGrid, buildMergedGrid } from './grid/occupancy';
 export { getVectorFromSide, dirFromPoints, computeHeadFacing } from './grid/direction';
 
 // ── 寻路算法 ──
-export { routeManhattan, findPath, trySingleLRoute } from './grid/pathfinding';
+export { routeManhattan, trySingleLRoute } from './grid/pathfinding';
 
 // ── 端口 / 连线工具 ──
 export { getCornerPoints, getMachinePortCheckPositions, splitConnectionAt, getPortOuterCells, getInputPortOuterCells, findPortOuterCellAt, findMachineAt } from './grid/port';
