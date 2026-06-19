@@ -1,21 +1,11 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GameMode } from '../types';
 import type { Point } from '../types';
-import { findPortOuterCellAt, findMachineAt, getPortOuterCells } from '../utils/gridUtils';
-import { GRID_SIZE } from '../config/constants';
-
-/** 限制平移范围，防止无限滚入空白区域 */
-const clampPan = (pan: Point, gridW: number, gridH: number): Point => {
-  const maxX = gridW * GRID_SIZE * 2;
-  const maxY = gridH * GRID_SIZE * 2;
-  const minX = -gridW * GRID_SIZE;
-  const minY = -gridH * GRID_SIZE;
-  return {
-    x: Math.max(minX, Math.min(maxX, pan.x)),
-    y: Math.max(minY, Math.min(maxY, pan.y)),
-  };
-};
+import { usePanZoom } from './grid/usePanZoom';
+import { useWireMode } from './grid/useWireMode';
+import { useSelectionMode } from './grid/useSelectionMode';
+import { useKeyboardShortcuts } from './grid/useKeyboardShortcuts';
 
 interface UseGridEventsReturn {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -30,143 +20,86 @@ interface UseGridEventsReturn {
   handleWheel: (e: React.WheelEvent) => void;
 }
 
+/**
+ * 画布事件总管 hook（调度层）
+ * 组合 usePanZoom / useWireMode / useSelectionMode / useKeyboardShortcuts，
+ * 按当前 GameMode 将 DOM 事件分发给对应子 hook。
+ */
 export const useGridEvents = (): UseGridEventsReturn => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isPanning, setIsPanning] = useState(false);
-  const lastMousePos = useRef<Point>({ x: 0, y: 0 });
+  // ── 共享基础设施 ──
+  const { containerRef, isPanning, getGridPos, handleWheel, startPan, movePan, stopPan } =
+    usePanZoom();
+
+  // ── hover 状态（React state 驱动渲染，ref 供闭包读取最新值） ──
   const [hoverPos, setHoverPos] = useState<Point | null>(null);
   const hoverPosRef = useRef<Point | null>(null);
 
-  const getGridPos = useCallback((e: React.MouseEvent): Point => {
-    if (!containerRef.current) return { x: 0, y: 0 };
-    const rect = containerRef.current.getBoundingClientRect();
-    const s = useGameStore.getState();
-    const x = Math.floor(((e.clientX - rect.left) - s.pan.x) / (GRID_SIZE * s.zoom));
-    const y = Math.floor(((e.clientY - rect.top) - s.pan.y) / (GRID_SIZE * s.zoom));
-    return { x, y };
-  }, []);
+  // ── 子 hook ──
+  const wire = useWireMode({ getGridPos, hoverPosRef });
+  const select = useSelectionMode({ getGridPos, hoverPosRef });
+  useKeyboardShortcuts({ hoverPosRef });
+
+  // ═══════════════════════════════════════════════════════════
+  // 组合事件处理器
+  // ═══════════════════════════════════════════════════════════
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // 中键 → 平移
     if (e.button === 1) {
       e.preventDefault();
-      setIsPanning(true);
-      lastMousePos.current = { x: e.clientX, y: e.clientY };
+      startPan(e);
       return;
     }
+    // 左键 + 框选模式 → 开始框选
+    select.onMouseDown(e);
+  }, [startPan, select]);
 
-    const pos = getGridPos(e);
-    const s = useGameStore.getState();
-
-    if (s.mode === GameMode.DEVICE_SELECT && e.button === 0) {
-      s.setBoxSelection(pos, pos);
-    }
-  }, [getGridPos]);
-
-  const handleMouseUp = useCallback((_e: React.MouseEvent) => {
-    setIsPanning(false);
-    const s = useGameStore.getState();
-    if (s.mode === GameMode.DEVICE_SELECT && s.selectionStart) {
-      s.commitBoxSelection(_e.shiftKey);
-    }
-  }, []);
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!containerRef.current) return;
-    const s = useGameStore.getState();
-    const rect = containerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const worldX = (mouseX - s.pan.x) / s.zoom;
-    const worldY = (mouseY - s.pan.y) / s.zoom;
-
-    const delta = -Math.sign(e.deltaY) * 0.1;
-    const newZoom = Math.min(Math.max(s.zoom + delta, 0.18), 3.0);
-
-    const newPanX = mouseX - worldX * newZoom;
-    const newPanY = mouseY - worldY * newZoom;
-
-    s.setZoom(newZoom);
-    s.setPan(clampPan({ x: newPanX, y: newPanY }, s.gridWidth, s.gridHeight));
-  }, []);
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    stopPan();
+    select.onMouseUp(e);
+  }, [stopPan, select]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    // 平移中
     if (isPanning) {
-      const deltaX = e.clientX - lastMousePos.current.x;
-      const deltaY = e.clientY - lastMousePos.current.y;
-      const s = useGameStore.getState();
-      s.setPan(clampPan({
-        x: s.pan.x + deltaX,
-        y: s.pan.y + deltaY
-      }, s.gridWidth, s.gridHeight));
-      lastMousePos.current = { x: e.clientX, y: e.clientY };
+      movePan(e);
       return;
     }
-
+    // 常规：更新 hover + 子模式处理
     const pos = getGridPos(e);
     setHoverPos(pos);
     hoverPosRef.current = pos;
-
-    const s = useGameStore.getState();
-    if (s.isConnecting) {
-      s.updatePreview(pos);
-    }
-
-    if (s.mode === GameMode.DEVICE_SELECT && s.selectionStart && e.buttons === 1) {
-      s.setBoxSelection(s.selectionStart, pos);
-    }
-  }, [isPanning, getGridPos]);
+    wire.onMouseMove(pos);
+    select.onMouseMove(pos, e);
+  }, [isPanning, getGridPos, movePan, wire, select]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (isPanning) return;
 
-    const pos = getGridPos(e);
     const s = useGameStore.getState();
 
-    // ── 连线模式（传送带/管道） ──
+    // ── 连线模式 ──
     if (s.mode === GameMode.CONVEYOR || s.mode === GameMode.PIPE) {
-      if (s.isConnecting) {
-        if (s.isValidPath) {
-          s.takeSnapshot();
-          s.commitConnection();
-        }
-        return;
-      }
-
-      const portType = s.mode === GameMode.CONVEYOR ? 'Solid' : 'Liquid';
-
-      const machine = findMachineAt(pos, s.machines);
-      if (machine) {
-        const ports = getPortOuterCells(machine, portType);
-        if (ports.length > 0) {
-          s.startConnecting(ports, portType);
-          if (hoverPosRef.current) s.updatePreview(hoverPosRef.current);
-        }
-        return;
-      }
-
-      const outerResult = findPortOuterCellAt(pos, s.machines, portType);
-      if (outerResult) {
-        s.startConnecting([{ pos: outerResult.pos, facing: outerResult.facing }], portType);
-        if (hoverPosRef.current) s.updatePreview(hoverPosRef.current);
-        return;
-      }
-
+      wire.onClick(e);
       return;
     }
 
-    // ── 原有模式逻辑 ──
+    // ── 批量移动 / 蓝图放置 ──
+    if (s.mode === GameMode.MOVE_SELECTION || s.mode === GameMode.BLUEPRINT_PLACE) {
+      select.onClickCommit(e);
+      return;
+    }
+
+    // ── 建造模式 ──
     if (s.mode === GameMode.BUILD && s.selectedMachineId) {
+      const pos = getGridPos(e);
       s.takeSnapshot();
       s.addMachine(s.selectedMachineId, pos.x, pos.y, s.previewRotation);
       if (!e.ctrlKey) {
         s.selectMachine(null);
       }
-    } else if (s.mode === GameMode.MOVE_SELECTION || s.mode === GameMode.BLUEPRINT_PLACE) {
-      s.takeSnapshot();
-      s.commitBatchMove(pos);
     }
-  }, [isPanning, getGridPos]);
+  }, [isPanning, getGridPos, wire, select]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -175,63 +108,8 @@ export const useGridEvents = (): UseGridEventsReturn => {
 
   const handleMouseLeave = useCallback(() => {
     setHoverPos(null);
-    setIsPanning(false);
-  }, []);
-
-  // ── 快捷键 E / Q / R / X / F / F1 / M / Ctrl+C / Escape ──
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const s = useGameStore.getState();
-      const isPlacing = !!s.selectedMachineId;
-
-      if (e.key.toLowerCase() === 'e') {
-        if (isPlacing) return;
-        if (s.mode === GameMode.CONVEYOR) {
-          s.cancelConnection();
-        } else {
-          if (s.isConnecting) s.cancelConnection();
-          s.setMode(GameMode.CONVEYOR);
-        }
-      } else if (e.key.toLowerCase() === 'q') {
-        if (isPlacing) return;
-        if (s.mode === GameMode.PIPE) {
-          s.cancelConnection();
-        } else {
-          if (s.isConnecting) s.cancelConnection();
-          s.setMode(GameMode.PIPE);
-        }
-      } else if (e.key.toLowerCase() === 'r') {
-        if (s.isConnecting) {
-          s.toggleLShape();
-          if (hoverPosRef.current) s.updatePreview(hoverPosRef.current);
-        } else {
-          s.rotatePreview();
-        }
-      } else if (e.key.toLowerCase() === 'x') {
-        if (isPlacing) return;
-        s.setMode(s.mode === GameMode.DEVICE_SELECT ? GameMode.BUILD : GameMode.DEVICE_SELECT);
-      } else if (e.key.toLowerCase() === 'f') {
-        s.takeSnapshot();
-        s.deleteSelected();
-      } else if (e.key === 'F1') {
-        e.preventDefault();
-        s.setBlueprintListMode('insert');
-        s.setUiView('list');
-      } else if (e.key.toLowerCase() === 'm') {
-        if (hoverPosRef.current) {
-          s.startBatchMove(hoverPosRef.current);
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-        if (hoverPosRef.current) {
-          s.startCopySelection(hoverPosRef.current);
-        }
-      } else if (e.key === 'Escape') {
-        s.cancelOperation();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    stopPan();
+  }, [stopPan]);
 
   return {
     containerRef,

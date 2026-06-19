@@ -382,8 +382,8 @@ Bit : 7──2   2         1         0
 **✅ 1. 占用网格代码重复 ~~（3 处）~~ — 已完成 (2026-06-15)**
 掩码系统 + `buildMergedGrid()` 统一三处网格构建，同时修复异类型连线阻断/拐弯漏拦/桥放异类型线上等 Bug。
 
-**2. `useGridEvents`（248 行）承载过多职责**
-一个 hook 处理 6 种游戏模式的 mousedown/move/up/click/wheel/keydown。拆为 `useBuildMode`、`useWireMode`、`useSelectionMode` 等子 hook，由 `useGridEvents` 组合调度。涉及文件：`useGridEvents.ts`。估计工作量：2h。
+**✅ 2. `useGridEvents`（248 行）承载过多职责 — 已完成 (2026-06-19)**
+拆为 `usePanZoom` / `useWireMode` / `useSelectionMode` / `useKeyboardShortcuts` 四个子 hook + 调度层，`Grid.tsx` 零改动。
 
 **3. `connectionSlice.updatePreview()`（206 行）难以独立测试**
 代码库中最大的单函数，混合网格构建、寻路、输入吸附、L 形切换、垂直方向选择、视觉 fallback 路径。寻路逻辑无法不走完整连线流程单独测试。涉及文件：`connectionSlice.ts`。估计工作量：2h。
@@ -419,6 +419,7 @@ BlueprintList、About、Settings 在 `App.tsx` 中同步导入，增加了主 bu
 - **撤销历史不捕获视图状态** — 设计决策：撤销只还原数据，保留用户当前视口位置。
 - **历史快照不去重** — 设计决策：去重引入比较开销，50 步上限已足够防止内存问题。
 - **`Gas` 端口类型** — 为游戏未来内容保留，暂不实现渲染路径。
+- **`UseSelectionModeDeps` 中 `hoverPosRef` 未使用** — `useSelectionMode` 接口声明了 `hoverPosRef` 但实现仅解构 `getGridPos`，为未来扩展预留，暂不清理。
 
 ### 建议执行顺序
 
@@ -427,7 +428,7 @@ BlueprintList、About、Settings 在 `App.tsx` 中同步导入，增加了主 bu
 | 1 | 占用网格去重 | connectionSlice + pathfinding + selectionSlice | 1h |
 | 4 | Zustand devtools | gameStore.ts | 5min |
 | 6 | 桶文件归位 | utils/grid/ | 5min |
-| 2 | useGridEvents 拆分 | hooks/ | 2h |
+| 2 | useGridEvents 拆分 | hooks/ | ✅ 已完成 |
 | 3 | updatePreview 拆分 | connectionSlice | 2h |
 | 5 | findPath 参数对象化 | pathfinding.ts | 30min |
 | 7 | 路由懒加载 | App.tsx | 15min |
