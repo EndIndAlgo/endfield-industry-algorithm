@@ -487,11 +487,11 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 - `public/logo.svg` 156KB（从 git 历史恢复，LoadingScreen 使用）
 - 附带修复 `index.html`：`lang="en"` → `lang="zh"`、`type="image/svg+xml"` 指向 PNG 的 MIME 矛盾
 
-**#2 — NaikaiFont-Bold.woff2 17MB**
-`public/fonts/NaikaiFont-Bold.woff2` 完整 CJK 字体（~2万汉字+日韩字符），实际只用 200-500 个不同汉字。
-- 方案A（推荐）：`glyphhanger` 扫描 `src/` 提取用到的字符 → 子集化 woff2，预估 17MB→2-5MB
-- 方案B：如字体有版权顾虑，删 `@font-face` + `public/fonts/`，改用系统字体栈 `"Microsoft YaHei", "PingFang SC", "Noto Sans SC"`，17MB→0
-- 预估：30 分钟
+**✅ #2 — NaikaiFont-Bold.woff2 17MB — 已完成 (2026-06-19)**
+`public/fonts/NaikaiFont-Bold.woff2` 完整 CJK 字体，实际只用于 LoadingScreen 一句装饰文案（5 个汉字"终末地牛逼"）。
+- 采用方案B：移除 `@font-face` 声明，`.sub-text` 改用系统字体栈，woff2 文件保留备用
+- 改动：`src/index.css`（删 @font-face）、`src/components/LoadingScreen.scss`（改 font-family）
+- 效果：首次加载免去 17MB 字体下载，LoadingScreen 文字用系统中文字体渲染
 
 ### 🟡 中优先级（质量 / 开发者体验）
 
@@ -518,10 +518,8 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 **✅ #8 — `index.html` 缺 meta 标签 — 已完成 (2026-06-19)**
 已添加 `description`、`og:title/description/image/type`、`theme-color` meta 标签
 
-**#9 — `vite.config.ts` 无生产分包策略**
-所有依赖和业务代码打包为一个 JS bundle。业务代码一行改动就让用户重新下载整个 vendor。
-- 修法：`manualChunks` 分离 `vendor-react` / `vendor-chakra` / `vendor-state` / `vendor-icons`
-- 预估：10 分钟
+**❌ #9 — `vite.config.ts` 无生产分包策略 — 不采用**
+项目体积极小，完整重部署即可，分包增加复杂度无实际收益。
 
 ### 🔵 继续搁置
 
@@ -539,11 +537,7 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 第二波 质量收尾 ✅ 已完成
   #6  消除 2 处 eslint-disable        30min  ✅
 
-第三波 构建优化（40 分钟）
-  #9  vite 分包策略                   10min
-  #2  字体子集化                      30min
-
-第四波 锦上添花（20 分钟）
+第三波 锦上添花（20 分钟）
   #7  清理多余图标                    20min
 ```
 
@@ -552,12 +546,12 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 | # | 方向 | 影响范围 | 估计 | 状态 |
 |---|------|----------|------|------|
 | 1 | logo 压缩 + lang 修复 | index.html + Header + LoadingScreen | 15min | ✅ 已完成 |
-| 2 | 字体子集化 | public/fonts/ | 30min | 🔵 待开始 |
+| 2 | 字体子集化 | public/fonts/ | 30min | ✅ 已完成 |
 | 4 | 删幽灵 Inter | index.css | 30s | ✅ 已完成 |
 | 6 | eslint-disable 消除 | App.tsx + ShareModal.tsx | 30min | ✅ 已完成 |
 | 7 | 多余图标清理 | assets/items/ | 20min | 🔵 待开始 |
 | 8 | 补 meta 标签 | index.html | 5min | ✅ 已完成 |
-| 9 | vite 分包 | vite.config.ts | 10min | 🔵 待开始 |
+| 9 | vite 分包 | vite.config.ts | 10min | ❌ 不采用 |
 
 ## 部署
 

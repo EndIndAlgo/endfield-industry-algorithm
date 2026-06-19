@@ -1,11 +1,3 @@
-@font-face {
-  font-family: 'NaikaiFont-Bold';
-  src: url('/fonts/NaikaiFont-Bold.woff2') format('woff2');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   --grid-size: 40px; /* 由 main.tsx 在启动时从 constants.ts GRID_SIZE 同步 */
   --gray-light: #e5e1e1;
