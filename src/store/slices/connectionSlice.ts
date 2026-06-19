@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { ConnectionSlice, GameState } from './types';
-import type { Connection, Point, Direction, PlacedMachine } from '../../types';
+import type { Connection, Point, Direction, PlacedMachine, PortType } from '../../types';
 import { GameMode, portTypeToMask, MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS } from '../../types';
 import { getMachineMask, getMachineCellMask } from '../../utils/machineUtils';
 import { MACHINES } from '../../config/machines';
@@ -16,6 +16,21 @@ import {
     getCornerPoints,
 } from '../../utils/grid';
 import { getRotatedDimensions } from '../../utils/machineUtils';
+
+// ── 占用网格缓存 ──
+// 连线模式下每帧 updatePreview 重建三个网格，但 machines/connections 在帧之间不变。
+// 用引用相等检测（Zustand 每次 mutation 创建新数组引用），零成本命中。
+interface GridCache {
+    machines: PlacedMachine[];
+    connections: Connection[];
+    gw: number;
+    gh: number;
+    portType: PortType;
+    mergedGrid: Uint8Array;
+    sameConnGrid: Uint8Array;
+    existingCornerGrid: Uint8Array;
+}
+let _gridCache: GridCache | null = null;
 
 export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSlice> = (set, get) => ({
     connections: [],
@@ -60,14 +75,30 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         const startPos = bestPort.pos;
         const tailFacing = bestPort.facing;
 
-        // ── 构建占用网格 ──
+        // ── 构建占用网格（引用相等缓存：连线模式下 machines/connections 帧间不变）──
         const gw = gridWidth || 100;
         const gh = gridHeight || 100;
         const connMask = portTypeToMask[portType];
         const bridgeMask = portType === 'Solid' ? MASK_SOLID_LOGISTICS : MASK_LIQUID_LOGISTICS;
-        const mergedGrid = buildMergedGrid(machines, connections, gw, gh, portType);
-        const sameConnGrid = buildConnectionGrid(connections, gw, gh, portType);
-        const existingCornerGrid = buildExistingCornerGrid(connections, gw, gh, portType);
+
+        let mergedGrid: Uint8Array;
+        let sameConnGrid: Uint8Array;
+        let existingCornerGrid: Uint8Array;
+
+        if (_gridCache &&
+            _gridCache.machines === machines &&
+            _gridCache.connections === connections &&
+            _gridCache.gw === gw && _gridCache.gh === gh &&
+            _gridCache.portType === portType) {
+            mergedGrid = _gridCache.mergedGrid;
+            sameConnGrid = _gridCache.sameConnGrid;
+            existingCornerGrid = _gridCache.existingCornerGrid;
+        } else {
+            mergedGrid = buildMergedGrid(machines, connections, gw, gh, portType);
+            sameConnGrid = buildConnectionGrid(connections, gw, gh, portType);
+            existingCornerGrid = buildExistingCornerGrid(connections, gw, gh, portType);
+            _gridCache = { machines, connections, gw, gh, portType, mergedGrid, sameConnGrid, existingCornerGrid };
+        }
 
         // ── 边界检查 ──
         if (startPos.x < 0 || startPos.x >= gw || startPos.y < 0 || startPos.y >= gh) {
