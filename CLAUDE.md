@@ -71,7 +71,20 @@ src/
 │   └── cssCustomProps.ts             # machinePositionStyle: CSS自定义属性 --x/--y/--w/--h 的类型安全工厂函数
 ├── hooks/
 │   ├── useChineseConverter.ts        # 繁/简热切换：动态 import('opencc-js') + 遍历文本节点 + MutationObserver 监听增量变更 + cn→tw 回转换
-│   └── useGridEvents.ts              # 画布事件总管 hook(~248行)：鼠标/键盘/滚轮事件 + 6种模式调度 + E/Q/R/X/F/F1/M/Ctrl+C/Escape 快捷键
+│   ├── useGridEvents.ts              # 画布事件调度层(~126行)：组合 usePanZoom/useWireMode/useSelectionMode/useKeyboardShortcuts 四个子hook，按 GameMode 分发DOM事件
+│   └── grid/
+│       ├── usePanZoom.ts             # 平移/缩放/坐标转换：中键平移 + 滚轮缩放(锚定鼠标) + getGridPos 屏幕→网格坐标
+│       ├── useWireMode.ts            # CONVEYOR/PIPE 连线模式：单击开始/提交连线 + 鼠标移动实时预览
+│       ├── useSelectionMode.ts       # DEVICE_SELECT 框选 + MOVE_SELECTION/BLUEPRINT_PLACE 批量移动确认
+│       └── useKeyboardShortcuts.ts   # 全局快捷键：E/Q/R/X/F/F1/M/Ctrl+C/Escape 监听 window keydown
+├── __tests__/
+│   ├── setup.ts                       # jsdom mock (ResizeObserver + scrollTo)
+│   ├── testWrapper.tsx                # ChakraProvider 包裹器
+│   ├── pureFunctions.test.ts          # 纯函数测试：碰撞检测/寻路/掩码/端口
+│   ├── store.test.ts                  # Zustand store 切片测试：machines/connections/selection/history
+│   ├── useChineseConverter.test.tsx   # 繁简转换 hook 测试
+│   ├── Machine.test.tsx               # Machine 组件渲染测试
+│   └── Toolbar.test.tsx               # Toolbar 组件渲染测试
 ├── components/
 │   ├── Grid.tsx                      # 核心画布(~116行，纯渲染外壳)：委托useGridEvents处理输入，组合 ConnectionSVGLayer + Machine×N + GhostPreview + SelectionBox + BatchMovePreview
 │   ├── Grid.scss                     # 网格背景(background-image linear-gradient)、连线/管道双线样式(outline+fill)、预影动画(@keyframes dash)、选中高亮、框选样式
@@ -311,7 +324,7 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 
 **图标覆盖**：43 台机器中仅 24 台有 `.webp` 图标，无图标时 `<img onError>` 自动隐藏仅显示文字。
 
-## 已解决历史问题（Sprint 1–8，2026-06-10 ~ 2026-06-13）
+## 已解决历史问题（Sprint 1–9，2026-06-10 ~ 2026-06-13）
 
 20 个已知问题全部修复，关键里程碑：
 - **Sprint 1–2** (06-10)：性能止血 — 细粒度 selector + React.memo + useCallback + getBoundingBox 去重 + ErrorBoundary
@@ -319,6 +332,7 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 - **Sprint 4–5** (06-13)：类型安全 + 测试 — any 清零 / 繁→简收尾 / 5 文件 100+ 测试用例 / CI/CD
 - **Sprint 6** (06-13)：架构瘦身 — Grid.tsx 拆出 ConnectionSVGLayer + useGridEvents + GhostPreview + SelectionBox + BatchMovePreview；gridUtils 拆为 5 模块
 - **Sprint 7–8** (06-13)：技术债清尾 — ESLint 25→0 / framer-motion 移除 / `any` 清零
+- **Sprint 9** (06-13)：项目清理 — 垃圾文件 / 许可证修正 / 文档重写 / 数据结构化
 
 🔵 **仍搁置**：
 - `commitConnection` 重构 — 逻辑仍在快速变化
@@ -425,7 +439,7 @@ BlueprintList、About、Settings 在 `App.tsx` 中同步导入，增加了主 bu
 
 | # | 方向 | 影响范围 | 估计工作量 |
 |---|------|----------|-----------|
-| 1 | 占用网格去重 | connectionSlice + pathfinding + selectionSlice | 1h |
+| 1 | 占用网格去重 | connectionSlice + pathfinding + selectionSlice | ✅ 已完成 |
 | 4 | Zustand devtools | gameStore.ts | 5min |
 | 6 | 桶文件归位 | utils/grid/ | 5min |
 | 2 | useGridEvents 拆分 | hooks/ | ✅ 已完成 |
