@@ -10,7 +10,6 @@ import {
     buildMergedGrid,
     buildConnectionGrid,
     buildExistingCornerGrid,
-    pickClosestPort,
     findRouteForMachine,
     findRouteToGround,
     getCornerPoints,
@@ -71,12 +70,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             isContinuing } = get();
         if (availablePorts.length === 0) return;
 
-        // ── 选最近端口 ──
-        const bestPort = pickClosestPort(availablePorts, mouseGridPos);
-        const startPos = bestPort.pos;
-        const tailFacing = bestPort.facing;
-
-        // ── 构建占用网格（引用相等缓存：连线模式下 machines/connections 帧间不变）──
+        // ── 构建占用网格（提前构建，所有端口共用）──
         const gw = gridWidth || 100;
         const gh = gridHeight || 100;
         const connMask = portTypeToMask[portType];
@@ -101,52 +95,53 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             _gridCache = { machines, connections, gw, gh, portType, mergedGrid, sameConnGrid, existingCornerGrid };
         }
 
-        // ── 边界检查 ──
-        if (startPos.x < 0 || startPos.x >= gw || startPos.y < 0 || startPos.y >= gh) {
-            set({
-                activeStartPos: startPos, activeTailFacing: tailFacing,
-                previewPath: [startPos, mouseGridPos], previewHeadFacing: tailFacing,
-                isValidPath: false, previewTargetIsMachine: false,
-            });
-            return;
-        }
-
-        // ── 起点重叠检查：新路径开头不能落在已有同类型同向连线上（续接豁免）──
-        if (!checkStartOverlap(startPos, tailFacing, connections, portType, isContinuing)) {
-            set({
-                activeStartPos: startPos, activeTailFacing: tailFacing,
-                previewPath: [startPos, mouseGridPos], previewHeadFacing: tailFacing,
-                isValidPath: false, previewTargetIsMachine: false,
-            });
-            return;
-        }
-
-        // ── 查找目标机器 → 委托纯函数计算路径 ──
+        // ── 查找目标机器（提前计算，所有端口共用）──
         const targetMachine = findMachineAt(mouseGridPos, machines);
 
-        if (targetMachine) {
-            const result = findRouteForMachine(
-                startPos, tailFacing, targetMachine, portType, lShapeMode,
-                mergedGrid, sameConnGrid, existingCornerGrid, bridgeMask, connMask,
-                gw, gh, isContinuing, mouseGridPos
-            );
-            set({
-                activeStartPos: startPos, activeTailFacing: tailFacing,
-                previewPath: result.path, previewHeadFacing: result.headFacing,
-                isValidPath: result.isValid, previewTargetIsMachine: result.targetIsMachine,
-            });
-        } else {
-            const result = findRouteToGround(
-                startPos, tailFacing, mouseGridPos, lShapeMode,
-                mergedGrid, sameConnGrid, existingCornerGrid, bridgeMask, connMask,
-                gw, gh, isContinuing
-            );
-            set({
-                activeStartPos: startPos, activeTailFacing: tailFacing,
-                previewPath: result.path, previewHeadFacing: result.headFacing,
-                isValidPath: result.isValid, previewTargetIsMachine: false,
-            });
+        // ── 按距离排序，逐个尝试端口，选第一个能连通的 ──
+        const sortedPorts = [...availablePorts].sort((a, b) =>
+            (Math.abs(a.pos.x - mouseGridPos.x) + Math.abs(a.pos.y - mouseGridPos.y)) -
+            (Math.abs(b.pos.x - mouseGridPos.x) + Math.abs(b.pos.y - mouseGridPos.y))
+        );
+
+        let bestStartPos = sortedPorts[0].pos;
+        let bestTailFacing = sortedPorts[0].facing;
+        let bestResult: { path: Point[]; headFacing: Direction; isValid: boolean; targetIsMachine: boolean } | null = null;
+
+        for (const port of sortedPorts) {
+            const startPos = port.pos;
+            const tailFacing = port.facing;
+
+            // 边界检查
+            if (startPos.x < 0 || startPos.x >= gw || startPos.y < 0 || startPos.y >= gh) continue;
+            // 起点重叠检查（续接豁免）
+            if (!checkStartOverlap(startPos, tailFacing, connections, portType, isContinuing)) continue;
+
+            if (targetMachine) {
+                const result = findRouteForMachine(
+                    startPos, tailFacing, targetMachine, portType, lShapeMode,
+                    mergedGrid, sameConnGrid, existingCornerGrid, bridgeMask, connMask,
+                    gw, gh, isContinuing, mouseGridPos
+                );
+                if (result.isValid) { bestStartPos = startPos; bestTailFacing = tailFacing; bestResult = result; break; }
+                if (!bestResult) { bestStartPos = startPos; bestTailFacing = tailFacing; bestResult = result; }
+            } else {
+                const result = findRouteToGround(
+                    startPos, tailFacing, mouseGridPos, lShapeMode,
+                    mergedGrid, sameConnGrid, existingCornerGrid, bridgeMask, connMask,
+                    gw, gh, isContinuing
+                );
+                const wrapper = { ...result, targetIsMachine: false };
+                if (result.isValid) { bestStartPos = startPos; bestTailFacing = tailFacing; bestResult = wrapper; break; }
+                if (!bestResult) { bestStartPos = startPos; bestTailFacing = tailFacing; bestResult = wrapper; }
+            }
         }
+
+        set({
+            activeStartPos: bestStartPos, activeTailFacing: bestTailFacing,
+            previewPath: bestResult!.path, previewHeadFacing: bestResult!.headFacing,
+            isValidPath: bestResult!.isValid, previewTargetIsMachine: bestResult!.targetIsMachine,
+        });
     },
 
     toggleLShape: () => {
