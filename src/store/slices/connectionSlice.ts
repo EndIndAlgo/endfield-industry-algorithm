@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { ConnectionSlice, GameState } from './types';
 import type { Connection, Point, Direction, PlacedMachine, PortType } from '@/types';
-import { GameMode, portTypeToMask, MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS } from '@/types';
+import { portTypeToMask, MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS } from '@/types';
 import { getMachineMask, getMachineCellMask } from '@/utils/machineUtils';
 import { MACHINES } from '@/config/machines';
 import {
@@ -34,40 +34,35 @@ let _gridCache: GridCache | null = null;
 
 export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSlice> = (set, get) => ({
     connections: [],
-    isConnecting: false,
-    isValidPath: true,
-    availablePorts: [],
-    portType: 'Solid',
-    activeStartPos: { x: 0, y: 0 },
-    activeTailFacing: 1 as Direction,
-    previewPath: [],
-    previewHeadFacing: 1 as Direction,
-    lShapeMode: 'auto',
-    isContinuing: false,
-    continueSourceId: null,
-    previewTargetIsMachine: false,
 
     startConnecting: (ports, portType) => {
         const first = ports[0];
         set({
-            isConnecting: true,
-            isContinuing: false,
-            continueSourceId: null,
-            previewTargetIsMachine: false,
-            isValidPath: true,
-            availablePorts: ports,
-            portType,
-            lShapeMode: 'auto',
-            activeStartPos: first.pos,
-            activeTailFacing: first.facing,
-            previewPath: [first.pos],
-            previewHeadFacing: first.facing,
+            modeState: {
+                kind: 'WIRE',
+                portType: portType,
+                connecting: {
+                    availablePorts: ports,
+                    activeStartPos: first.pos,
+                    activeTailFacing: first.facing,
+                    previewPath: [first.pos],
+                    previewHeadFacing: first.facing,
+                    isValidPath: true,
+                    lShapeMode: 'auto',
+                    isContinuing: false,
+                    continueSourceId: null,
+                    previewTargetIsMachine: false,
+                },
+            },
         });
     },
 
     updatePreview: (mouseGridPos) => {
-        const { availablePorts, portType, lShapeMode, connections, machines, gridWidth, gridHeight,
-            isContinuing } = get();
+        const ms = get().modeState;
+        if (ms.kind !== 'WIRE' || !ms.connecting) return;
+
+        const { connections, machines, gridWidth, gridHeight } = get();
+        const { availablePorts, portType, lShapeMode, isContinuing } = { portType: ms.portType, ...ms.connecting };
         if (availablePorts.length === 0) return;
 
         // ── 构建占用网格（提前构建，所有端口共用）──
@@ -138,41 +133,63 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         }
 
         set({
-            activeStartPos: bestStartPos, activeTailFacing: bestTailFacing,
-            previewPath: bestResult!.path, previewHeadFacing: bestResult!.headFacing,
-            isValidPath: bestResult!.isValid, previewTargetIsMachine: bestResult!.targetIsMachine,
+            modeState: {
+                kind: 'WIRE',
+                portType: ms.portType,
+                connecting: {
+                    ...ms.connecting,
+                    activeStartPos: bestStartPos,
+                    activeTailFacing: bestTailFacing,
+                    previewPath: bestResult!.path,
+                    previewHeadFacing: bestResult!.headFacing,
+                    isValidPath: bestResult!.isValid,
+                    previewTargetIsMachine: bestResult!.targetIsMachine,
+                },
+            },
         });
     },
 
     toggleLShape: () => {
-        set(s => {
-            const NEXT: Record<string, typeof s.lShapeMode> = {
-                'auto': 'perpendicular',
-                'perpendicular': 'same-dir',
-                'same-dir': 'auto',
-            };
-            return { lShapeMode: NEXT[s.lShapeMode] };
+        const ms = get().modeState;
+        if (ms.kind !== 'WIRE' || !ms.connecting) return;
+
+        const NEXT: Record<string, typeof ms.connecting.lShapeMode> = {
+            'auto': 'perpendicular',
+            'perpendicular': 'same-dir',
+            'same-dir': 'auto',
+        };
+
+        set({
+            modeState: {
+                kind: 'WIRE',
+                portType: ms.portType,
+                connecting: { ...ms.connecting, lShapeMode: NEXT[ms.connecting.lShapeMode] },
+            },
         });
     },
 
     commitConnection: () => {
-        const { activeTailFacing, previewPath, previewHeadFacing, isValidPath, portType, connections, machines,
-            isContinuing, previewTargetIsMachine } = get();
+        const ms = get().modeState;
+        if (ms.kind !== 'WIRE' || !ms.connecting) return;
+
+        const { connections, machines } = get();
+        const { activeTailFacing, previewPath, previewHeadFacing, isValidPath, isContinuing, previewTargetIsMachine } = ms.connecting;
+        const wiringPortType = ms.portType;
+
         if (!isValidPath || previewPath.length === 0) {
-            get().cancelConnection();
+            set({ modeState: { kind: 'WIRE', portType: wiringPortType, connecting: null } });
             return;
         }
 
         // ── 起点重叠检查（续接豁免，作为防御性二次校验）──
-        if (!checkStartOverlap(previewPath[0], activeTailFacing, connections, portType, isContinuing)) {
-            get().cancelConnection();
+        if (!checkStartOverlap(previewPath[0], activeTailFacing, connections, wiringPortType, isContinuing)) {
+            set({ modeState: { kind: 'WIRE', portType: wiringPortType, connecting: null } });
             return;
         }
 
         const path = [...previewPath];
         const tailFacing = activeTailFacing;
         const headFacing = previewHeadFacing;
-        const wiringPortType = portType;
 
         // ── 交叉检测与桥生成 ──
         const pointToConns = new Map<string, Connection[]>();
@@ -206,10 +223,8 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             const key = `${p.x},${p.y}`;
             if (pointToConns.has(key)) {
                 const w = gw2 || 100;
-                if (existingCornerGrid2[p.y * w + p.x]) {
-                    // 交叉点在已有线拐弯处 → 不放桥，不拆分
-                    continue;
-                }
+                // 交叉点在已有线拐弯处 → 不放桥，不拆分
+                if (existingCornerGrid2[p.y * w + p.x]) continue;
                 intersectionPoints.push(p);
             }
         }
@@ -318,11 +333,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
                 if (ncStart.x === exEnd.x && ncStart.y === exEnd.y && nc.tailFacing === existing.headFacing) {
                     const mergedPath = [...existing.path, ...nc.path.slice(1)];
                     connsToAdd.splice(i, 1);
-                    connsToAdd.push({
-                        ...existing,
-                        path: mergedPath,
-                        headFacing: nc.headFacing,
-                    });
+                    connsToAdd.push({ ...existing, path: mergedPath, headFacing: nc.headFacing });
                     merged = true;
                     break;
                 }
@@ -332,11 +343,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
                 if (ncEnd.x === exStart.x && ncEnd.y === exStart.y && existing.tailFacing === nc.headFacing) {
                     const mergedPath = [...nc.path, ...existing.path.slice(1)];
                     connsToAdd.splice(i, 1);
-                    connsToAdd.push({
-                        ...existing,
-                        path: mergedPath,
-                        tailFacing: nc.tailFacing,
-                    });
+                    connsToAdd.push({ ...existing, path: mergedPath, tailFacing: nc.tailFacing });
                     merged = true;
                     break;
                 }
@@ -364,34 +371,32 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
                 ...connsToAdd,
                 ...finalConns,
             ],
-            isConnecting: !shouldNotContinue,
-            isValidPath: true,
-            availablePorts: shouldNotContinue ? [] : [{ pos: lastPos, facing: continueFacing }],
-            activeStartPos: lastPos,
-            activeTailFacing: continueFacing,
-            previewPath: shouldNotContinue ? [] : [lastPos],
-            previewHeadFacing: continueFacing,
-            isContinuing: !shouldNotContinue,
-            continueSourceId: null,
+            modeState: shouldNotContinue
+                ? { kind: 'WIRE', portType: wiringPortType, connecting: null }
+                : {
+                    kind: 'WIRE',
+                    portType: wiringPortType,
+                    connecting: {
+                        availablePorts: [{ pos: lastPos, facing: continueFacing }],
+                        activeStartPos: lastPos,
+                        activeTailFacing: continueFacing,
+                        previewPath: [lastPos],
+                        previewHeadFacing: continueFacing,
+                        isValidPath: true,
+                        lShapeMode: 'auto',
+                        isContinuing: true,
+                        continueSourceId: null,
+                        previewTargetIsMachine: false,
+                    },
+                },
         }));
     },
 
     cancelConnection: () => {
+        const ms = get().modeState;
+        const portType = ms.kind === 'WIRE' ? ms.portType : 'Solid';
         set({
-            isConnecting: false,
-            isValidPath: true,
-            availablePorts: [],
-            portType: 'Solid',
-            activeStartPos: { x: 0, y: 0 },
-            activeTailFacing: 1 as Direction,
-            previewPath: [],
-            previewHeadFacing: 1 as Direction,
-            lShapeMode: 'auto',
-            isContinuing: false,
-            continueSourceId: null,
-            previewTargetIsMachine: false,
+            modeState: { kind: 'WIRE', portType, connecting: null },
         });
-        // 回到 BUILD 模式
-        get().setMode(GameMode.BUILD);
     },
 });

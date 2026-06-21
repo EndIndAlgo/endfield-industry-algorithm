@@ -1,26 +1,28 @@
 import type { StateCreator } from 'zustand';
 import type { SelectionSlice, GameState } from './types';
 import type { PlacedMachine, Connection, Point } from '@/types';
-import { GameMode, portTypeToMask } from '@/types';
+import { portTypeToMask } from '@/types';
 import { MACHINES } from '@/config/machines';
 import { getMachinePortCheckPositions, getBoundingBox, getCornerPoints, splitConnectionAt } from '@/utils/grid';
 import { getRotatedDimensions, getMachineCellMask, getMachineMask } from '@/utils/machineUtils';
 
 export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlice> = (set, get) => ({
-    selectionStart: null,
-    selectionEnd: null,
-    selectedMachineIds: [],
-    selectedConnectionIds: [],
-    moveAnchor: null,
-    movingMachinesSnapshot: [],
-    movingConnectionsSnapshot: [],
-    isCopying: false,
 
-    setBoxSelection: (start, end) => set({ selectionStart: start, selectionEnd: end }),
+    setBoxSelection: (start, end) => {
+        const ms = get().modeState;
+        if (ms.kind !== 'DEVICE_SELECT') return;
+        set({
+            modeState: { ...ms, selectionStart: start, selectionEnd: end },
+        });
+    },
 
     commitBoxSelection: (isToggle = false) => {
-        const { selectionStart, selectionEnd, machines, connections, selectedMachineIds: prevMachineIds, selectedConnectionIds: prevConnectionIds } = get();
+        const ms = get().modeState;
+        if (ms.kind !== 'DEVICE_SELECT') return;
+        const { selectionStart, selectionEnd, selectedMachineIds: prevMachineIds, selectedConnectionIds: prevConnectionIds } = ms;
         if (!selectionStart || !selectionEnd) return;
+
+        const { machines, connections } = get();
 
         const x1 = Math.min(selectionStart.x, selectionEnd.x);
         const y1 = Math.min(selectionStart.y, selectionEnd.y);
@@ -58,18 +60,31 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         }
 
         set({
-            selectedMachineIds: finalMachineIds,
-            selectedConnectionIds: finalConnectionIds,
-            selectionStart: null,
-            selectionEnd: null
+            modeState: {
+                kind: 'DEVICE_SELECT',
+                selectionStart: null,
+                selectionEnd: null,
+                selectedMachineIds: finalMachineIds,
+                selectedConnectionIds: finalConnectionIds,
+            },
         });
     },
 
-    clearSelection: () => set({ selectedMachineIds: [], selectedConnectionIds: [] }),
+    clearSelection: () => {
+        const ms = get().modeState;
+        if (ms.kind !== 'DEVICE_SELECT') return;
+        set({
+            modeState: { ...ms, selectedMachineIds: [], selectedConnectionIds: [] },
+        });
+    },
 
     deleteSelected: () => {
-        const { machines, connections, selectedMachineIds, selectedConnectionIds } = get();
+        const ms = get().modeState;
+        if (ms.kind !== 'DEVICE_SELECT') return;
+        const { selectedMachineIds, selectedConnectionIds } = ms;
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;
+
+        const { machines, connections } = get();
 
         const machinesToRemove = new Set(selectedMachineIds);
         const connectionsToRemove = new Set(selectedConnectionIds);
@@ -98,14 +113,23 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         set({
             machines: newMachines,
             connections: newConnections,
-            selectedMachineIds: [],
-            selectedConnectionIds: []
+            modeState: {
+                kind: 'DEVICE_SELECT',
+                selectionStart: null,
+                selectionEnd: null,
+                selectedMachineIds: [],
+                selectedConnectionIds: [],
+            },
         });
     },
 
     startBatchMove: () => {
-        const { machines, connections, selectedMachineIds, selectedConnectionIds } = get();
+        const ms = get().modeState;
+        if (ms.kind !== 'DEVICE_SELECT') return;
+        const { selectedMachineIds, selectedConnectionIds } = ms;
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;
+
+        const { machines, connections } = get();
 
         const movingMachines = machines.filter(m => selectedMachineIds.includes(m.id));
         const movingConnections = connections.filter(c => selectedConnectionIds.includes(c.id));
@@ -118,21 +142,27 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         const remainingConnections = connections.filter(c => !selectedConnectionIds.includes(c.id));
 
         set({
-            mode: GameMode.MOVE_SELECTION,
-            moveAnchor: { x: anchor.minX, y: anchor.minY },
-            movingMachinesSnapshot: movingMachines,
-            movingConnectionsSnapshot: movingConnections,
+            modeState: {
+                kind: 'MOVE_SELECTION',
+                moveAnchor: { x: anchor.minX, y: anchor.minY },
+                movingMachinesSnapshot: movingMachines,
+                movingConnectionsSnapshot: movingConnections,
+                isCopying: false,
+                originSelectedMachineIds: selectedMachineIds,
+                originSelectedConnectionIds: selectedConnectionIds,
+            },
             machines: remainingMachines,
             connections: remainingConnections,
-            selectedMachineIds: [],
-            selectedConnectionIds: [],
-            isCopying: false
         });
     },
 
     startCopySelection: () => {
-        const { machines, connections, selectedMachineIds, selectedConnectionIds } = get();
+        const ms = get().modeState;
+        if (ms.kind !== 'DEVICE_SELECT') return;
+        const { selectedMachineIds, selectedConnectionIds } = ms;
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;
+
+        const { machines, connections } = get();
 
         const sourceMachines = machines.filter(m => selectedMachineIds.includes(m.id));
         const sourceConnections = connections.filter(c => selectedConnectionIds.includes(c.id));
@@ -156,19 +186,25 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         }));
 
         set({
-            mode: GameMode.MOVE_SELECTION,
-            moveAnchor: { x: anchor.minX, y: anchor.minY },
-            movingMachinesSnapshot: newMachines,
-            movingConnectionsSnapshot: newConnections,
-            selectedMachineIds: [],
-            selectedConnectionIds: [],
-            isCopying: true
+            modeState: {
+                kind: 'MOVE_SELECTION',
+                moveAnchor: { x: anchor.minX, y: anchor.minY },
+                movingMachinesSnapshot: newMachines,
+                movingConnectionsSnapshot: newConnections,
+                isCopying: true,
+                originSelectedMachineIds: selectedMachineIds,
+                originSelectedConnectionIds: selectedConnectionIds,
+            },
         });
     },
 
     commitBatchMove: (targetPos) => {
-        const { moveAnchor, movingMachinesSnapshot, movingConnectionsSnapshot, machines, gridWidth, gridHeight, connections } = get();
+        const ms = get().modeState;
+        if (ms.kind !== 'MOVE_SELECTION') return;
+        const { moveAnchor, movingMachinesSnapshot, movingConnectionsSnapshot } = ms;
         if (!moveAnchor) return;
+
+        const { machines, gridWidth, gridHeight, connections } = get();
 
         const offsetX = targetPos.x - moveAnchor.x;
         const offsetY = targetPos.y - moveAnchor.y;
@@ -184,7 +220,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         // ── 构建剩余实体的掩码网格 ──
         const baseGrid = new Uint8Array(gridWidth * gridHeight);
 
-        // 剩余机器掩码
         for (const m of machines) {
             const cfg = MACHINES.find(c => c.id === m.machineId);
             if (!cfg) continue;
@@ -199,7 +234,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
             }
         }
 
-        // 剩余连线掩码 (所有类型)
         for (const c of connections) {
             const cm = portTypeToMask[c.portType];
             for (const p of c.path) {
@@ -215,13 +249,11 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
             if (!cfg) continue;
             const { width: mw, height: mh } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
 
-            // 越界
             if (m.x < 0 || m.y < 0 || m.x + mw > gridWidth || m.y + mh > gridHeight) {
                 collision = true;
                 break;
             }
 
-            // 掩码逐格 AND
             let maskHit = false;
             for (let cy = m.y; cy < m.y + mh && !maskHit; cy++) {
                 const row = cy * gridWidth;
@@ -233,7 +265,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
             }
             if (maskHit) { collision = true; break; }
 
-            // 无冲突 → 累积掩码（后续机器可见）
             for (let cy = m.y; cy < m.y + mh; cy++) {
                 const row = cy * gridWidth;
                 for (let cx = m.x; cx < m.x + mw; cx++) {
@@ -255,7 +286,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
             const connsToAdd: Connection[] = [];
             const splitPlaced = new Map<string, Connection[]>();
 
-            // 按 portType 分组 (Solid 先, Liquid 后, bridgeMask 自然排斥同格)
             const portTypes = [...new Set(placedConns.map(c => c.portType))];
 
             for (const pt of portTypes) {
@@ -263,7 +293,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                 const bridgeMask = getMachineMask(bridgeId);
                 const connMask = portTypeToMask[pt];
 
-                // pointToConns: 剩余同类型路径格 → 连线
                 const pointToConns = new Map<string, Connection[]>();
                 for (const c of connections) {
                     if (c.portType !== pt) continue;
@@ -275,7 +304,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                     }
                 }
 
-                // 剩余同类型连线 corner (桥不能放在已有线的拐弯上)
                 const cornerGrid = new Uint8Array(gridWidth * gridHeight);
                 for (const c of connections) {
                     if (c.portType !== pt) continue;
@@ -286,7 +314,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                     }
                 }
 
-                // fullMaskGrid: 全部机器 + 全部剩余连线 + 已生成的桥
                 const fullMaskGrid = new Uint8Array(gridWidth * gridHeight);
                 for (const m of allMachines) {
                     const c2 = MACHINES.find(c => c.id === m.machineId);
@@ -316,20 +343,16 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                     }
                 }
 
-                // 逐条处理此类型的移动连线
                 for (const conn of placedConns) {
                     if (conn.portType !== pt) continue;
 
-                    // 收集交叉点
                     const intersectionPoints: Point[] = [];
                     for (const p of conn.path) {
                         const key = `${p.x},${p.y}`;
                         if (!pointToConns.has(key)) continue;
 
-                        // 交叉点不能是剩余线拐弯（桥不能放拐弯上）
                         if (cornerGrid[p.y * gridWidth + p.x]) { collision = true; break; }
 
-                        // 桥掩码验证：bridgeMask 不能与 cellMask 的异类型位冲突
                         const cellMask = fullMaskGrid[p.y * gridWidth + p.x];
                         if ((bridgeMask & cellMask) !== connMask) { collision = true; break; }
 
@@ -337,7 +360,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                     }
                     if (collision) break;
 
-                    // 自身拐弯不能落在剩余同类型线上
                     for (const cp of getCornerPoints(conn.path, conn.tailFacing, conn.headFacing)) {
                         if (cp.x >= 0 && cp.x < gridWidth && cp.y >= 0 && cp.y < gridHeight) {
                             if (pointToConns.has(`${cp.x},${cp.y}`)) { collision = true; break; }
@@ -347,7 +369,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
 
                     if (intersectionPoints.length === 0) continue;
 
-                    // 创建桥
                     for (const p of intersectionPoints) {
                         bridgesToCreate.push({
                             id: crypto.randomUUID(),
@@ -358,7 +379,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                         fullMaskGrid[p.y * gridWidth + p.x] |= bridgeMask;
                     }
 
-                    // 拆分被穿越的剩余连线 + 递归拆碎片
                     for (const p of intersectionPoints) {
                         const key = `${p.x},${p.y}`;
                         const crossed = pointToConns.get(key) || [];
@@ -378,7 +398,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                         }
                     }
 
-                    // 碎片注册回 pointToConns（后续移动连线可见）
                     for (const part of connsToAdd) {
                         for (const pp of part.path) {
                             const pk = `${pp.x},${pp.y}`;
@@ -388,7 +407,6 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                         }
                     }
 
-                    // 拆分移动连线自身
                     let parts = [conn];
                     for (const p of intersectionPoints) {
                         parts = parts.flatMap(c => splitConnectionAt(c, p));
@@ -413,13 +431,13 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                     ...connsToAdd,
                     ...finalPlacedConns,
                 ],
-                movingMachinesSnapshot: [],
-                movingConnectionsSnapshot: [],
-                moveAnchor: null,
-                mode: GameMode.DEVICE_SELECT,
-                selectedMachineIds: placedMachines.map(m => m.id),
-                selectedConnectionIds: finalPlacedConns.map(c => c.id),
-                isCopying: false
+                modeState: {
+                    kind: 'DEVICE_SELECT',
+                    selectionStart: null,
+                    selectionEnd: null,
+                    selectedMachineIds: placedMachines.map(m => m.id),
+                    selectedConnectionIds: finalPlacedConns.map(c => c.id),
+                },
             });
 
             return;

@@ -1,10 +1,21 @@
 import { Icon } from '@iconify/react';
 import { useGameStore } from '@/store/gameStore';
-import { GameMode } from '@/types';
+import { selectIsBuildMode, selectIsWireMode, selectIsDeviceSelectMode, selectIsMoveSelectionMode,
+    selectSelectedMachineId, selectHasSelection, selectConnecting } from '@/store/selectors';
 import './OperationHints.scss';
 
 export const OperationHints = () => {
-    const { mode, selectedMachineId, selectedMachineIds, selectedConnectionIds, lShapeMode } = useGameStore();
+    // 窄 selector：仅在相关 sub-state 变更时重渲染
+    const isBuild = useGameStore(selectIsBuildMode);
+    const isWire = useGameStore(selectIsWireMode);
+    const isDeviceSelect = useGameStore(selectIsDeviceSelectMode);
+    const isMoveSelection = useGameStore(selectIsMoveSelectionMode);
+    const selectedMachineId = useGameStore(selectSelectedMachineId);
+    const hasSelection = useGameStore(selectHasSelection);
+    const connecting = useGameStore(selectConnecting);
+    const wirePortType = useGameStore(s => s.modeState.kind === 'WIRE' ? s.modeState.portType : null);
+
+    const lShapeMode = connecting?.lShapeMode ?? 'auto';
 
     const STRATEGY_LABELS: Record<string, string> = {
         'auto': '自动',
@@ -12,12 +23,13 @@ export const OperationHints = () => {
         'same-dir': '同向',
     };
 
-    const hasSelection = (selectedMachineIds && selectedMachineIds.length > 0) || (selectedConnectionIds && selectedConnectionIds.length > 0);
+    const isConveyor = isWire && wirePortType === 'Solid';
+    const isPipe = isWire && wirePortType === 'Liquid';
 
     return (
         <div className="operation-hints">
             {/* 预设模式：建造模式，无选取 (且非框选模式) */}
-            {mode === GameMode.BUILD && !selectedMachineId && !hasSelection && (
+            {isBuild && !selectedMachineId && !hasSelection && (
                 <>
                     <div className="hint-item">
                         <div className="key-icon">E</div>
@@ -38,8 +50,8 @@ export const OperationHints = () => {
                 </>
             )}
 
-            {/* 有选取项目 (在框选或建造模式，但主要是指有选取时) */}
-            {hasSelection && mode !== GameMode.MOVE_SELECTION && (
+            {/* 有选取项目 */}
+            {hasSelection && !isMoveSelection && (
                 <>
                     <div className="hint-item">
                         <div className="key-icon">M</div>
@@ -49,7 +61,7 @@ export const OperationHints = () => {
                         <div className="key-icon">F</div>
                         <span>批量删除</span>
                     </div>
-                    {mode === GameMode.DEVICE_SELECT && (
+                    {isDeviceSelect && (
                         <div className="hint-item">
                             <div className="key-icon">Shift</div>
                             <span>+</span>
@@ -106,7 +118,7 @@ export const OperationHints = () => {
             )}
 
             {/* 传送带模式 */}
-            {mode === GameMode.CONVEYOR && (
+            {isConveyor && (
                 <>
                     <div className="hint-item">
                         <div className="key-icon">
@@ -134,7 +146,7 @@ export const OperationHints = () => {
             )}
 
             {/* 管道模式 */}
-            {mode === GameMode.PIPE && (
+            {isPipe && (
                 <>
                     <div className="hint-item">
                         <div className="key-icon">
@@ -162,7 +174,7 @@ export const OperationHints = () => {
             )}
 
             {/* 框选模式 */}
-            {mode === GameMode.DEVICE_SELECT && (
+            {isDeviceSelect && (
                 <>
                     <div className="hint-item">
                         <div className="key-icon">
@@ -174,7 +186,7 @@ export const OperationHints = () => {
             )}
 
             {/* 批量移动模式 */}
-            {mode === GameMode.MOVE_SELECTION && (
+            {isMoveSelection && (
                 <>
                     <div className="hint-item">
                         <div className="key-icon">
@@ -190,26 +202,6 @@ export const OperationHints = () => {
                     </div>
                 </>
             )}
-
-            {/* 蓝图放置模式 */}
-            {mode === GameMode.BLUEPRINT_PLACE && (
-                <>
-                    <div className="hint-item">
-                        <div className="key-icon">
-                            <Icon icon="ph:mouse-right-click-fill" width="24" height="24" />
-                        </div>
-                        <span>取消放置</span>
-                    </div>
-                    <div className="hint-item">
-                        <div className="key-icon">
-                            <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
-                        </div>
-                        <span>确定放置</span>
-                    </div>
-                </>
-            )}
-
-            {/* 如果有选取项目 (假设游戏 store 已暴露相关状态) */}
 
             {/* 全域操作 */}
             <div className="hint-item">

@@ -1,5 +1,4 @@
-import type { Point, PlacedMachine, Connection, Direction, PortType } from '@/types';
-import type { GameMode } from '@/types';
+import type { Point, PlacedMachine, Connection, Direction, PortType, ModeState } from '@/types';
 
 export interface HistorySnapshot {
     machines: PlacedMachine[];
@@ -11,49 +10,30 @@ export interface CanvasSlice {
     pan: Point;
     gridWidth: number;
     gridHeight: number;
+    hoverPosFrac: Point | null;
     setZoom: (zoom: number) => void;
     setPan: (pan: Point) => void;
     setGridSize: (width: number, height: number) => void;
+    setHoverPosFrac: (pos: Point | null) => void;
+}
+
+export interface ModeSlice {
+    modeState: ModeState;
+    setMode: (kind: 'BUILD' | 'WIRE_SOLID' | 'WIRE_LIQUID' | 'DEVICE_SELECT') => void;
+    cancelOperation: () => void;
 }
 
 export interface MachinesSlice {
     machines: PlacedMachine[];
-    mode: GameMode;
-    selectedMachineId: string | null;
-    previewRotation: Direction;
-    movingMachineBackup: PlacedMachine | null;
-    buildOffset: Point | null;
-    hoverPosFrac: Point | null;
-    setHoverPosFrac: (pos: Point | null) => void;
-    setMode: (mode: GameMode) => void;
     selectMachine: (machineId: string | null) => void;
     rotatePreview: () => void;
     addMachine: (machineId: string, x: number, y: number, rotation: Direction) => void;
     removeMachine: (instanceId: string) => void;
     pickupMachine: (instanceId: string) => void;
-    cancelOperation: () => void;
 }
 
 export interface ConnectionSlice {
     connections: Connection[];
-    isConnecting: boolean;
-    isValidPath: boolean;
-    // 连线源：可用端口列表（点击机器=全部匹配输出端口，点击端口外侧=仅该端口，延续=单元素）
-    availablePorts: { pos: Point; facing: Direction }[];
-    portType: PortType;
-    // 当前帧计算结果
-    activeStartPos: Point;
-    activeTailFacing: Direction;
-    previewPath: Point[];
-    previewHeadFacing: Direction;
-    // L 形策略
-    lShapeMode: 'auto' | 'perpendicular' | 'same-dir';
-    // 续接标记（自动续接或其他触发方式）
-    isContinuing: boolean;
-    continueSourceId: string | null;
-    // 当前预览目标是否为机器（用于判断是否续接）
-    previewTargetIsMachine: boolean;
-    // Actions
     startConnecting: (ports: { pos: Point; facing: Direction }[], portType: PortType) => void;
     updatePreview: (mouseGridPos: Point) => void;
     toggleLShape: () => void;
@@ -62,14 +42,6 @@ export interface ConnectionSlice {
 }
 
 export interface SelectionSlice {
-    selectionStart: Point | null;
-    selectionEnd: Point | null;
-    selectedMachineIds: string[];
-    selectedConnectionIds: string[];
-    moveAnchor: Point | null;
-    movingMachinesSnapshot: PlacedMachine[];
-    movingConnectionsSnapshot: Connection[];
-    isCopying: boolean;
     setBoxSelection: (start: Point | null, end: Point | null) => void;
     commitBoxSelection: (isToggle?: boolean) => void;
     clearSelection: () => void;
@@ -100,4 +72,4 @@ export interface BlueprintSlice {
     startInsertBlueprintOnNewMap: (blueprint: { data: { machines: PlacedMachine[], connections: Connection[] } }) => void;
 }
 
-export interface GameState extends CanvasSlice, MachinesSlice, ConnectionSlice, SelectionSlice, HistorySlice, BlueprintSlice {}
+export interface GameState extends CanvasSlice, ModeSlice, MachinesSlice, ConnectionSlice, SelectionSlice, HistorySlice, BlueprintSlice {}

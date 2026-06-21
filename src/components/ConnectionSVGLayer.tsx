@@ -6,6 +6,7 @@ import { portTypeToMask } from '@/types';
 import { GRID_SIZE } from '@/config/constants';
 import { Z_INDEX, connZ } from '@/config/zIndex';
 import { pathToPoints } from '@/utils/portPosition';
+import { selectSelectedConnectionIds, selectIsConnecting, selectConnecting, selectWirePortType } from '@/store/selectors';
 
 interface ConnectionSVGLayerProps {
   /** 仅渲染该类型的连线，不传则渲染全部 */
@@ -17,13 +18,10 @@ export const ConnectionSVGLayer: React.FC<ConnectionSVGLayerProps> = memo(({ por
   const gridWidth = useGameStore(s => s.gridWidth);
   const gridHeight = useGameStore(s => s.gridHeight);
   const connections = useGameStore(s => s.connections);
-  const selectedConnectionIds = useGameStore(s => s.selectedConnectionIds);
-  const isConnecting = useGameStore(s => s.isConnecting);
-  const previewPath = useGameStore(s => s.previewPath);
-  const isValidPath = useGameStore(s => s.isValidPath);
-  const tailFacingForPreview = useGameStore(s => s.activeTailFacing);
-  const headFacingForPreview = useGameStore(s => s.previewHeadFacing);
-  const connectPortType = useGameStore(s => s.portType);
+  const selectedConnectionIds = useGameStore(selectSelectedConnectionIds);
+  const isConnecting = useGameStore(selectIsConnecting);
+  const connecting = useGameStore(selectConnecting);
+  const connectPortType = useGameStore(selectWirePortType);
 
   const svgSize = {
     width: gridWidth * GRID_SIZE,
@@ -37,6 +35,11 @@ export const ConnectionSVGLayer: React.FC<ConnectionSVGLayerProps> = memo(({ por
     : connections;
 
   const showPreview = isConnecting && (!filterType || connectPortType === filterType);
+
+  const previewPath = connecting?.previewPath ?? [];
+  const isValidPath = connecting?.isValidPath ?? true;
+  const tailFacingForPreview = connecting?.activeTailFacing ?? 1;
+  const headFacingForPreview = connecting?.previewHeadFacing ?? 1;
 
   return (
     <svg

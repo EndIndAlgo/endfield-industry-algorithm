@@ -6,12 +6,12 @@ import { GhostPreview } from './GhostPreview';
 import { SelectionBox } from './SelectionBox';
 import { BatchMovePreview } from './BatchMovePreview';
 import { useGridEvents } from '@/hooks/useGridEvents';
-import { GameMode } from '@/types';
 import { getMachineConfig } from '@/config/machines';
 import classNames from 'classnames';
 import './Grid.scss';
 import { getRotatedDimensions, buildPowerGrid } from '@/utils/machineUtils';
 import { GRID_SIZE } from '@/config/constants';
+import { selectSelectedMachineIds } from '@/store/selectors';
 
 export const Grid = () => {
   // ── 细粒度 store selector ──
@@ -20,8 +20,8 @@ export const Grid = () => {
   const gridWidth = useGameStore(s => s.gridWidth);
   const gridHeight = useGameStore(s => s.gridHeight);
   const machines = useGameStore(s => s.machines);
-  const mode = useGameStore(s => s.mode);
-  const selectedMachineIds = useGameStore(s => s.selectedMachineIds);
+  const modeKind = useGameStore(s => s.modeState.kind);
+  const selectedMachineIds = useGameStore(selectSelectedMachineIds);
 
   // ── 供电网格 ──
   const poweredMachineIds = useMemo(() => {
@@ -64,7 +64,7 @@ export const Grid = () => {
   return (
     <div
       className={classNames('grid-container', {
-        'wiring-mode': mode === GameMode.CONVEYOR || mode === GameMode.PIPE,
+        'wiring-mode': modeKind === 'WIRE',
         'panning': isPanning,
       })}
       ref={containerRef}

@@ -65,16 +65,61 @@ export interface Connection {
   portType: PortType;
 }
 
-export const GameMode = {
-  BUILD: 'BUILD',
-  CONVEYOR: 'CONVEYOR',
-  PIPE: 'PIPE',
-  DEVICE_SELECT: 'DEVICE_SELECT',
-  MOVE_SELECTION: 'MOVE_SELECTION',
-  BLUEPRINT_PLACE: 'BLUEPRINT_PLACE'
-} as const;
+// ── 连线中的瞬态字段（WIRE variant 子状态）──
+export interface ConnectingFields {
+  availablePorts: { pos: Point; facing: Direction }[];
+  activeStartPos: Point;
+  activeTailFacing: Direction;
+  previewPath: Point[];
+  previewHeadFacing: Direction;
+  isValidPath: boolean;
+  lShapeMode: 'auto' | 'perpendicular' | 'same-dir';
+  isContinuing: boolean;
+  continueSourceId: string | null;
+  previewTargetIsMachine: boolean;
+}
 
-export type GameMode = typeof GameMode[keyof typeof GameMode];
+// ── 模式判别联合 ──
+export type ModeState =
+  // BUILD：placing 判 null 区分 idle/placing/pickup
+  | {
+      kind: 'BUILD';
+      placing: {
+        selectedMachineId: string;
+        previewRotation: Direction;
+        /** 放置偏移：鼠标到机器原点的距离。工具栏选机 = 中心，拾取 = 鼠标在机器内的精确位置 */
+        buildOffset: Point;
+        /** null = 从工具栏选的，object = 从画布拾取的，撤销时需要还原 */
+        movingMachineBackup: PlacedMachine | null;
+      } | null;                                    // null=空闲
+    }
+
+  // WIRE：CONVEYOR+PIPE 合并，portType 区分物流类型，connecting null 区分子状态
+  | {
+      kind: 'WIRE';
+      portType: 'Solid' | 'Liquid';             // Solid=传送带(E键), Liquid=管道(Q键)
+      connecting: ConnectingFields | null;       // null=空闲, object=连线中
+    }
+
+  // DEVICE_SELECT：selectionStart/End 的 null 区分空闲/拖拽
+  | {
+      kind: 'DEVICE_SELECT';
+      selectionStart: Point | null;             // null=空闲, object=拖拽中
+      selectionEnd: Point | null;
+      selectedMachineIds: string[];             // 框选结果（持久，供后续移动/复制/删除）
+      selectedConnectionIds: string[];
+    }
+
+  // MOVE_SELECTION：M+Ctrl+C+蓝图插入合并，isCopying 区分来源
+  | {
+      kind: 'MOVE_SELECTION';
+      moveAnchor: Point;
+      movingMachinesSnapshot: PlacedMachine[];
+      movingConnectionsSnapshot: Connection[];
+      isCopying: boolean;                       // false=移动, true=复制/蓝图
+      originSelectedMachineIds: string[];       // 取消移动时还原原选区
+      originSelectedConnectionIds: string[];
+    };
 
 // ── 物流掩码 (按高度排列，值=渲染顺序) ──
 

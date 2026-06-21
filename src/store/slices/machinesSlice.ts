@@ -1,65 +1,72 @@
 import type { StateCreator } from 'zustand';
 import type { MachinesSlice, GameState } from './types';
 import type { PlacedMachine, Direction, Point } from '@/types';
-import { GameMode } from '@/types';
 import { MACHINES } from '@/config/machines';
 import { checkPlacementCollision, getMachinePortCheckPositions } from '@/utils/grid';
 import { getRotatedDimensions } from '@/utils/machineUtils';
 
 export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice> = (set, get) => ({
     machines: [],
-    mode: GameMode.BUILD,
-    selectedMachineId: null,
-    previewRotation: 0,
-    movingMachineBackup: null,
-    buildOffset: null,
-    hoverPosFrac: null,
-
-    setHoverPosFrac: (pos) => set({ hoverPosFrac: pos }),
-
-    setMode: (mode) => {
-        const current = get().mode;
-        // 离开 DEVICE_SELECT 模式时清除框选状态
-        if (current === GameMode.DEVICE_SELECT && mode !== GameMode.DEVICE_SELECT) {
-            set({ mode, selectionStart: null, selectionEnd: null, selectedMachineIds: [], selectedConnectionIds: [] });
-        } else {
-            set({ mode });
-        }
-    },
 
     selectMachine: (machineId) => {
-        const { movingMachineBackup } = get();
-        if (movingMachineBackup) {
+        const ms = get().modeState;
+
+        // 如果正在拾取中（BUILD 模式，有 movingMachineBackup），先还原机器
+        if (ms.kind === 'BUILD' && ms.placing?.movingMachineBackup) {
             set(state => ({
-                machines: [...state.machines, movingMachineBackup],
-                movingMachineBackup: null
+                machines: [...state.machines, ms.placing!.movingMachineBackup!],
             }));
         }
-        // 计算放置偏移：默认取机器中心
-        let buildOffset: Point | null = null;
-        if (machineId) {
-            const config = MACHINES.find(c => c.id === machineId);
-            if (config) {
-                const { width, height } = getRotatedDimensions(config.width, config.height, 0);
-                buildOffset = { x: width / 2, y: height / 2 };
-            }
+
+        if (!machineId) {
+            set({ modeState: { kind: 'BUILD', placing: null } });
+            return;
         }
-        set({ selectedMachineId: machineId, mode: GameMode.BUILD, previewRotation: 0, buildOffset });
+
+        const config = MACHINES.find(c => c.id === machineId);
+        if (!config) {
+            set({ modeState: { kind: 'BUILD', placing: null } });
+            return;
+        }
+
+        const { width, height } = getRotatedDimensions(config.width, config.height, 0);
+        const buildOffset = { x: width / 2, y: height / 2 };
+
+        set({
+            modeState: {
+                kind: 'BUILD',
+                placing: {
+                    selectedMachineId: machineId,
+                    previewRotation: 0,
+                    buildOffset,
+                    movingMachineBackup: null,
+                },
+            },
+        });
     },
 
-    rotatePreview: () => set(state => {
-        const newRotation = (state.previewRotation + 1) % 4 as Direction;
+    rotatePreview: () => {
+        const ms = get().modeState;
+        if (ms.kind !== 'BUILD' || !ms.placing) return;
+
+        const newRotation = (ms.placing.previewRotation + 1) % 4 as Direction;
         // 旋转后重新计算中心偏移
-        let buildOffset: Point | null = null;
-        if (state.selectedMachineId) {
-            const config = MACHINES.find(c => c.id === state.selectedMachineId);
-            if (config) {
-                const { width, height } = getRotatedDimensions(config.width, config.height, newRotation);
-                buildOffset = { x: width / 2, y: height / 2 };
-            }
+        let buildOffset: Point;
+        const config = MACHINES.find(c => c.id === ms.placing.selectedMachineId);
+        if (config) {
+            const { width, height } = getRotatedDimensions(config.width, config.height, newRotation);
+            buildOffset = { x: width / 2, y: height / 2 };
+        } else {
+            buildOffset = ms.placing.buildOffset;
         }
-        return { previewRotation: newRotation, buildOffset };
-    }),
+
+        set({
+            modeState: {
+                kind: 'BUILD',
+                placing: { ...ms.placing, previewRotation: newRotation, buildOffset },
+            },
+        });
+    },
 
     addMachine: (machineId, x, y, rotation) => {
         const config = MACHINES.find(m => m.id === machineId);
@@ -77,17 +84,24 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
 
         if (checkPlacementCollision(machineId, x, y, width, height, machines, connections, gridWidth, gridHeight)) return;
 
-        const { movingMachineBackup } = get();
+        const ms = get().modeState;
         let finalId: string = crypto.randomUUID();
-        if (movingMachineBackup) {
-            finalId = movingMachineBackup.id;
+        if (ms.kind === 'BUILD' && ms.placing?.movingMachineBackup) {
+            finalId = ms.placing.movingMachineBackup.id;
         }
 
         const newMachine: PlacedMachine = { id: finalId, machineId, x, y, rotation };
 
+        // 放置后保持 placing 状态（清空 movingMachineBackup），支持连续放置
+        const newPlacing = ms.kind === 'BUILD' && ms.placing
+            ? { ...ms.placing, movingMachineBackup: null }
+            : null;
+
         set(state => ({
             machines: [...state.machines, newMachine],
-            movingMachineBackup: null
+            modeState: newPlacing
+                ? { kind: 'BUILD' as const, placing: newPlacing }
+                : { kind: 'BUILD' as const, placing: null },
         }));
     },
 
@@ -112,7 +126,6 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
         if (!machine) return;
 
         // 记录拾取时鼠标在机器内的相对位置
-        // 鼠标在机器内 → 精确记录偏移；否则默认取机器中心
         let offset: Point;
         if (hoverPosFrac) {
             offset = { x: hoverPosFrac.x - machine.x, y: hoverPosFrac.y - machine.y };
@@ -124,64 +137,17 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
             offset = { x: width / 2, y: height / 2 };
         }
 
-        set(() => ({
-            movingMachineBackup: machine,
-            selectedMachineId: machine.machineId,
-            previewRotation: machine.rotation,
-            buildOffset: offset,
-            mode: GameMode.BUILD,
+        set({
+            modeState: {
+                kind: 'BUILD',
+                placing: {
+                    selectedMachineId: machine.machineId,
+                    previewRotation: machine.rotation,
+                    buildOffset: offset,
+                    movingMachineBackup: machine,
+                },
+            },
             machines: machines.filter(m => m.id !== instanceId),
-        }));
-    },
-
-    cancelOperation: () => {
-        const { isConnecting, movingMachineBackup, mode } = get();
-        if (isConnecting) {
-            get().cancelConnection();
-            return;
-        }
-        // 连接模式（非连线中）→ 回到 BUILD
-        if (mode === GameMode.CONVEYOR || mode === GameMode.PIPE) {
-            set({ mode: GameMode.BUILD });
-            return;
-        }
-
-        if (movingMachineBackup) {
-            set(state => ({
-                machines: [...state.machines, movingMachineBackup],
-                movingMachineBackup: null,
-                buildOffset: null,
-                selectedMachineId: null,
-                mode: GameMode.BUILD
-            }));
-        } else {
-            set({ selectedMachineId: null });
-        }
-
-        const { movingMachinesSnapshot, movingConnectionsSnapshot } = get();
-        if (mode === GameMode.DEVICE_SELECT) {
-            set({ selectionStart: null, selectionEnd: null, selectedMachineIds: [], selectedConnectionIds: [], mode: GameMode.BUILD });
-        }
-        if (mode === GameMode.MOVE_SELECTION || mode === GameMode.BLUEPRINT_PLACE) {
-            const { isCopying: wasCopying } = get();
-            if (wasCopying) {
-                set({
-                    movingMachinesSnapshot: [],
-                    movingConnectionsSnapshot: [],
-                    moveAnchor: null,
-                    mode: GameMode.DEVICE_SELECT,
-                    isCopying: false
-                });
-            } else {
-                set(state => ({
-                    machines: [...state.machines, ...movingMachinesSnapshot],
-                    connections: [...state.connections, ...movingConnectionsSnapshot],
-                    movingMachinesSnapshot: [],
-                    movingConnectionsSnapshot: [],
-                    moveAnchor: null,
-                    mode: GameMode.DEVICE_SELECT
-                }));
-            }
-        }
+        });
     },
 });

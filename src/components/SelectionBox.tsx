@@ -1,15 +1,14 @@
 import React, { memo } from 'react';
 import { useGameStore } from '@/store/gameStore';
-import { GameMode } from '@/types';
 import { GRID_SIZE } from '@/config/constants';
 
 /** DEVICE_SELECT 模式下的框选矩形 */
 export const SelectionBox: React.FC = memo(() => {
-  const selectionStart = useGameStore(s => s.selectionStart);
-  const selectionEnd = useGameStore(s => s.selectionEnd);
-  const mode = useGameStore(s => s.mode);
+  const modeState = useGameStore(s => s.modeState);
 
-  if (!selectionStart || !selectionEnd || mode !== GameMode.DEVICE_SELECT) return null;
+  if (modeState.kind !== 'DEVICE_SELECT') return null;
+  const { selectionStart, selectionEnd } = modeState;
+  if (!selectionStart || !selectionEnd) return null;
 
   const x1 = Math.min(selectionStart.x, selectionEnd.x);
   const y1 = Math.min(selectionStart.y, selectionEnd.y);

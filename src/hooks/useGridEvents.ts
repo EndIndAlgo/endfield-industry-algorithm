@@ -1,6 +1,5 @@
 import { useRef, useState, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
-import { GameMode } from '@/types';
 import type { Point } from '@/types';
 import { usePanZoom } from './grid/usePanZoom';
 import { useWireMode } from './grid/useWireMode';
@@ -23,7 +22,7 @@ interface UseGridEventsReturn {
 /**
  * 画布事件总管 hook（调度层）
  * 组合 usePanZoom / useWireMode / useSelectionMode / useKeyboardShortcuts，
- * 按当前 GameMode 将 DOM 事件分发给对应子 hook。
+ * 按当前 ModeState.kind 将 DOM 事件分发给对应子 hook。
  */
 export const useGridEvents = (): UseGridEventsReturn => {
   // ── 共享基础设施 ──
@@ -78,26 +77,28 @@ export const useGridEvents = (): UseGridEventsReturn => {
     if (isPanning) return;
 
     const s = useGameStore.getState();
+    const ms = s.modeState;
 
     // ── 连线模式 ──
-    if (s.mode === GameMode.CONVEYOR || s.mode === GameMode.PIPE) {
+    if (ms.kind === 'WIRE') {
       wire.onClick(e);
       return;
     }
 
     // ── 批量移动 / 蓝图放置 ──
-    if (s.mode === GameMode.MOVE_SELECTION || s.mode === GameMode.BLUEPRINT_PLACE) {
+    if (ms.kind === 'MOVE_SELECTION') {
       select.onClickCommit(e);
       return;
     }
 
     // ── 建造模式 ──
-    if (s.mode === GameMode.BUILD && s.selectedMachineId && s.buildOffset) {
+    if (ms.kind === 'BUILD' && ms.placing) {
+      const { buildOffset, selectedMachineId, previewRotation } = ms.placing;
       const pos = s.hoverPosFrac
-        ? { x: Math.round(s.hoverPosFrac.x - s.buildOffset.x), y: Math.round(s.hoverPosFrac.y - s.buildOffset.y) }
+        ? { x: Math.round(s.hoverPosFrac.x - buildOffset.x), y: Math.round(s.hoverPosFrac.y - buildOffset.y) }
         : getGridPos(e);
       s.takeSnapshot();
-      s.addMachine(s.selectedMachineId, pos.x, pos.y, s.previewRotation);
+      s.addMachine(selectedMachineId, pos.x, pos.y, previewRotation);
       if (!e.ctrlKey) {
         s.selectMachine(null);
       }

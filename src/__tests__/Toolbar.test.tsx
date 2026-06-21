@@ -2,13 +2,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Toolbar } from '@/components/Toolbar';
 import { TestWrapper } from './testWrapper';
-import { GameMode } from '@/types';
 import { useGameStore } from '@/store/gameStore';
 
 const resetStore = () => {
   useGameStore.setState({
-    mode: GameMode.BUILD,
-    selectedMachineId: null,
+    modeState: { kind: 'BUILD', placing: null },
     machines: [],
     connections: [],
     gridWidth: 24,
@@ -40,17 +38,19 @@ describe('Toolbar 组件', () => {
       expect(screen.getByTitle('Box Selection Mode (X)')).toBeInTheDocument();
     });
 
-    it('点击传送带按钮切换到 CONVEYOR 模式', () => {
+    it('点击传送带按钮切换到 WIRE_SOLID 模式', () => {
       render(<TestWrapper><Toolbar /></TestWrapper>);
       fireEvent.click(screen.getByTitle('传送带模式 (E)'));
-      expect(useGameStore.getState().mode).toBe('CONVEYOR');
+      const ms = useGameStore.getState().modeState;
+      expect(ms.kind).toBe('WIRE');
+      if (ms.kind === 'WIRE') expect(ms.portType).toBe('Solid');
     });
 
     it('再次点击传送带按钮切回 BUILD 模式', () => {
-      useGameStore.setState({ mode: GameMode.CONVEYOR });
+      useGameStore.setState({ modeState: { kind: 'WIRE', portType: 'Solid', connecting: null } });
       render(<TestWrapper><Toolbar /></TestWrapper>);
       fireEvent.click(screen.getByTitle('传送带模式 (E)'));
-      expect(useGameStore.getState().mode).toBe('BUILD');
+      expect(useGameStore.getState().modeState.kind).toBe('BUILD');
     });
   });
 
@@ -68,7 +68,6 @@ describe('Toolbar 组件', () => {
     it('默认选中 production 分类，显示对应机器', () => {
       render(<TestWrapper><Toolbar /></TestWrapper>);
       // production 分类包含精炼炉（ref）
-      // 机器名称可能因 onError 隐藏图片而只显示文字
       expect(screen.getByText('精煉爐')).toBeInTheDocument();
     });
 
@@ -88,27 +87,41 @@ describe('Toolbar 组件', () => {
       render(<TestWrapper><Toolbar /></TestWrapper>);
       // 默认 production 分类，ref 在其中
       fireEvent.click(screen.getByText('精煉爐'));
-      expect(useGameStore.getState().selectedMachineId).toBe('ref');
+      const s = useGameStore.getState();
+      expect(s.modeState.kind).toBe('BUILD');
+      if (s.modeState.kind === 'BUILD' && s.modeState.placing) {
+        expect(s.modeState.placing.selectedMachineId).toBe('ref');
+      }
     });
 
     it('点击指针按钮取消选择', () => {
-      useGameStore.setState({ selectedMachineId: 'ref' });
+      useGameStore.setState({
+        modeState: {
+          kind: 'BUILD',
+          placing: { selectedMachineId: 'ref', previewRotation: 0, buildOffset: { x: 1.5, y: 1.5 }, movingMachineBackup: null },
+        },
+      });
       render(<TestWrapper><Toolbar /></TestWrapper>);
       fireEvent.click(screen.getByTitle('Select / Move'));
-      expect(useGameStore.getState().selectedMachineId).toBeNull();
+      expect(useGameStore.getState().modeState.placing).toBeNull();
     });
   });
 
   describe('工具按钮高亮', () => {
     it('当前模式按钮高亮（active class）', () => {
-      useGameStore.setState({ mode: GameMode.CONVEYOR });
+      useGameStore.setState({ modeState: { kind: 'WIRE', portType: 'Solid', connecting: null } });
       render(<TestWrapper><Toolbar /></TestWrapper>);
       const btn = screen.getByTitle('传送带模式 (E)');
       expect(btn.className).toContain('active');
     });
 
     it('选中的机器按钮高亮', () => {
-      useGameStore.setState({ selectedMachineId: 'ref' });
+      useGameStore.setState({
+        modeState: {
+          kind: 'BUILD',
+          placing: { selectedMachineId: 'ref', previewRotation: 0, buildOffset: { x: 1.5, y: 1.5 }, movingMachineBackup: null },
+        },
+      });
       render(<TestWrapper><Toolbar /></TestWrapper>);
       // ref 按钮应该有 active class
       const buttons = document.querySelectorAll('.machine-btn.active');

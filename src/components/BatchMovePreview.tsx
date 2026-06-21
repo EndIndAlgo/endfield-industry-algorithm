@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { Machine } from './Machine';
-import { GameMode, portTypeToMask } from '@/types';
+import { portTypeToMask } from '@/types';
 import type { Point, Connection, PortType } from '@/types';
 import { pathToPoints } from '@/utils/portPosition';
 import { Z_INDEX, connZ } from '@/config/zIndex';
@@ -43,15 +43,16 @@ const BatchMoveConnectionsSVG: React.FC<{ connections: Connection[]; portType: P
   },
 );
 
-/** MOVE_SELECTION / BLUEPRINT_PLACE 模式下的批量移动预览（机器虚影 + 连线虚影） */
+/** MOVE_SELECTION 模式下的批量移动预览（机器虚影 + 连线虚影） */
 export const BatchMovePreview: React.FC<BatchMovePreviewProps> = memo(({ hoverPos }) => {
-  const mode = useGameStore(s => s.mode);
-  const moveAnchor = useGameStore(s => s.moveAnchor);
-  const movingMachinesSnapshot = useGameStore(s => s.movingMachinesSnapshot);
-  const movingConnectionsSnapshot = useGameStore(s => s.movingConnectionsSnapshot);
+  const modeState = useGameStore(s => s.modeState);
 
-  const show = (mode === GameMode.MOVE_SELECTION || mode === GameMode.BLUEPRINT_PLACE) && moveAnchor && hoverPos;
+  const show = modeState.kind === 'MOVE_SELECTION' && modeState.moveAnchor && hoverPos;
   if (!show) return null;
+
+  // Only access MOVE_SELECTION fields when we know we're in that mode
+  if (modeState.kind !== 'MOVE_SELECTION') return null;
+  const { moveAnchor, movingMachinesSnapshot, movingConnectionsSnapshot } = modeState;
 
   const offsetX = hoverPos!.x - moveAnchor!.x;
   const offsetY = hoverPos!.y - moveAnchor!.y;

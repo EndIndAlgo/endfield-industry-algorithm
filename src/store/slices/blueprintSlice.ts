@@ -1,6 +1,5 @@
 import type { StateCreator } from 'zustand';
 import type { BlueprintSlice, GameState } from './types';
-import { GameMode } from '@/types';
 import { getBoundingBox } from '@/utils/grid';
 
 export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlice> = (set) => ({
@@ -29,11 +28,15 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         }));
 
         set({
-            mode: GameMode.BLUEPRINT_PLACE,
-            moveAnchor: anchor,
-            movingMachinesSnapshot: newMachines,
-            movingConnectionsSnapshot: newConnections,
-            isCopying: true,
+            modeState: {
+                kind: 'MOVE_SELECTION',
+                moveAnchor: anchor,
+                movingMachinesSnapshot: newMachines,
+                movingConnectionsSnapshot: newConnections,
+                isCopying: true,
+                originSelectedMachineIds: [],
+                originSelectedConnectionIds: [],
+            },
             uiView: 'editor'
         });
     },
@@ -64,11 +67,15 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             connections: [],
             gridWidth: newSize,
             gridHeight: newSize,
-            mode: GameMode.BLUEPRINT_PLACE,
-            moveAnchor: anchor,
-            movingMachinesSnapshot: newMachines,
-            movingConnectionsSnapshot: newConnections,
-            isCopying: true,
+            modeState: {
+                kind: 'MOVE_SELECTION',
+                moveAnchor: anchor,
+                movingMachinesSnapshot: newMachines,
+                movingConnectionsSnapshot: newConnections,
+                isCopying: true,
+                originSelectedMachineIds: [],
+                originSelectedConnectionIds: [],
+            },
             uiView: 'editor',
             history: { past: [], future: [] }
         });
@@ -82,9 +89,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             gridHeight,
             currentBlueprintId: blueprintId,
             currentBlueprintName: blueprintName,
-            mode: GameMode.BUILD,
-            selectedMachineId: null,
-            movingMachineBackup: null,
+            modeState: { kind: 'BUILD', placing: null },
             history: { past: [], future: [] }
         });
     },
@@ -97,9 +102,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             connections: [],
             currentBlueprintId: null,
             currentBlueprintName: null,
-            mode: GameMode.BUILD,
-            selectedMachineId: null,
-            movingMachineBackup: null,
+            modeState: { kind: 'BUILD', placing: null },
             history: { past: [], future: [] }
         });
     },

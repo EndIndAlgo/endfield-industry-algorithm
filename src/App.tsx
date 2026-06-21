@@ -91,12 +91,16 @@ export default function App() {
 
   // ── 保存逻辑（通过 getState() 读取最新 store 状态，引用稳定） ──
   const handleTriggerSave = useCallback(() => {
-    const { machines, connections, selectedMachineIds, selectedConnectionIds, currentBlueprintId, currentBlueprintName } = useGameStore.getState();
+    const { machines, connections, modeState, currentBlueprintId, currentBlueprintName } = useGameStore.getState();
+
+    // 从 modeState 提取选区（仅在 DEVICE_SELECT 模式下有意义）
+    const selMachineIds = modeState.kind === 'DEVICE_SELECT' ? modeState.selectedMachineIds : [];
+    const selConnectionIds = modeState.kind === 'DEVICE_SELECT' ? modeState.selectedConnectionIds : [];
 
     // 有选区 → 提取选区数据另存
-    if (selectedMachineIds.length > 0 || selectedConnectionIds.length > 0) {
-      const selectedMachines = machines.filter(m => selectedMachineIds.includes(m.id));
-      const selectedConnections = connections.filter(c => selectedConnectionIds.includes(c.id));
+    if (selMachineIds.length > 0 || selConnectionIds.length > 0) {
+      const selectedMachines = machines.filter(m => selMachineIds.includes(m.id));
+      const selectedConnections = connections.filter(c => selConnectionIds.includes(c.id));
 
       if (selectedMachines.length > 0 || selectedConnections.length > 0) {
         const bb = getBoundingBox(selectedMachines, selectedConnections);

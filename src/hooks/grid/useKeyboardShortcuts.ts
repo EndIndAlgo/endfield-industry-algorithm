@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useGameStore } from '@/store/gameStore';
-import { GameMode } from '@/types';
 import type { Point } from '@/types';
 
 interface UseKeyboardShortcutsDeps {
@@ -15,26 +14,36 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const s = useGameStore.getState();
-      const isPlacing = !!s.selectedMachineId;
+      const ms = s.modeState;
+      const isPlacing = ms.kind === 'BUILD' && ms.placing !== null;
+      const isConnecting = ms.kind === 'WIRE' && ms.connecting !== null;
 
       if (e.key.toLowerCase() === 'e') {
         if (isPlacing) return;
-        if (s.mode === GameMode.CONVEYOR) {
-          s.cancelConnection();
+        if (ms.kind === 'WIRE' && ms.portType === 'Solid') {
+          if (ms.connecting) {
+            s.cancelConnection();     // 连线中 → 取消连线，停在 WIRE/Solid 空闲
+          } else {
+            s.setMode('BUILD');       // 空闲 → 退出，回到 BUILD（toggle）
+          }
         } else {
-          if (s.isConnecting) s.cancelConnection();
-          s.setMode(GameMode.CONVEYOR);
+          if (isConnecting) s.cancelConnection();
+          s.setMode('WIRE_SOLID');
         }
       } else if (e.key.toLowerCase() === 'q') {
         if (isPlacing) return;
-        if (s.mode === GameMode.PIPE) {
-          s.cancelConnection();
+        if (ms.kind === 'WIRE' && ms.portType === 'Liquid') {
+          if (ms.connecting) {
+            s.cancelConnection();     // 连线中 → 取消连线，停在 WIRE/Liquid 空闲
+          } else {
+            s.setMode('BUILD');       // 空闲 → 退出，回到 BUILD（toggle）
+          }
         } else {
-          if (s.isConnecting) s.cancelConnection();
-          s.setMode(GameMode.PIPE);
+          if (isConnecting) s.cancelConnection();
+          s.setMode('WIRE_LIQUID');
         }
       } else if (e.key.toLowerCase() === 'r') {
-        if (s.isConnecting) {
+        if (isConnecting) {
           s.toggleLShape();
           if (hoverPosRef.current) s.updatePreview(hoverPosRef.current);
         } else {
@@ -42,7 +51,7 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
         }
       } else if (e.key.toLowerCase() === 'x') {
         if (isPlacing) return;
-        s.setMode(s.mode === GameMode.DEVICE_SELECT ? GameMode.BUILD : GameMode.DEVICE_SELECT);
+        s.setMode(ms.kind === 'DEVICE_SELECT' ? 'BUILD' : 'DEVICE_SELECT');
       } else if (e.key.toLowerCase() === 'f') {
         s.takeSnapshot();
         s.deleteSelected();

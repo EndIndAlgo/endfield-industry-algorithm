@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
-import { GameMode } from '@/types';
 import type { Point } from '@/types';
 
 interface UseSelectionModeDeps {
@@ -10,13 +9,13 @@ interface UseSelectionModeDeps {
 
 /**
  * 选择/移动模式 hook
- * 处理 DEVICE_SELECT 框选 + MOVE_SELECTION/BLUEPRINT_PLACE 批量移动确认
+ * 处理 DEVICE_SELECT 框选 + MOVE_SELECTION 批量移动确认
  */
 export function useSelectionMode({ getGridPos }: UseSelectionModeDeps) {
   /** 鼠标按下：开始框选 */
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     const s = useGameStore.getState();
-    if (s.mode === GameMode.DEVICE_SELECT && e.button === 0) {
+    if (s.modeState.kind === 'DEVICE_SELECT' && e.button === 0) {
       const pos = getGridPos(e);
       s.setBoxSelection(pos, pos);
     }
@@ -25,7 +24,8 @@ export function useSelectionMode({ getGridPos }: UseSelectionModeDeps) {
   /** 鼠标释放：提交框选 */
   const onMouseUp = useCallback((e: React.MouseEvent) => {
     const s = useGameStore.getState();
-    if (s.mode === GameMode.DEVICE_SELECT && s.selectionStart) {
+    const ms = s.modeState;
+    if (ms.kind === 'DEVICE_SELECT' && ms.selectionStart) {
       s.commitBoxSelection(e.shiftKey);
     }
   }, []);
@@ -33,8 +33,9 @@ export function useSelectionMode({ getGridPos }: UseSelectionModeDeps) {
   /** 鼠标移动：更新框选范围 */
   const onMouseMove = useCallback((pos: Point, e: React.MouseEvent) => {
     const s = useGameStore.getState();
-    if (s.mode === GameMode.DEVICE_SELECT && s.selectionStart && e.buttons === 1) {
-      s.setBoxSelection(s.selectionStart, pos);
+    const ms = s.modeState;
+    if (ms.kind === 'DEVICE_SELECT' && ms.selectionStart && e.buttons === 1) {
+      s.setBoxSelection(ms.selectionStart, pos);
     }
   }, []);
 

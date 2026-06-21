@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useGameStore } from '@/store/gameStore';
-import { GameMode } from '@/types';
-import type { PlacedMachine, Connection, Direction } from '@/types';
+import type { PlacedMachine, Connection } from '@/types';
 
 /** 创建一台测试用的 1x1 机器（物流桥，不占大空间） */
 const makeLBR = (overrides: Partial<PlacedMachine> = {}): PlacedMachine => ({
@@ -26,35 +25,13 @@ const resetStore = () => {
   useGameStore.setState({
     machines: [],
     connections: [],
-    mode: GameMode.BUILD,
-    selectedMachineId: null,
-    previewRotation: 0,
-    movingMachineBackup: null,
+    modeState: { kind: 'BUILD', placing: null },
     zoom: 1,
     pan: { x: 0, y: 0 },
     gridWidth: 24,
     gridHeight: 24,
     history: { past: [], future: [] },
-    isConnecting: false,
-    isContinuing: false,
-    continueSourceId: null,
-    isValidPath: true,
-    availablePorts: [],
-    portType: 'Solid',
-    activeStartPos: { x: 0, y: 0 },
-    activeTailFacing: 1 as Direction,
-    previewPath: [],
-    previewHeadFacing: 1 as Direction,
-    lShapeMode: 'same-dir',
-    previewTargetIsMachine: false,
-    selectionStart: null,
-    selectionEnd: null,
-    selectedMachineIds: [],
-    selectedConnectionIds: [],
-    moveAnchor: null,
-    movingMachinesSnapshot: [],
-    movingConnectionsSnapshot: [],
-    isCopying: false,
+    hoverPosFrac: null,
   });
 };
 
@@ -139,20 +116,22 @@ describe('machinesSlice', () => {
   });
 
   describe('pickupMachine', () => {
-    it('拾取机器放入 movingMachineBackup，从 machines 移除', () => {
+    it('拾取机器放入 modeState.placing.movingMachineBackup，从 machines 移除', () => {
       useGameStore.setState({ machines: [makeLBR()] });
       useGameStore.getState().pickupMachine('lbr-1');
       const s = useGameStore.getState();
       expect(s.machines).toHaveLength(0);
-      expect(s.movingMachineBackup).toBeDefined();
-      expect(s.movingMachineBackup!.id).toBe('lbr-1');
+      expect(s.modeState.kind).toBe('BUILD');
+      expect(s.modeState.placing).toBeDefined();
+      expect(s.modeState.placing!.movingMachineBackup).toBeDefined();
+      expect(s.modeState.placing!.movingMachineBackup!.id).toBe('lbr-1');
     });
 
     it('拾取不存在的机器不改变状态', () => {
       useGameStore.setState({ machines: [makeLBR()] });
       useGameStore.getState().pickupMachine('nonexistent');
       expect(useGameStore.getState().machines).toHaveLength(1);
-      expect(useGameStore.getState().movingMachineBackup).toBeNull();
+      expect(useGameStore.getState().modeState.placing).toBeNull();
     });
   });
 
@@ -161,8 +140,10 @@ describe('machinesSlice', () => {
       useGameStore.setState({ machines: [makeLBR()] });
       useGameStore.getState().pickupMachine('lbr-1');
       useGameStore.getState().cancelOperation();
-      expect(useGameStore.getState().machines).toHaveLength(1);
-      expect(useGameStore.getState().movingMachineBackup).toBeNull();
+      const s = useGameStore.getState();
+      expect(s.machines).toHaveLength(1);
+      expect(s.modeState.kind).toBe('BUILD');
+      expect(s.modeState.placing).toBeNull();
     });
   });
 });
@@ -224,40 +205,62 @@ describe('selectionSlice', () => {
 
   describe('commitBoxSelection', () => {
     it('框选范围内机器被选中', () => {
-      useGameStore.setState({ machines: [makeLBR({ x: 2, y: 2 })] });
+      useGameStore.setState({
+        machines: [makeLBR({ x: 2, y: 2 })],
+        modeState: { kind: 'DEVICE_SELECT', selectionStart: null, selectionEnd: null, selectedMachineIds: [], selectedConnectionIds: [] },
+      });
       useGameStore.getState().setBoxSelection({ x: 0, y: 0 }, { x: 5, y: 5 });
       useGameStore.getState().commitBoxSelection();
       // lbr 1×1 在 (2,2), 完全在 (0,0)-(5,5) 内 → 选中
-      expect(useGameStore.getState().selectedMachineIds).toContain('lbr-1');
+      const s = useGameStore.getState();
+      expect(s.modeState.kind).toBe('DEVICE_SELECT');
+      if (s.modeState.kind === 'DEVICE_SELECT') {
+        expect(s.modeState.selectedMachineIds).toContain('lbr-1');
+      }
     });
 
     it('框选范围外机器不被选中', () => {
-      useGameStore.setState({ machines: [makeLBR({ x: 10, y: 10 })] });
+      useGameStore.setState({
+        machines: [makeLBR({ x: 10, y: 10 })],
+        modeState: { kind: 'DEVICE_SELECT', selectionStart: null, selectionEnd: null, selectedMachineIds: [], selectedConnectionIds: [] },
+      });
       useGameStore.getState().setBoxSelection({ x: 0, y: 0 }, { x: 5, y: 5 });
       useGameStore.getState().commitBoxSelection();
-      expect(useGameStore.getState().selectedMachineIds).toHaveLength(0);
+      const s = useGameStore.getState();
+      if (s.modeState.kind === 'DEVICE_SELECT') {
+        expect(s.modeState.selectedMachineIds).toHaveLength(0);
+      }
     });
 
     it('toggle 模式反选已选中的机器', () => {
       useGameStore.setState({
         machines: [makeLBR({ x: 2, y: 2 })],
-        selectedMachineIds: ['lbr-1'],
+        modeState: { kind: 'DEVICE_SELECT', selectionStart: null, selectionEnd: null, selectedMachineIds: ['lbr-1'], selectedConnectionIds: [] },
       });
       useGameStore.getState().setBoxSelection({ x: 0, y: 0 }, { x: 5, y: 5 });
       useGameStore.getState().commitBoxSelection(true);
-      expect(useGameStore.getState().selectedMachineIds).toHaveLength(0);
+      const s = useGameStore.getState();
+      if (s.modeState.kind === 'DEVICE_SELECT') {
+        expect(s.modeState.selectedMachineIds).toHaveLength(0);
+      }
     });
   });
 
   describe('deleteSelected', () => {
     it('删除选中的机器', () => {
-      useGameStore.setState({ machines: [makeLBR()], selectedMachineIds: ['lbr-1'] });
+      useGameStore.setState({
+        machines: [makeLBR()],
+        modeState: { kind: 'DEVICE_SELECT', selectionStart: null, selectionEnd: null, selectedMachineIds: ['lbr-1'], selectedConnectionIds: [] },
+      });
       useGameStore.getState().deleteSelected();
       expect(useGameStore.getState().machines).toHaveLength(0);
     });
 
     it('无选中时不操作', () => {
-      useGameStore.setState({ machines: [makeLBR()] });
+      useGameStore.setState({
+        machines: [makeLBR()],
+        modeState: { kind: 'DEVICE_SELECT', selectionStart: null, selectionEnd: null, selectedMachineIds: [], selectedConnectionIds: [] },
+      });
       useGameStore.getState().deleteSelected();
       expect(useGameStore.getState().machines).toHaveLength(1);
     });
@@ -265,29 +268,44 @@ describe('selectionSlice', () => {
 
   describe('startBatchMove', () => {
     it('移动机器到 snapshot，从 store 移除', () => {
-      useGameStore.setState({ machines: [makeLBR()], selectedMachineIds: ['lbr-1'] });
+      useGameStore.setState({
+        machines: [makeLBR()],
+        modeState: { kind: 'DEVICE_SELECT', selectionStart: null, selectionEnd: null, selectedMachineIds: ['lbr-1'], selectedConnectionIds: [] },
+      });
       useGameStore.getState().startBatchMove();
       const s = useGameStore.getState();
       expect(s.machines).toHaveLength(0);
-      expect(s.movingMachinesSnapshot).toHaveLength(1);
-      expect(s.mode).toBe('MOVE_SELECTION');
+      expect(s.modeState.kind).toBe('MOVE_SELECTION');
+      if (s.modeState.kind === 'MOVE_SELECTION') {
+        expect(s.modeState.movingMachinesSnapshot).toHaveLength(1);
+      }
     });
 
     it('无选中时不操作', () => {
-      useGameStore.setState({ machines: [makeLBR()] });
+      useGameStore.setState({
+        machines: [makeLBR()],
+        modeState: { kind: 'DEVICE_SELECT', selectionStart: null, selectionEnd: null, selectedMachineIds: [], selectedConnectionIds: [] },
+      });
       useGameStore.getState().startBatchMove();
-      expect(useGameStore.getState().movingMachinesSnapshot).toHaveLength(0);
+      const s = useGameStore.getState();
+      expect(s.modeState.kind).toBe('DEVICE_SELECT');
     });
   });
 
   describe('startCopySelection', () => {
     it('复制选中的机器（ID 重新生成）', () => {
-      useGameStore.setState({ machines: [makeLBR()], selectedMachineIds: ['lbr-1'] });
+      useGameStore.setState({
+        machines: [makeLBR()],
+        modeState: { kind: 'DEVICE_SELECT', selectionStart: null, selectionEnd: null, selectedMachineIds: ['lbr-1'], selectedConnectionIds: [] },
+      });
       useGameStore.getState().startCopySelection();
       const s = useGameStore.getState();
-      expect(s.movingMachinesSnapshot).toHaveLength(1);
-      expect(s.movingMachinesSnapshot[0].id).not.toBe('lbr-1'); // 新 ID
-      expect(s.isCopying).toBe(true);
+      expect(s.modeState.kind).toBe('MOVE_SELECTION');
+      if (s.modeState.kind === 'MOVE_SELECTION') {
+        expect(s.modeState.movingMachinesSnapshot).toHaveLength(1);
+        expect(s.modeState.movingMachinesSnapshot[0].id).not.toBe('lbr-1'); // 新 ID
+        expect(s.modeState.isCopying).toBe(true);
+      }
     });
   });
 
@@ -296,10 +314,15 @@ describe('selectionSlice', () => {
       useGameStore.setState({
         machines: [],
         connections: [],
-        movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
-        movingConnectionsSnapshot: [],
-        moveAnchor: { x: 0, y: 0 },
-        mode: GameMode.MOVE_SELECTION,
+        modeState: {
+          kind: 'MOVE_SELECTION',
+          moveAnchor: { x: 0, y: 0 },
+          movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
+          movingConnectionsSnapshot: [],
+          isCopying: false,
+          originSelectedMachineIds: [],
+          originSelectedConnectionIds: [],
+        },
         gridWidth: 24,
         gridHeight: 24,
       });
@@ -313,30 +336,49 @@ describe('selectionSlice', () => {
       useGameStore.setState({
         machines: [makeLBR({ x: 5, y: 5, id: 'blocker' })],
         connections: [],
-        movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
-        movingConnectionsSnapshot: [],
-        moveAnchor: { x: 0, y: 0 },
-        mode: GameMode.MOVE_SELECTION,
+        modeState: {
+          kind: 'MOVE_SELECTION',
+          moveAnchor: { x: 0, y: 0 },
+          movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
+          movingConnectionsSnapshot: [],
+          isCopying: false,
+          originSelectedMachineIds: [],
+          originSelectedConnectionIds: [],
+        },
         gridWidth: 24,
         gridHeight: 24,
       });
       useGameStore.getState().commitBatchMove({ x: 5, y: 5 });
       // 碰撞，snapshot 应还在（移动未成功）
-      expect(useGameStore.getState().movingMachinesSnapshot).toHaveLength(1);
+      const s = useGameStore.getState();
+      expect(s.modeState.kind).toBe('MOVE_SELECTION');
+      if (s.modeState.kind === 'MOVE_SELECTION') {
+        expect(s.modeState.movingMachinesSnapshot).toHaveLength(1);
+      }
     });
 
     it('越界时拒绝', () => {
       useGameStore.setState({
         machines: [],
-        movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
-        movingConnectionsSnapshot: [],
-        moveAnchor: { x: 0, y: 0 },
-        mode: GameMode.MOVE_SELECTION,
+        modeState: {
+          kind: 'MOVE_SELECTION',
+          moveAnchor: { x: 0, y: 0 },
+          movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
+          movingConnectionsSnapshot: [],
+          isCopying: false,
+          originSelectedMachineIds: [],
+          originSelectedConnectionIds: [],
+        },
         gridWidth: 24,
         gridHeight: 24,
       });
       useGameStore.getState().commitBatchMove({ x: 100, y: 100 });
-      expect(useGameStore.getState().movingMachinesSnapshot).toHaveLength(1);
+      // 越界，snapshot 应还在
+      const s = useGameStore.getState();
+      expect(s.modeState.kind).toBe('MOVE_SELECTION');
+      if (s.modeState.kind === 'MOVE_SELECTION') {
+        expect(s.modeState.movingMachinesSnapshot).toHaveLength(1);
+      }
     });
   });
 });

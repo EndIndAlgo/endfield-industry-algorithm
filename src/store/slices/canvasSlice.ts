@@ -9,9 +9,11 @@ export const createCanvasSlice: StateCreator<GameState, [], [], CanvasSlice> = (
     pan: { x: 0, y: 0 },
     gridWidth: 24,
     gridHeight: 24,
+    hoverPosFrac: null,
 
     setZoom: (zoom) => set({ zoom }),
     setPan: (pan) => set({ pan }),
+    setHoverPosFrac: (pos) => set({ hoverPosFrac: pos }),
     setGridSize: (width, height) => {
         const { machines, connections } = get();
 

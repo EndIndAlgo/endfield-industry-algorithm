@@ -1,7 +1,6 @@
 import React, { useMemo, memo } from 'react';
 import classNames from 'classnames';
 import { useGameStore } from '@/store/gameStore';
-import { GameMode } from '@/types';
 import type { Point, PortConfig } from '@/types';
 import { MACHINES } from '@/config/machines';
 import { checkPlacementCollision } from '@/utils/grid';
@@ -10,6 +9,7 @@ import { GRID_SIZE } from '@/config/constants';
 import { Z_INDEX, machineZ } from '@/config/zIndex';
 import { getMachineMask } from '@/utils/machineUtils';
 import { getGhostArrowPosition } from '@/utils/portPosition';
+import { selectPlacing, selectIsBuildMode } from '@/store/selectors';
 import './GhostPreview.scss';
 
 interface GhostPreviewProps {
@@ -18,19 +18,21 @@ interface GhostPreviewProps {
 
 /** BUILD 模式下鼠标悬停时的机器放置预览（ghost + 供电范围 + 端口箭头） */
 export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => {
-  const mode = useGameStore(s => s.mode);
-  const selectedMachineId = useGameStore(s => s.selectedMachineId);
-  const previewRotation = useGameStore(s => s.previewRotation);
+  const isBuild = useGameStore(selectIsBuildMode);
+  const placing = useGameStore(selectPlacing);
   const machines = useGameStore(s => s.machines);
   const connections = useGameStore(s => s.connections);
   const gridWidth = useGameStore(s => s.gridWidth);
   const gridHeight = useGameStore(s => s.gridHeight);
-  const buildOffset = useGameStore(s => s.buildOffset);
   const hoverPosFrac = useGameStore(s => s.hoverPosFrac);
 
+  const selectedMachineId = placing?.selectedMachineId ?? null;
+  const previewRotation = placing?.previewRotation ?? 0;
+  const buildOffset = placing?.buildOffset ?? null;
+
   const ghostConfig = useMemo(
-    () => (mode === GameMode.BUILD && selectedMachineId) ? MACHINES.find(m => m.id === selectedMachineId) : null,
-    [mode, selectedMachineId],
+    () => (isBuild && selectedMachineId) ? MACHINES.find(m => m.id === selectedMachineId) : null,
+    [isBuild, selectedMachineId],
   );
 
   // 用 buildOffset 计算实际 ghost 整格位置：round(鼠标小数位置 − 偏移)

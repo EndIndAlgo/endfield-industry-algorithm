@@ -1,7 +1,6 @@
 import React, { useRef, useCallback, useMemo, memo, useState } from 'react';
 import { Icon } from '@iconify/react';
 import classNames from 'classnames';
-import { GameMode } from '@/types';
 import type { PlacedMachine } from '@/types';
 import { getMachineConfig } from '@/config/machines';
 import { useGameStore } from '@/store/gameStore';
@@ -50,7 +49,7 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
     const handleClick = useCallback((e: React.MouseEvent) => {
         const s = useGameStore.getState();
         // 连接模式下不阻止冒泡，让 Grid 统一处理
-        if (s.mode !== GameMode.CONVEYOR && s.mode !== GameMode.PIPE) {
+        if (s.modeState.kind !== 'WIRE') {
             e.stopPropagation();
         }
     }, []);
@@ -58,8 +57,8 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         if (e.button !== 0) return;
         const s = useGameStore.getState();
-        // 连接模式下不启动长按拾取
-        if (s.mode === GameMode.CONVEYOR || s.mode === GameMode.PIPE) return;
+        // 连线模式下不启动长按拾取
+        if (s.modeState.kind === 'WIRE') return;
 
         pressTimer.current = setTimeout(() => {
             const s = useGameStore.getState();

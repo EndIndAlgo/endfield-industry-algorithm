@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { MACHINES } from '@/config/machines';
-import { GameMode } from '@/types';
 import classNames from 'classnames';
 import { MousePointer2, ArrowRight, Waves, BoxSelect } from 'lucide-react';
 import { Tabs } from '@chakra-ui/react';
+import { selectIsBuildMode, selectIsDeviceSelectMode, selectSelectedMachineId } from '@/store/selectors';
 import './Toolbar.scss';
 
 const TABS = [
@@ -44,10 +44,18 @@ const MACHINE_GROUPS: Record<string, string[]> = {
 };
 
 export const Toolbar = () => {
-    const { selectedMachineId, selectMachine, mode, setMode } = useGameStore();
+    const selectMachine = useGameStore(s => s.selectMachine);
+    const setMode = useGameStore(s => s.setMode);
     const [activeTab, setActiveTab] = useState('production');
 
     const filteredMachines = MACHINES.filter(m => MACHINE_GROUPS[activeTab]?.includes(m.id));
+
+    // 窄 selector：仅在 BUILD placing / wire type / DEVICE_SELECT 变更时重渲染
+    const isBuild = useGameStore(selectIsBuildMode);
+    const isWireSolid = useGameStore(s => s.modeState.kind === 'WIRE' && s.modeState.portType === 'Solid');
+    const isWireLiquid = useGameStore(s => s.modeState.kind === 'WIRE' && s.modeState.portType === 'Liquid');
+    const isDeviceSelect = useGameStore(selectIsDeviceSelectMode);
+    const selectedMachineId = useGameStore(selectSelectedMachineId);
 
     return (
         <div className="toolbar-container">
@@ -86,29 +94,29 @@ export const Toolbar = () => {
             <div className="toolbar">
                 <div className="section">
                     <button
-                        className={classNames('tool-btn', { active: mode === GameMode.BUILD && !selectedMachineId })}
+                        className={classNames('tool-btn', { active: isBuild && !selectedMachineId })}
                         onClick={() => selectMachine(null)}
                         title="Select / Move"
                     >
                         <MousePointer2 size={24} />
                     </button>
                     <button
-                        className={classNames('tool-btn', { active: mode === GameMode.CONVEYOR })}
-                        onClick={() => setMode(mode === GameMode.CONVEYOR ? GameMode.BUILD : GameMode.CONVEYOR)}
+                        className={classNames('tool-btn', { active: isWireSolid })}
+                        onClick={() => setMode(isWireSolid ? 'BUILD' : 'WIRE_SOLID')}
                         title="传送带模式 (E)"
                     >
                         <ArrowRight size={24} />
                     </button>
                     <button
-                        className={classNames('tool-btn', { active: mode === GameMode.PIPE })}
-                        onClick={() => setMode(mode === GameMode.PIPE ? GameMode.BUILD : GameMode.PIPE)}
+                        className={classNames('tool-btn', { active: isWireLiquid })}
+                        onClick={() => setMode(isWireLiquid ? 'BUILD' : 'WIRE_LIQUID')}
                         title="管道模式 (Q)"
                     >
                         <Waves size={24} />
                     </button>
                     <button
-                        className={classNames('tool-btn', { active: mode === GameMode.DEVICE_SELECT })}
-                        onClick={() => setMode(mode === GameMode.DEVICE_SELECT ? GameMode.BUILD : GameMode.DEVICE_SELECT)}
+                        className={classNames('tool-btn', { active: isDeviceSelect })}
+                        onClick={() => setMode(isDeviceSelect ? 'BUILD' : 'DEVICE_SELECT')}
                         title="Box Selection Mode (X)"
                     >
                         <BoxSelect size={24} />
