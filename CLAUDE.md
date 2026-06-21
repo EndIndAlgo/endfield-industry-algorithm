@@ -109,7 +109,7 @@ src/
 │   ├── IconButton.scss              # 圆形36px按钮、tooltip淡入动画、::before箭头
 │   ├── OperationHints.tsx            # 操作提示面板：根据mode/hasSelection/selectedMachineId动态显示快捷键组合(含鼠标图标)
 │   ├── OperationHints.scss          # 绝对定位右侧居中、JetBrains Mono字体、键盘图标样式
-│   ├── LoadingScreen.tsx             # 启动画面：延迟动态 import assets/items 所有图片→进度条→黄色展开动画→淡出
+│   ├── LoadingScreen.tsx             # 启动画面：纯 CSS 动画（黄条填充→展开→淡出），无网络依赖
 │   ├── LoadingScreen.scss           # 暗底+黄色竖条展开动画(cubic-bezier)、左下角百分比+右上角loading图
 │   ├── ErrorBoundary.tsx             # React 错误边界类组件：包裹所有路由页面，捕获渲染错误并显示回退 UI
 │   └── ui/
@@ -117,10 +117,9 @@ src/
 │       └── About.scss               # .member-icon-btn hover变黄
 ├── assets/
 │   ├── logo-header.png               # Header 用的 96px 高 logo（2x retina）
-│   ├── loading.png                   # 加载画面右侧图(240px)
 │   ├── members/                      # 团队成员头像 (eddy3721.gif, tata.png)
-│   ├── machines/                     # 机器图标 .webp (以machine.id命名, 如pco.webp)
-│   └── items/                        # 材料图标 (item_0~item_131, 延迟加载不阻塞启动)
+│   └── machines/                     # 机器图标 .webp (以machine.id命名, 如pco.webp)
+├── _archive/                         # 已移除的旧资产（fonts/, items/, logo.png）
 ```
 
 ## 核心架构
@@ -513,8 +512,8 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 
 ### 🟢 低优先级（锦上添花）
 
-**❌ #7 — `assets/items/` 132 个图标 vs 76 种材料 — 搁置**
-多了 56 个未使用的 webp 文件，但需要游戏数据人工对照才能准确清理，盲目删除风险大于收益。
+**✅ #7 — `assets/items/` 132 个图标 vs 76 种材料 — 已完成 (2026-06-22)**
+图标已移至 `_archive/items/`（git 历史可恢复），LoadingScreen 移除预加载逻辑。
 
 **✅ #8 — `index.html` 缺 meta 标签 — 已完成 (2026-06-19)**
 已添加 `description`、`og:title/description/image/type`、`theme-color` meta 标签
@@ -546,7 +545,7 @@ Phase 5 ─ 依赖 Phase 3+4 代码稳定
 | 2 | 字体子集化 | public/fonts/ | 30min | ✅ 已完成 |
 | 4 | 删幽灵 Inter | index.css | 30s | ✅ 已完成 |
 | 6 | eslint-disable 消除 | App.tsx + ShareModal.tsx | 30min | ✅ 已完成 |
-| 7 | 多余图标清理 | assets/items/ | 20min | 🔵 搁置 |
+| 7 | 多余图标清理 | assets/items/ | 20min | ✅ 已完成 |
 | 8 | 补 meta 标签 | index.html | 5min | ✅ 已完成 |
 | 9 | vite 分包 | vite.config.ts | 10min | ❌ 不采用 |
 

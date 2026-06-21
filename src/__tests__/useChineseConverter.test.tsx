@@ -21,13 +21,14 @@ const TestComponent = () => {
 
 describe('useChineseConverter', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     useSettingsStore.setState({ language: 'zh-TW' });
     document.documentElement.lang = '';
-    // 清理 body
     document.body.innerHTML = '';
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -36,14 +37,14 @@ describe('useChineseConverter', () => {
     await act(async () => {
       render(<TestComponent />);
     });
-    // opencc-js 的 Converter 不应被调用（zh-TW 模式下不从 tw→cn）
+    // 快进 1.2s 延迟
+    await act(async () => { vi.advanceTimersByTime(1500); });
     const OpenCC = await import('opencc-js');
     expect(OpenCC.Converter).not.toHaveBeenCalled();
   });
 
   it('zh-CN 模式触发 tw→cn 转换', async () => {
     useSettingsStore.setState({ language: 'zh-CN' });
-    // 设置 lang 为 zh-CN 模拟已在 CN 模式
     document.documentElement.lang = 'zh-TW';
     document.body.innerHTML = '<div data-testid="content">設定 語言</div>';
 
@@ -51,8 +52,10 @@ describe('useChineseConverter', () => {
       render(<TestComponent />);
     });
 
-    // 等待动态 import + DOM 遍历完成
-    await new Promise(r => setTimeout(r, 100));
+    // 快进延迟，触发 setTimeout → import → Converter
+    await act(async () => { vi.advanceTimersByTime(1500); });
+    // 再 tick 让 import() 的微任务完成
+    await act(async () => { await Promise.resolve(); });
 
     const OpenCC = await import('opencc-js');
     expect(OpenCC.Converter).toHaveBeenCalledWith({ from: 'tw', to: 'cn' });
@@ -66,7 +69,9 @@ describe('useChineseConverter', () => {
       render(<TestComponent />);
     });
 
-    await new Promise(r => setTimeout(r, 100));
+    await act(async () => { vi.advanceTimersByTime(1500); });
+    await act(async () => { await Promise.resolve(); });
+
     expect(document.documentElement.lang).toBe('zh-CN');
   });
 
@@ -78,7 +83,9 @@ describe('useChineseConverter', () => {
       render(<TestComponent />);
     });
 
-    await new Promise(r => setTimeout(r, 100));
+    await act(async () => { vi.advanceTimersByTime(1500); });
+    await act(async () => { await Promise.resolve(); });
+
     expect(document.documentElement.lang).toBe('zh-TW');
   });
 });

@@ -1,12 +1,21 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSettingsStore } from '@/store/settingsStore';
 
+/**
+ * 首屏延迟（ms）—— 等 LoadingScreen 动画完成后再加载 opencc-js 词典，
+ * 避免 482KB 词典与主 bundle 竞争首屏带宽。
+ */
+const CONVERSION_DELAY = 1200;
+
 export const useChineseConverter = () => {
     const { language } = useSettingsStore();
     const [isConverting, setIsConverting] = useState(false);
     const observerRef = useRef<MutationObserver | null>(null);
 
     useEffect(() => {
+        let cancelled = false;
+        const timerIds: number[] = [];
+
         const convertPage = async () => {
             // Clean up previous observer
             if (observerRef.current) {
@@ -17,6 +26,15 @@ export const useChineseConverter = () => {
             if (language === 'zh-CN') {
                 setIsConverting(true);
                 try {
+                    // 延迟加载词典，让首屏渲染和 LoadingScreen 动画先完成
+                    if (CONVERSION_DELAY > 0) {
+                        await new Promise<void>(resolve => {
+                            const id = window.setTimeout(resolve, CONVERSION_DELAY);
+                            timerIds.push(id);
+                        });
+                    }
+                    if (cancelled) return;
+
                     const OpenCC = await import('opencc-js');
                     const converter = OpenCC.Converter({ from: 'tw', to: 'cn' });
 
@@ -78,6 +96,14 @@ export const useChineseConverter = () => {
                 if (document.documentElement.lang === 'zh-CN') {
                     setIsConverting(true);
                     try {
+                        if (CONVERSION_DELAY > 0) {
+                            await new Promise<void>(resolve => {
+                                const id = window.setTimeout(resolve, CONVERSION_DELAY);
+                                timerIds.push(id);
+                            });
+                        }
+                        if (cancelled) return;
+
                         const OpenCC = await import('opencc-js');
                         // Use 'cn' -> 'tw' to restore
                         const converter = OpenCC.Converter({ from: 'cn', to: 'tw' });
@@ -117,6 +143,8 @@ export const useChineseConverter = () => {
         convertPage();
 
         return () => {
+            cancelled = true;
+            timerIds.forEach(id => window.clearTimeout(id));
             if (observerRef.current) {
                 observerRef.current.disconnect();
             }

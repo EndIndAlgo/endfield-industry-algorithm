@@ -1,92 +1,62 @@
 import React, { useEffect, useState } from 'react';
 import './LoadingScreen.scss';
-// 使用 SVG logo 替代原 360KB 的 loading.png
 
 interface LoadingScreenProps {
     onComplete: () => void;
 }
 
+/**
+ * 启动画面 — 纯 CSS 动画，不阻塞首屏。
+ * 原预加载 132 张 item 图片的逻辑已移除（图片全项目零引用）。
+ */
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onComplete }) => {
+    const [phase, setPhase] = useState<'fill' | 'expand' | 'fade'>('fill');
     const [progress, setProgress] = useState(0);
-    const [isExpanded, setIsExpanded] = useState(false);
-    const [isFading, setIsFading] = useState(false);
 
     useEffect(() => {
-        const loadAssets = async () => {
-            // 延迟加载 assets/items 所有图片，避免 eager 阻塞启动
-            const imageModules = import.meta.glob<{ default: string }>(
-                '../assets/items/*.{png,jpg,jpeg,svg,webp}',
-                { eager: false, query: '?url', import: 'default' },
-            );
-            const paths = Object.keys(imageModules);
-            const totalAssets = paths.length;
-
-            if (totalAssets === 0) {
-                setProgress(100);
-                return;
+        // 阶段 1：0→100% 动画计数，200ms（requestAnimationFrame 驱动）
+        const start = performance.now();
+        const duration = 200;
+        let rafId: number;
+        const tick = (now: number) => {
+            const p = Math.min((now - start) / duration * 100, 100);
+            setProgress(Math.round(p));
+            if (p < 100) {
+                rafId = requestAnimationFrame(tick);
             }
-
-            let loadedCount = 0;
-
-            const updateProgress = () => {
-                loadedCount++;
-                setProgress(Math.round((loadedCount / totalAssets) * 100));
-            };
-
-            // 逐张异步 import 并通过 new Image() 触发浏览器缓存
-            await Promise.all(paths.map(async (path) => {
-                try {
-                    const url = (await imageModules[path]()) as unknown as string;
-                    await new Promise<void>((resolve) => {
-                        const img = new Image();
-                        img.src = url;
-                        img.onload = () => { updateProgress(); resolve(); };
-                        img.onerror = () => { updateProgress(); resolve(); };
-                    });
-                } catch {
-                    updateProgress();
-                }
-            }));
         };
+        rafId = requestAnimationFrame(tick);
 
-        loadAssets();
-    }, []);
+        const expandTimer = setTimeout(() => {
+            setPhase('expand');
 
-    useEffect(() => {
-        if (progress === 100) {
-            // 在 100% 時等待片刻然後展開
-            const expandTimer = setTimeout(() => {
-                setIsExpanded(true);
+            const fadeTimer = setTimeout(() => {
+                setPhase('fade');
 
-                // 展開後淡出
-                const fadeTimer = setTimeout(() => {
-                    setIsFading(true);
-
-                    // 淡出後完成
-                    const completeTimer = setTimeout(() => {
-                        onComplete();
-                    }, 500); // 0.5秒淡出持續時間
-                    return () => clearTimeout(completeTimer);
-
-                }, 600); // 等待展開動畫 (略長於 0.5 秒)
-                return () => clearTimeout(fadeTimer);
-
-            }, 200);
-            return () => clearTimeout(expandTimer);
-        }
-    }, [progress, onComplete]);
+                const completeTimer = setTimeout(() => {
+                    onComplete();
+                }, 200);
+                return () => clearTimeout(completeTimer);
+            }, 250);
+            return () => clearTimeout(fadeTimer);
+        }, 220);
+        return () => {
+            clearTimeout(expandTimer);
+            cancelAnimationFrame(rafId);
+        };
+    }, [onComplete]);
 
     return (
-        <div className={`loading-screen ${isFading ? 'fade-out' : ''}`}>
+        <div className={`loading-screen ${phase === 'fade' ? 'fade-out' : ''}`}>
             <div
-                className={`yellow-bar ${isExpanded ? 'expanded' : ''}`}
+                className={`yellow-bar ${phase !== 'fill' ? 'expanded' : ''}`}
                 style={{ height: `${progress}%` }}
-            ></div>
+            />
 
             <div className="content-container">
                 <div className="left-section">
                     <div className="progress-text">
-                        <span className="number">{Math.floor(progress)}</span>
+                        <span className="number">{progress}</span>
                         <span className="percent">%</span>
                     </div>
                     <div className="loading-label">加载中...</div>
