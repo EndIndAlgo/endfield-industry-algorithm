@@ -416,7 +416,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                 movingMachinesSnapshot: [],
                 movingConnectionsSnapshot: [],
                 moveAnchor: null,
-                mode: GameMode.BUILD,
+                mode: GameMode.DEVICE_SELECT,
                 selectedMachineIds: placedMachines.map(m => m.id),
                 selectedConnectionIds: finalPlacedConns.map(c => c.id),
                 isCopying: false
