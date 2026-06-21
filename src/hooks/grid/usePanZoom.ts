@@ -34,6 +34,16 @@ export function usePanZoom() {
     return { x, y };
   }, []);
 
+  /** 屏幕坐标 → 小数网格坐标（不取整，用于拾取偏移计算） */
+  const getGridPosFrac = useCallback((e: { clientX: number; clientY: number }): Point => {
+    if (!containerRef.current) return { x: 0, y: 0 };
+    const rect = containerRef.current.getBoundingClientRect();
+    const s = useGameStore.getState();
+    const x = ((e.clientX - rect.left) - s.pan.x) / (GRID_SIZE * s.zoom);
+    const y = ((e.clientY - rect.top) - s.pan.y) / (GRID_SIZE * s.zoom);
+    return { x, y };
+  }, []);
+
   /** 开始平移（中键按下） */
   const startPan = useCallback((e: { clientX: number; clientY: number }) => {
     setIsPanning(true);
@@ -82,6 +92,7 @@ export function usePanZoom() {
     containerRef,
     isPanning,
     getGridPos,
+    getGridPosFrac,
     handleWheel,
     startPan,
     movePan,

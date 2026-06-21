@@ -27,7 +27,7 @@ interface UseGridEventsReturn {
  */
 export const useGridEvents = (): UseGridEventsReturn => {
   // ── 共享基础设施 ──
-  const { containerRef, isPanning, getGridPos, handleWheel, startPan, movePan, stopPan } =
+  const { containerRef, isPanning, getGridPos, getGridPosFrac, handleWheel, startPan, movePan, stopPan } =
     usePanZoom();
 
   // ── hover 状态（React state 驱动渲染，ref 供闭包读取最新值） ──
@@ -69,9 +69,10 @@ export const useGridEvents = (): UseGridEventsReturn => {
     const pos = getGridPos(e);
     setHoverPos(pos);
     hoverPosRef.current = pos;
+    useGameStore.getState().setHoverPosFrac(getGridPosFrac(e));
     wire.onMouseMove(pos);
     select.onMouseMove(pos, e);
-  }, [isPanning, getGridPos, movePan, wire, select]);
+  }, [isPanning, getGridPos, getGridPosFrac, movePan, wire, select]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (isPanning) return;
@@ -92,7 +93,10 @@ export const useGridEvents = (): UseGridEventsReturn => {
 
     // ── 建造模式 ──
     if (s.mode === GameMode.BUILD && s.selectedMachineId) {
-      const pos = getGridPos(e);
+      const { pickupOffset, hoverPosFrac } = s;
+      const pos = pickupOffset && hoverPosFrac
+        ? { x: Math.round(hoverPosFrac.x - pickupOffset.x), y: Math.round(hoverPosFrac.y - pickupOffset.y) }
+        : getGridPos(e);
       s.takeSnapshot();
       s.addMachine(s.selectedMachineId, pos.x, pos.y, s.previewRotation);
       if (!e.ctrlKey) {

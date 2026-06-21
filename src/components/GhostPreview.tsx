@@ -25,20 +25,31 @@ export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => 
   const connections = useGameStore(s => s.connections);
   const gridWidth = useGameStore(s => s.gridWidth);
   const gridHeight = useGameStore(s => s.gridHeight);
+  const pickupOffset = useGameStore(s => s.pickupOffset);
+  const hoverPosFrac = useGameStore(s => s.hoverPosFrac);
 
   const ghostConfig = useMemo(
     () => (mode === GameMode.BUILD && selectedMachineId) ? MACHINES.find(m => m.id === selectedMachineId) : null,
     [mode, selectedMachineId],
   );
 
+  // 拾取偏移后的实际 ghost 整格位置：round(鼠标小数位置 − 拾取偏移)
+  const ghostPos = useMemo(() => {
+    if (!pickupOffset || !hoverPosFrac) return hoverPos;
+    return {
+      x: Math.round(hoverPosFrac.x - pickupOffset.x),
+      y: Math.round(hoverPosFrac.y - pickupOffset.y),
+    };
+  }, [hoverPosFrac, pickupOffset, hoverPos]);
+
   const ghostData = useMemo(() => {
-    if (!ghostConfig || !hoverPos) return null;
+    if (!ghostConfig || !ghostPos) return null;
 
     const dims = getRotatedDimensions(ghostConfig.width, ghostConfig.height, previewRotation);
     const ghostWidth = dims.width;
     const ghostHeight = dims.height;
 
-    const candidate = { x: hoverPos.x, y: hoverPos.y, width: ghostWidth, height: ghostHeight };
+    const candidate = { x: ghostPos.x, y: ghostPos.y, width: ghostWidth, height: ghostHeight };
     const isOutOfBounds = candidate.x < 0 || candidate.y < 0 ||
       candidate.x + candidate.width > gridWidth ||
       candidate.y + candidate.height > gridHeight;
@@ -53,9 +64,9 @@ export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => 
     ).map((p, i) => ({ ...p, isInput: i < ghostConfig.inputs.length }));
 
     return { ghostWidth, ghostHeight, isGhostInvalid, ghostPorts };
-  }, [ghostConfig, hoverPos, previewRotation, machines, connections, gridWidth, gridHeight]);
+  }, [ghostConfig, ghostPos, previewRotation, machines, connections, gridWidth, gridHeight]);
 
-  if (!ghostConfig || !hoverPos || !ghostData) return null;
+  if (!ghostConfig || !ghostPos || !ghostData) return null;
 
   const { ghostWidth, ghostHeight, isGhostInvalid, ghostPorts } = ghostData;
 
@@ -65,8 +76,8 @@ export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => 
       {ghostConfig.supplyDistance > 0 && (
         <div
           style={{
-            left: (hoverPos.x - ghostConfig.supplyDistance) * GRID_SIZE,
-            top: (hoverPos.y - ghostConfig.supplyDistance) * GRID_SIZE,
+            left: (ghostPos.x - ghostConfig.supplyDistance) * GRID_SIZE,
+            top: (ghostPos.y - ghostConfig.supplyDistance) * GRID_SIZE,
             width: (ghostWidth + 2 * ghostConfig.supplyDistance) * GRID_SIZE,
             height: (ghostHeight + 2 * ghostConfig.supplyDistance) * GRID_SIZE,
             position: 'absolute',
@@ -82,8 +93,8 @@ export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => 
       <div
         className={classNames('machine-ghost', { 'invalid-placement': isGhostInvalid })}
         style={{
-          left: hoverPos.x * GRID_SIZE,
-          top: hoverPos.y * GRID_SIZE,
+          left: ghostPos.x * GRID_SIZE,
+          top: ghostPos.y * GRID_SIZE,
           width: ghostWidth * GRID_SIZE,
           height: ghostHeight * GRID_SIZE,
           zIndex: machineZ(Z_INDEX.GHOST_BASE, getMachineMask(ghostConfig.id)),
@@ -92,7 +103,7 @@ export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => 
 
       {/* Ghost 端口箭头 */}
       {ghostPorts.map((p: PortConfig & { isInput?: boolean }, i: number) => {
-        const pos = getGhostArrowPosition(p, hoverPos);
+        const pos = getGhostArrowPosition(p, ghostPos);
 
         return (
           <div

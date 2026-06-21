@@ -22,6 +22,9 @@ export interface MachinesSlice {
     selectedMachineId: string | null;
     previewRotation: Direction;
     movingMachineBackup: PlacedMachine | null;
+    pickupOffset: Point | null;
+    hoverPosFrac: Point | null;
+    setHoverPosFrac: (pos: Point | null) => void;
     setMode: (mode: GameMode) => void;
     selectMachine: (machineId: string | null) => void;
     rotatePreview: () => void;

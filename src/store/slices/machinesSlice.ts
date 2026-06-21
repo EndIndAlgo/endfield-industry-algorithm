@@ -12,6 +12,10 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
     selectedMachineId: null,
     previewRotation: 0,
     movingMachineBackup: null,
+    pickupOffset: null,
+    hoverPosFrac: null,
+
+    setHoverPosFrac: (pos) => set({ hoverPosFrac: pos }),
 
     setMode: (mode) => {
         const current = get().mode;
@@ -82,14 +86,20 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
     },
 
     pickupMachine: (instanceId) => {
-        const { machines } = get();
+        const { machines, hoverPosFrac } = get();
         const machine = machines.find(m => m.id === instanceId);
         if (!machine) return;
+
+        // 记录拾取时鼠标在机器内的相对位置（小数偏移）
+        const offset = hoverPosFrac
+            ? { x: hoverPosFrac.x - machine.x, y: hoverPosFrac.y - machine.y }
+            : { x: 0, y: 0 };
 
         set(() => ({
             movingMachineBackup: machine,
             selectedMachineId: machine.machineId,
             previewRotation: machine.rotation,
+            pickupOffset: offset,
             mode: GameMode.BUILD,
             machines: machines.filter(m => m.id !== instanceId),
         }));
@@ -111,6 +121,7 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
             set(state => ({
                 machines: [...state.machines, movingMachineBackup],
                 movingMachineBackup: null,
+                pickupOffset: null,
                 selectedMachineId: null,
                 mode: GameMode.BUILD
             }));
