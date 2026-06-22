@@ -468,6 +468,7 @@ Bit : 7──2   2         1         0
 ### 🔵 搁置
 
 - **`commitConnection` 重构** — 当前耦合在 store action 内（交叉检测+桥生成+连线分割+合并约 230 行），等待 ModeState 重构稳定后再拆为纯函数
+- **`selectionSlice.commitBatchMove` 重构** — 约 245 行，交叉检测+桥生成+连线分割全交织在 store action 中，与 `commitConnection` 逻辑高度重复，应提取为共享纯函数
 - **分享格式版本字节** — 当前未上线，未来重新设计分享格式时一并处理
 - **撤销历史不捕获视图状态** — 设计决策：撤销只还原数据，保留用户当前视口位置
 - **历史快照不去重** — 设计决策：去重引入比较开销，50 步上限已足够防止内存问题
@@ -475,11 +476,17 @@ Bit : 7──2   2         1         0
 - **连线前端显示优化** — 优化 Connection 的前端显示逻辑，具体方向待进一步明确（2026-06-20 口述）
 - **重复材料图标** — 需游戏数据人工对照
 - **E2E 测试 / a11y / 移动端 / 国际化** — 不在当前范围内
-
 ### 🟢 低优先级（锦上添花）
 
 - `src/assets/loading.png` 368KB 无引用，待确认后移至 `_archive/`
 - `connectionSlice.ts` 402 行（`commitConnection` 内部 230 行），仍可拆为纯函数，等逻辑稳定后处理
+- `Header.tsx:20` `useGameStore()` 无 selector 解构 → 订阅整个 store，应改用单独 `useGameStore(s => s.xxx)` 调用
+- `BatchMovePreview.tsx:54` 冗余守卫 — `show` 已判 `kind === 'MOVE_SELECTION'`，第 54 行再判一次
+- `selectors.ts:51` `selectIsPickup` 用 `?.movingMachineBackup !== undefined` 代理 `placing !== null` 检查，语义不直观
+- `BlueprintList.tsx:63` `zIndex="2000"` 硬编码绕过 `zIndex.ts` 常量系统
+- `machineUtils.ts` `getMachineMask`/`getMachineCellMask` 每次 `MACHINES.find()` O(n)，应预建 `Map`
+- `IconButton.scss:29` `.icon-svg { transform: scale(3); }` CSS 缩放导致低分辨率，应改用原生尺寸
+- `Header.tsx:16-17` import 语句在组件函数体下方，应移到文件顶部
 
 ---
 

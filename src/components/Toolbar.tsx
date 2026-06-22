@@ -4,7 +4,7 @@ import { MACHINES } from '@/config/machines';
 import classNames from 'classnames';
 import { MousePointer2, ArrowRight, Waves, BoxSelect } from 'lucide-react';
 import { Tabs } from '@chakra-ui/react';
-import { selectIsBuildMode, selectIsDeviceSelectMode, selectSelectedMachineId } from '@/store/selectors';
+import { selectIsBuildMode, selectIsDeviceSelectMode, selectSelectedMachineId, selectIsWireSolid, selectIsWireLiquid } from '@/store/selectors';
 import './Toolbar.scss';
 
 const TABS = [
@@ -52,8 +52,8 @@ export const Toolbar = () => {
 
     // 窄 selector：仅在 BUILD placing / wire type / DEVICE_SELECT 变更时重渲染
     const isBuild = useGameStore(selectIsBuildMode);
-    const isWireSolid = useGameStore(s => s.modeState.kind === 'WIRE' && s.modeState.portType === 'Solid');
-    const isWireLiquid = useGameStore(s => s.modeState.kind === 'WIRE' && s.modeState.portType === 'Liquid');
+    const isWireSolid = useGameStore(selectIsWireSolid);
+    const isWireLiquid = useGameStore(selectIsWireLiquid);
     const isDeviceSelect = useGameStore(selectIsDeviceSelectMode);
     const selectedMachineId = useGameStore(selectSelectedMachineId);
 

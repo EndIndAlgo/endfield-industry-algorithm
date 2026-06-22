@@ -8,7 +8,7 @@ interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> 
     tooltip?: string;
 }
 
-export const IconButton: React.FC<IconButtonProps> = ({ icon, tooltip, className, ...props }) => {
+export const TooltipIconButton: React.FC<IconButtonProps> = ({ icon, tooltip, className, ...props }) => {
     return (
         <button className={classNames('icon-button', className)} {...props}>
             <Icon icon={icon} className="icon-svg" width="100%" height="100%" />

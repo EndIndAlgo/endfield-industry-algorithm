@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import './Header.scss';
 import logoIcon from '@/assets/logo-header.png';
 
-import { IconButton } from './IconButton';
+import { TooltipIconButton } from './IconButton';
 
 import { GRID_PRESETS } from '@/config/constants';
 import { useGameStore } from '@/store/gameStore';
@@ -65,12 +65,12 @@ export const Header = ({ onSave, onOpen }: HeaderProps) => {
                     </Select.Root>
                 </div>
                 <div className="actions">
-                    <IconButton icon="material-symbols:fit-screen" tooltip="重置视图" onClick={() => { setPan({ x: 0, y: 0 }); setZoom(1); }} />
-                    <IconButton icon="material-symbols:save" tooltip="保存" onClick={onSave} />
-                    <IconButton icon="typcn:home" tooltip="蓝图列表" onClick={onOpen} />
-                    <IconButton icon="material-symbols:share" tooltip="分享" onClick={() => { setIsShareOpen(true); setShareKey(k => k + 1); }} />
-                    <IconButton icon="material-symbols:settings" tooltip="设置" onClick={() => setUiView('settings')} />
-                    <IconButton icon="material-symbols:info-i-rounded" tooltip="关于" onClick={() => setUiView('about')} />
+                    <TooltipIconButton icon="material-symbols:fit-screen" tooltip="重置视图" onClick={() => { setPan({ x: 0, y: 0 }); setZoom(1); }} />
+                    <TooltipIconButton icon="material-symbols:save" tooltip="保存" onClick={onSave} />
+                    <TooltipIconButton icon="typcn:home" tooltip="蓝图列表" onClick={onOpen} />
+                    <TooltipIconButton icon="material-symbols:share" tooltip="分享" onClick={() => { setIsShareOpen(true); setShareKey(k => k + 1); }} />
+                    <TooltipIconButton icon="material-symbols:settings" tooltip="设置" onClick={() => setUiView('settings')} />
+                    <TooltipIconButton icon="material-symbols:info-i-rounded" tooltip="关于" onClick={() => setUiView('about')} />
                 </div>
             </div>
             {isShareOpen && <ShareModal key={shareKey} onClose={() => setIsShareOpen(false)} />}

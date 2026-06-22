@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { BlueprintSlice, GameState } from './types';
 import { getBoundingBox } from '@/utils/grid';
+import { GRID_PRESETS } from '@/config/constants';
 
 export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlice> = (set) => ({
     uiView: 'editor',
@@ -50,8 +51,8 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
 
         const contentW = bb.width;
         const contentH = bb.height;
-        const GRID_PRESETS = [24, 32, 40, 55, 70];
-        const newSize = GRID_PRESETS.find(s => s >= Math.max(contentW, contentH) + 4) || 70;
+        const presetWidths = [...new Set(GRID_PRESETS.map(p => p.width))];
+        const newSize = presetWidths.find(s => s >= Math.max(contentW, contentH) + 4) || 70;
 
         const anchor = { x: bb.minX, y: bb.minY };
 

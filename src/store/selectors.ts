@@ -52,6 +52,14 @@ export const selectIsPickup = (s: GameState) =>
 
 // ── WIRE 子状态 ──
 
+/** 是否在 WIRE Solid（传送带）模式 */
+export const selectIsWireSolid = (s: GameState) =>
+    s.modeState.kind === 'WIRE' && s.modeState.portType === 'Solid';
+
+/** 是否在 WIRE Liquid（管道）模式 */
+export const selectIsWireLiquid = (s: GameState) =>
+    s.modeState.kind === 'WIRE' && s.modeState.portType === 'Liquid';
+
 /** WIRE 模式的 portType（Solid/Liquid），非 WIRE 模式返回 null */
 export const selectWirePortType = (s: GameState) =>
     s.modeState.kind === 'WIRE' ? s.modeState.portType : null;

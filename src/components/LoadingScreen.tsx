@@ -27,21 +27,25 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onComplete }) => {
         };
         rafId = requestAnimationFrame(tick);
 
+        let fadeTimer: ReturnType<typeof setTimeout>;
+        let completeTimer: ReturnType<typeof setTimeout>;
+
         const expandTimer = setTimeout(() => {
             setPhase('expand');
 
-            const fadeTimer = setTimeout(() => {
+            fadeTimer = setTimeout(() => {
                 setPhase('fade');
 
-                const completeTimer = setTimeout(() => {
+                completeTimer = setTimeout(() => {
                     onComplete();
                 }, 200);
-                return () => clearTimeout(completeTimer);
             }, 250);
-            return () => clearTimeout(fadeTimer);
         }, 220);
+
         return () => {
             clearTimeout(expandTimer);
+            clearTimeout(fadeTimer);
+            clearTimeout(completeTimer);
             cancelAnimationFrame(rafId);
         };
     }, [onComplete]);
