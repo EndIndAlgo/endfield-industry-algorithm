@@ -2,9 +2,12 @@ import type { Direction, PortConfig, PlacedMachine, MachineConfig } from '@/type
 import { MASK_REGULAR_MACHINE } from '@/types';
 import { MACHINES } from '@/config/machines';
 
+/** 机器 ID → 配置的 O(1) 查找表 */
+const machineMap = new Map(MACHINES.map(m => [m.id, m]));
+
 /** 从配置读取机器渲染掩码（全同模式返回原值，差异模式返回 max） */
 export const getMachineMask = (machineId: string): number => {
-    const cfg = MACHINES.find(c => c.id === machineId);
+    const cfg = machineMap.get(machineId);
     if (!cfg) return MASK_REGULAR_MACHINE;
     const m = cfg.mask;
     if (typeof m === 'number') return m;
@@ -15,7 +18,7 @@ export const getMachineMask = (machineId: string): number => {
 
 /** 从配置读取机器指定格的碰撞掩码 */
 export const getMachineCellMask = (machineId: string, relX: number, relY: number): number => {
-    const cfg = MACHINES.find(c => c.id === machineId);
+    const cfg = machineMap.get(machineId);
     if (!cfg) return 0;
     const m = cfg.mask;
     if (typeof m === 'number') return m;

@@ -47,11 +47,7 @@ const BatchMoveConnectionsSVG: React.FC<{ connections: Connection[]; portType: P
 export const BatchMovePreview: React.FC<BatchMovePreviewProps> = memo(({ hoverPos }) => {
   const modeState = useGameStore(s => s.modeState);
 
-  const show = modeState.kind === 'MOVE_SELECTION' && modeState.moveAnchor && hoverPos;
-  if (!show) return null;
-
-  // Only access MOVE_SELECTION fields when we know we're in that mode
-  if (modeState.kind !== 'MOVE_SELECTION') return null;
+  if (modeState.kind !== 'MOVE_SELECTION' || !modeState.moveAnchor || !hoverPos) return null;
   const { moveAnchor, movingMachinesSnapshot, movingConnectionsSnapshot } = modeState;
 
   const offsetX = hoverPos!.x - moveAnchor!.x;

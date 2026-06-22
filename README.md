@@ -182,7 +182,7 @@ src/
 │   └── useChineseConverter.test.tsx # 繁简转换测试
 └── assets/
     ├── logo-header.png              # Header 用 logo（96px 高，2x retina）
-    ├── loading.png                  # 368KB（未使用，待清理）
+
     ├── members/                     # 团队成员头像
     └── machines/                    # 机器图标 .webp（24 台）
 

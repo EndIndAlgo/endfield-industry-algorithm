@@ -119,7 +119,7 @@ src/
 │       └── About.scss               # .member-icon-btn hover变黄
 ├── assets/
 │   ├── logo-header.png               # Header 用的 96px 高 logo（2x retina）
-│   ├── loading.png                   # 368KB（未使用，待清理）
+
 │   ├── members/                      # 团队成员头像 (eddy3721.gif, tata.png)
 │   └── machines/                     # 机器图标 .webp (以machine.id命名, 如pco.webp)
 ├── _archive/                         # 已移除的旧资产（fonts/NaikaiFont-Bold.woff2, items/132张.webp, logo.png）
@@ -476,17 +476,12 @@ Bit : 7──2   2         1         0
 - **连线前端显示优化** — 优化 Connection 的前端显示逻辑，具体方向待进一步明确（2026-06-20 口述）
 - **重复材料图标** — 需游戏数据人工对照
 - **E2E 测试 / a11y / 移动端 / 国际化** — 不在当前范围内
+
 ### 🟢 低优先级（锦上添花）
 
-- `src/assets/loading.png` 368KB 无引用，待确认后移至 `_archive/`
 - `connectionSlice.ts` 402 行（`commitConnection` 内部 230 行），仍可拆为纯函数，等逻辑稳定后处理
-- `Header.tsx:20` `useGameStore()` 无 selector 解构 → 订阅整个 store，应改用单独 `useGameStore(s => s.xxx)` 调用
-- `BatchMovePreview.tsx:54` 冗余守卫 — `show` 已判 `kind === 'MOVE_SELECTION'`，第 54 行再判一次
-- `selectors.ts:51` `selectIsPickup` 用 `?.movingMachineBackup !== undefined` 代理 `placing !== null` 检查，语义不直观
-- `BlueprintList.tsx:63` `zIndex="2000"` 硬编码绕过 `zIndex.ts` 常量系统
-- `machineUtils.ts` `getMachineMask`/`getMachineCellMask` 每次 `MACHINES.find()` O(n)，应预建 `Map`
-- `IconButton.scss:29` `.icon-svg { transform: scale(3); }` CSS 缩放导致低分辨率，应改用原生尺寸
-- `Header.tsx:16-17` import 语句在组件函数体下方，应移到文件顶部
+
+
 
 ---
 

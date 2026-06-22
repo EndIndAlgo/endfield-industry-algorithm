@@ -3,6 +3,7 @@ import { Box, VStack, Text, Button, IconButton, Flex, Drawer, Badge } from '@cha
 import { FilePlus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { type Blueprint, deleteBlueprint, getBlueprints } from '@/utils/storage';
+import { Z_INDEX } from '@/config/zIndex';
 
 import { useGameStore } from '@/store/gameStore';
 
@@ -60,7 +61,7 @@ export const BlueprintList = ({ onSelect, onCreateNew, mode }: BlueprintListProp
             position="fixed"
             inset="0"
             bg="var(--gray-light)"
-            zIndex="2000"
+            zIndex={Z_INDEX.BLUEPRINT_LIST}
             p={8}
         >
             <Box borderLeft={"4px solid var(--gray-dark)"} pl={"8px"}>

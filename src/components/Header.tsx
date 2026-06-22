@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { createListCollection, Select } from '@chakra-ui/react';
 import { ChevronDown } from 'lucide-react';
 import './Header.scss';
 import logoIcon from '@/assets/logo-header.png';
 
 import { TooltipIconButton } from './IconButton';
+import { ShareModal } from './ShareModal';
 
 import { GRID_PRESETS } from '@/config/constants';
 import { useGameStore } from '@/store/gameStore';
@@ -13,11 +15,13 @@ interface HeaderProps {
     onOpen: () => void;
 }
 
-import { ShareModal } from './ShareModal';
-import { useState } from 'react';
-
 export const Header = ({ onSave, onOpen }: HeaderProps) => {
-    const { gridWidth, gridHeight, setGridSize, setUiView, setPan, setZoom } = useGameStore();
+    const gridWidth = useGameStore(s => s.gridWidth);
+    const gridHeight = useGameStore(s => s.gridHeight);
+    const setGridSize = useGameStore(s => s.setGridSize);
+    const setUiView = useGameStore(s => s.setUiView);
+    const setPan = useGameStore(s => s.setPan);
+    const setZoom = useGameStore(s => s.setZoom);
     const [isShareOpen, setIsShareOpen] = useState(false);
     const [shareKey, setShareKey] = useState(0);
 

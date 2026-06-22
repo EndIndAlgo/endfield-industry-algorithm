@@ -35,6 +35,7 @@ export const Z_INDEX = {
   OPERATION_HINTS: 2000,
   TOOLBAR: 2100,
   HEADER: 2200,
+  BLUEPRINT_LIST: 2300,
 
   // ── 工具提示 ──
   ICON_TOOLTIP: 3000,

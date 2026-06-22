@@ -48,7 +48,7 @@ export const selectBuildOffset = (s: GameState): Point | null =>
 
 /** 当前是否在拾取机器（仅在 BUILD 模式 + placing 非 null + backup 非 null 时） */
 export const selectIsPickup = (s: GameState) =>
-    s.modeState.kind === 'BUILD' && s.modeState.placing?.movingMachineBackup !== undefined && s.modeState.placing.movingMachineBackup !== null;
+    s.modeState.kind === 'BUILD' && s.modeState.placing !== null && s.modeState.placing.movingMachineBackup !== null;
 
 // ── WIRE 子状态 ──
 
