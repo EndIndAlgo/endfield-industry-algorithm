@@ -3,7 +3,7 @@ import type { ConnectionSlice, GameState } from './types';
 import type { Connection, Point, Direction, PlacedMachine, PortType } from '@/types';
 import { portTypeToMask, MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS } from '@/types';
 import { Mask } from '@/utils/mask';
-import { getMachineConfigById, getRotatedDimensions } from '@/utils/machineUtils';
+import { getMachineConfigById } from '@/utils/machineUtils';
 import { MACHINES } from '@/config/machines';
 import {
     findMachineAt,
@@ -257,8 +257,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         for (const m of machines) {
             const cfg = MACHINES.find(c => c.id === m.machineId);
             if (!cfg) continue;
-            const { width, height } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
-            fullMask.MergeInPlace(Mask.Uniform(width, height, cfg.mask.maxMask), m.x, m.y);
+            fullMask.MergeInPlace(Mask.FromMask(cfg.mask, m.rotation), m.x, m.y);
         }
         for (const c of connections) {
             const cm = portTypeToMask[c.portType];

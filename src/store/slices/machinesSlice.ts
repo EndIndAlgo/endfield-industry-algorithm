@@ -82,7 +82,7 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
             return;
         }
 
-        if (checkPlacementCollision(machineId, x, y, width, height, machines, connections, gridWidth, gridHeight)) return;
+        if (checkPlacementCollision(machineId, x, y, rotation, machines, connections, gridWidth, gridHeight)) return;
 
         const ms = get().modeState;
         let finalId: string = crypto.randomUUID();

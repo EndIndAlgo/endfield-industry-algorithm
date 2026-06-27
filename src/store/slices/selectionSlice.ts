@@ -224,8 +224,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         for (const m of machines) {
             const cfg = MACHINES.find(c => c.id === m.machineId);
             if (!cfg) continue;
-            const { width: mw, height: mh } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
-            baseGrid.MergeInPlace(Mask.Uniform(mw, mh, cfg.mask.maxMask), m.x, m.y);
+            baseGrid.MergeInPlace(Mask.FromMask(cfg.mask, m.rotation), m.x, m.y);
         }
 
         for (const c of connections) {
@@ -248,7 +247,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                 break;
             }
 
-            const result = baseGrid.TryMerge(Mask.Uniform(mw, mh, cfg.mask.maxMask), m.x, m.y);
+            const result = baseGrid.TryMerge(Mask.FromMask(cfg.mask, m.rotation), m.x, m.y);
             if (!result) { collision = true; break; }
             baseGrid = result;
         }
@@ -298,8 +297,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                 for (const m of allMachines) {
                     const c2 = MACHINES.find(c => c.id === m.machineId);
                     if (!c2) continue;
-                    const { width: mw, height: mh } = getRotatedDimensions(c2.width, c2.height, m.rotation);
-                    fullMask.MergeInPlace(Mask.Uniform(mw, mh, c2.mask.maxMask), m.x, m.y);
+                    fullMask.MergeInPlace(Mask.FromMask(c2.mask, m.rotation), m.x, m.y);
                 }
                 for (const c of connections) {
                     const cm = portTypeToMask[c.portType];

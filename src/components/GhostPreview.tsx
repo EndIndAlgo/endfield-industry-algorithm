@@ -55,7 +55,7 @@ export const GhostPreview: React.FC<GhostPreviewProps> = memo(({ hoverPos }) => 
       candidate.x + candidate.width > gridWidth ||
       candidate.y + candidate.height > gridHeight;
     const isGhostInvalid = isOutOfBounds || checkPlacementCollision(
-      ghostConfig.id, candidate.x, candidate.y, ghostWidth, ghostHeight,
+      ghostConfig.id, candidate.x, candidate.y, previewRotation,
       machines, connections, gridWidth, gridHeight,
     );
 
