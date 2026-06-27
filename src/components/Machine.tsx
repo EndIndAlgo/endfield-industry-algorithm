@@ -5,7 +5,7 @@ import type { PlacedMachine } from '@/types';
 import { getMachineConfig } from '@/config/machines';
 import { useGameStore } from '@/store/gameStore';
 import './Machine.scss';
-import { getRotatedDimensions, getRotatedPorts, getMachineConfigById } from '@/utils/machineUtils';
+import { getRotatedDimensions, getRotatedPorts } from '@/utils/machineUtils';
 import { Z_INDEX, machineZ } from '@/config/zIndex';
 import { GRID_SIZE } from '@/config/constants';
 import { getPortStyle } from '@/utils/portPosition';
@@ -122,7 +122,7 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
 
     const style = {
         ...machinePositionStyle(data.x, data.y, width, height),
-        zIndex: machineZ(zBase, getMachineConfigById(data.machineId)?.mask.maxMask ?? 0),
+        zIndex: machineZ(zBase, config.mask.maxMask),
     };
 
     return (
