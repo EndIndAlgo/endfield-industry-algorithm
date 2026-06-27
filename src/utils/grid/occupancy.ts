@@ -1,6 +1,6 @@
 import type { PlacedMachine, Connection, PortType } from '@/types';
 import { portTypeToMask } from '@/types';
-import { MACHINES } from '@/config/machines';
+import { getMachineConfigById } from '@/utils/machineUtils';
 import { Mask } from '@/utils/mask';
 import { getCornerPoints } from './port';
 
@@ -39,9 +39,9 @@ export const buildMergedGrid = (
 
   // 机器占用
   for (const m of machines) {
-    const config = MACHINES.find(c => c.id === m.machineId);
-    if (!config) continue;
-    grid.MergeInPlace(Mask.FromMask(config.mask, m.rotation), m.x, m.y);
+    const cfg = getMachineConfigById(m.machineId);
+    if (!cfg) continue;
+    grid.MergeInPlace(cfg.mask4![m.rotation], m.x, m.y);
   }
 
   // 异类型连线 (同类型跳过, 可通过放桥)

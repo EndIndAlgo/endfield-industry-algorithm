@@ -1,4 +1,4 @@
-import type { MachineConfig } from '@/types';
+import type { Direction, MachineConfig } from '@/types';
 import { MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS, MASK_REGULAR_MACHINE } from '@/types';
 import { Mask } from '@/utils/mask';
 /*顺序：
@@ -798,5 +798,10 @@ export const MACHINES: MachineConfig[] = [
         color: 'rgba(255, 255, 255, 0.3)',
     },
 ];
+
+// 预计算 4 种旋转掩码，模块加载时一次性完成
+for (const m of MACHINES) {
+    m.mask4 = [0, 1, 2, 3].map(r => Mask.FromMask(m.mask, r as Direction));
+}
 
 export const getMachineConfig = (id: string) => MACHINES.find(m => m.id === id);

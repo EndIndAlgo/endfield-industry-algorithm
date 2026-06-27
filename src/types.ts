@@ -24,7 +24,9 @@ export interface MachineConfig {
   outputs: PortConfig[];
   color: string;
   supplyDistance: number; // 从机器边缘向外延伸的格数 (0=不供电)
-  mask: Mask; // 每格碰撞掩码（通过 Mask.Uniform 初始化）
+  mask: Mask; // 未旋转掩码（rot=0）
+  /** 4 种旋转后的掩码 [rot0,rot1,rot2,rot3]，模块加载时由 machines.ts 填充 */
+  mask4?: Mask[];
 }
 
 export type Side = 'top' | 'right' | 'bottom' | 'left';

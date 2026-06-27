@@ -1,7 +1,7 @@
 import type { Direction, PlacedMachine, Point } from '@/types';
 import { portTypeToMask } from '@/types';
 import { MACHINES } from '@/config/machines';
-import { getRotatedDimensions } from '@/utils/machineUtils';
+import { getRotatedDimensions, getMachineConfigById } from '@/utils/machineUtils';
 import { Mask } from '@/utils/mask';
 
 /** 获取机器旋转后的矩形 */
@@ -66,9 +66,9 @@ export const checkPlacementCollision = (
 
   // 已有机器掩码
   for (const m of machines) {
-    const cfg = MACHINES.find(c => c.id === m.machineId);
+    const cfg = getMachineConfigById(m.machineId);
     if (!cfg) continue;
-    grid.MergeInPlace(Mask.FromMask(cfg.mask, m.rotation), m.x, m.y);
+    grid.MergeInPlace(cfg.mask4![m.rotation], m.x, m.y);
   }
 
   // 已有连线掩码 (所有类型)
@@ -83,9 +83,9 @@ export const checkPlacementCollision = (
   }
 
   // 候选机器每格掩码 vs 已有掩码
-  const candidateCfg = MACHINES.find(c => c.id === machineId);
+  const candidateCfg = getMachineConfigById(machineId);
   if (!candidateCfg) return false;
-  return grid.HasCollision(Mask.FromMask(candidateCfg.mask, rotation), x, y);
+  return grid.HasCollision(candidateCfg.mask4![rotation], x, y);
 };
 
 /** 计算内容尺寸（用于蓝图等） */
