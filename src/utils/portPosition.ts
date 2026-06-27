@@ -1,4 +1,5 @@
-import type { Point, PortConfig, Side } from '@/types';
+import type { Direction, Point, PortConfig, Side } from '@/types';
+import { oppositeDir, DIR_UP, DIR_RIGHT, DIR_DOWN, DIR_LEFT } from '@/types';
 import { GRID_SIZE, PORT_ARROW_ROTATION } from '@/config/constants';
 
 /** 端口中心在格子内的像素偏移量
@@ -10,20 +11,20 @@ const CELL_CENTER = (GRID_SIZE / 2) - 3 - 2 - 3; // = 12
 const EXTEND = 0.45;
 
 /** 将路径端点沿方向延伸，使连线视觉上深入机器内部 */
-const extendPoint = (p: Point, dir: number, amt: number): Point => {
-  switch (dir % 4) {
-    case 0: return { x: p.x, y: p.y - amt };
-    case 1: return { x: p.x + amt, y: p.y };
-    case 2: return { x: p.x, y: p.y + amt };
-    case 3: return { x: p.x - amt, y: p.y };
+const extendPoint = (p: Point, dir: Direction, amt: number): Point => {
+  switch (dir) {
+    case DIR_UP: return { x: p.x, y: p.y - amt };
+    case DIR_RIGHT: return { x: p.x + amt, y: p.y };
+    case DIR_DOWN: return { x: p.x, y: p.y + amt };
+    case DIR_LEFT: return { x: p.x - amt, y: p.y };
     default: return { ...p };
   }
 };
 
 /** 将路径转为 SVG polyline points 字符串 */
-export const pathToPoints = (path: Point[], tailFacing: number, headFacing: number): string => {
+export const pathToPoints = (path: Point[], tailFacing: Direction, headFacing: Direction): string => {
   const renderPath: Point[] = [];
-  renderPath.push(extendPoint(path[0], (tailFacing + 2) % 4, EXTEND));
+  renderPath.push(extendPoint(path[0], oppositeDir(tailFacing), EXTEND));
   renderPath.push(...path);
   const last = path[path.length - 1];
   renderPath.push(extendPoint(last, headFacing, EXTEND));

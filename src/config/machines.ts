@@ -1,5 +1,5 @@
-import type { Direction, MachineConfig } from '@/types';
-import { MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS, MASK_REGULAR_MACHINE } from '@/types';
+import type { MachineConfig } from '@/types';
+import { MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS, MASK_REGULAR_MACHINE, DIR_UP, DIR_RIGHT, DIR_DOWN, DIR_LEFT } from '@/types';
 import { Mask } from '@/utils/mask';
 /*顺序：
 协议核心
@@ -801,7 +801,7 @@ export const MACHINES: MachineConfig[] = [
 
 // 预计算 4 种旋转掩码，模块加载时一次性完成
 for (const m of MACHINES) {
-    m.mask4 = [0, 1, 2, 3].map(r => Mask.FromMask(m.mask, r as Direction));
+    m.mask4 = [DIR_UP, DIR_RIGHT, DIR_DOWN, DIR_LEFT].map(r => Mask.FromMask(m.mask, r));
 }
 
 export const getMachineConfig = (id: string) => MACHINES.find(m => m.id === id);

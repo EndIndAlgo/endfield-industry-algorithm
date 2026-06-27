@@ -1,4 +1,5 @@
 import type { Point, Direction } from '@/types';
+import { isHorizontal } from '@/types';
 
 /** 8 分区曼哈顿路由: L 形直角折线，遇障碍自动换另一条路 */
 export const routeManhattan = (
@@ -55,7 +56,7 @@ export const trySingleLRoute = (
 ): Point[] | null => {
   const path: Point[] = [];
 
-  const horizontalFirst = firstAxis === 1 || firstAxis === 3;
+  const horizontalFirst = isHorizontal(firstAxis);
   const corner: Point = horizontalFirst
     ? { x: end.x, y: start.y }
     : { x: start.x, y: end.y };

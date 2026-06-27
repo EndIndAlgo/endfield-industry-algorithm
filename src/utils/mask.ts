@@ -1,5 +1,5 @@
 import type { Direction, PortType, Point } from '@/types';
-import { portTypeToMask } from '@/types';
+import { portTypeToMask, isHorizontal } from '@/types';
 
 /** 遍历 Uint8Array 取最大值 */
 const computeMaxMask = (data: Uint8Array): number => {
@@ -65,7 +65,7 @@ export class Mask {
     const { width: sw, height: sh, data: src } = cfgMask;
     if (rotation === 0) return cfgMask.Clone();
 
-    const swapped = rotation % 2 === 1;
+    const swapped = isHorizontal(rotation);
     const nw = swapped ? sh : sw;
     const nh = swapped ? sw : sh;
     const dst = new Uint8Array(nw * nh);

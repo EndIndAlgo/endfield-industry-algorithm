@@ -43,12 +43,22 @@ export interface PortConfig {
 
 export type Direction = 0 | 1 | 2 | 3; // 0: Up, 1: Right, 2: Down, 3: Left (Clockwise)
 
+// 命名常量
+export const DIR_UP: Direction = 0;
+export const DIR_RIGHT: Direction = 1;
+export const DIR_DOWN: Direction = 2;
+export const DIR_LEFT: Direction = 3;
+
+// 工具函数
+export const oppositeDir = (d: Direction): Direction => ((d + 2) % 4) as Direction;
+export const isHorizontal = (d: Direction): boolean => d === DIR_RIGHT || d === DIR_LEFT;
+
 /** Side → Direction 映射 */
 export const sideToDir: Record<Side, Direction> = {
-    top: 0,
-    right: 1,
-    bottom: 2,
-    left: 3
+    top: DIR_UP,
+    right: DIR_RIGHT,
+    bottom: DIR_DOWN,
+    left: DIR_LEFT
 };
 
 export interface PlacedMachine {

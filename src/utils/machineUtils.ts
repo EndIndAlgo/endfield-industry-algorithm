@@ -1,4 +1,5 @@
 import type { Direction, PortConfig, PlacedMachine, MachineConfig } from '@/types';
+import { isHorizontal } from '@/types';
 import { MACHINES } from '@/config/machines';
 
 /** 机器 ID → 配置的 O(1) 查找表 */
@@ -20,7 +21,7 @@ export const getMachineConfigById = (id: string): MachineConfig | undefined =>
     machineMap.get(id);
 
 export const getRotatedDimensions = (width: number, height: number, rotation: Direction) => {
-    if (rotation % 2 === 1) { // 1 (90) or 3 (270)
+    if (isHorizontal(rotation)) { // 90° or 270°
         return { width: height, height: width };
     }
     return { width, height };

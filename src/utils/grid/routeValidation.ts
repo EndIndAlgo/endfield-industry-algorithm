@@ -1,5 +1,5 @@
 import type { Point, Direction, PortType, PlacedMachine, Connection } from '@/types';
-import { sideToDir } from '@/types';
+import { sideToDir, oppositeDir } from '@/types';
 import { trySingleLRoute } from './pathfinding';
 import { computeHeadFacing, dirFromPoints } from './direction';
 import { getInputPortOuterCells } from './port';
@@ -76,7 +76,7 @@ export const checkStartOverlap = (
 ): boolean => {
   if (isContinuing) return true;
 
-  const oppositeFacing = ((tailFacing + 2) % 4) as Direction;
+  const oppositeFacing = oppositeDir(tailFacing);
   for (const c of connections) {
     if (c.portType !== portType) continue;
     for (let i = 0; i < c.path.length; i++) {
@@ -140,7 +140,7 @@ export const findRouteForMachine = (
     if (startPos.x === ic.pos.x && startPos.y === ic.pos.y) {
       if ((mergedGrid[startPos.y * gw + startPos.x] & connMask) !== 0) continue;
 
-      const entryDir = ((sideToDir[ic.side] + 2) % 4) as Direction;
+      const entryDir = oppositeDir(sideToDir[ic.side]);
       // 非续接时拐弯在同类型线上 → 不放桥（续接首格豁免）
       if (!isContinuing && sameConnGrid[startPos.y * gw + startPos.x] && tailFacing !== entryDir) {
         continue;
@@ -166,7 +166,7 @@ export const findRouteForMachine = (
     if (!path) continue;
 
     const fullPath = [startPos, ...path];
-    const entryDir = ((sideToDir[ic.side] + 2) % 4) as Direction;
+    const entryDir = oppositeDir(sideToDir[ic.side]);
 
     if (!validateRouteConflicts(fullPath, tailFacing, entryDir, sameConnGrid, mergedGrid,
         existingCornerGrid, bridgeMask, connMask, gw, { isContinuing, startPos })) {
@@ -181,7 +181,7 @@ export const findRouteForMachine = (
   }
 
   if (bestInput) {
-    const headFacing = ((sideToDir[bestInput.side] + 2) % 4) as Direction;
+    const headFacing = oppositeDir(sideToDir[bestInput.side]);
     return { path: bestInput.path, headFacing, isValid: true, targetIsMachine: true };
   }
 
@@ -191,7 +191,7 @@ export const findRouteForMachine = (
 
   for (const ic of inputCells) {
     if (startPos.x === ic.pos.x && startPos.y === ic.pos.y) {
-      bestVisual = { path: [startPos], headFacing: ((sideToDir[ic.side] + 2) % 4) as Direction, dist: 0 };
+      bestVisual = { path: [startPos], headFacing: oppositeDir(sideToDir[ic.side]), dist: 0 };
       break;
     }
     const firstAxis = lShapeMode === 'perpendicular'
@@ -200,7 +200,7 @@ export const findRouteForMachine = (
     const p = trySingleLRoute(startPos, ic.pos, firstAxis, emptyGrid, gw, gh);
     if (p) {
       const d = Math.abs(ic.pos.x - mouseGridPos.x) + Math.abs(ic.pos.y - mouseGridPos.y);
-      const hf = ((sideToDir[ic.side] + 2) % 4) as Direction;
+      const hf = oppositeDir(sideToDir[ic.side]);
       if (!bestVisual || d < bestVisual.dist) {
         bestVisual = { path: [startPos, ...p], headFacing: hf, dist: d };
       }
