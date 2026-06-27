@@ -34,11 +34,9 @@
 - **现象**: 只在 `collision.ts` 加了零掩码跳过优化，其余三处连线循环未加
 - **修复**: `occupancy.ts` + `connectionSlice.ts` + `selectionSlice.ts`×2 统一加 `if (cm === 0) continue`
 
-### 5. Mask.data 直接写入绕过 maxMax 追踪
+### 5. ~~Mask.data 直接写入绕过 maxMax 追踪~~ ✅ 已修复
 - **文件**: `collision.ts:81`, `occupancy.ts:55`, `connectionSlice.ts:249`, `selectionSlice.ts:234,307,315,353`
-- **现象**: `grid.data[...] |= cm` 绕过 `mergeInPlaceInternal` 的 `maxMax` 更新，写入后 Mask 的 `maxMax` 可能过期
-- **触发**: 当前在这些写入后不再读取 `maxMax`，但未来重构有隐患
-- **修复**: 若需读取 `maxMax`，用 `MergeInPlace` 替代直接 `data` 写入
+- **修复**: 新增 `Mask.WriteValue(x,y,value)` 方法——单点按位或写入 + 同步更新 maxMask；7 处 `grid.data[...] |=` 全部替换为 `grid.WriteValue(...)`
 
 ### 6. buildMergedGrid 创建 Mask 后又丢弃
 - **文件**: `occupancy.ts:33-65`

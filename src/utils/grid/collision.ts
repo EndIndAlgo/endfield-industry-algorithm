@@ -77,7 +77,7 @@ export const checkPlacementCollision = (
     if (cm === 0) continue;
     for (const p of c.path) {
       if (p.x >= 0 && p.x < gridW && p.y >= 0 && p.y < gridH) {
-        grid.data[p.y * gridW + p.x] |= cm;
+        grid.WriteValue(p.x, p.y, cm);
       }
     }
   }

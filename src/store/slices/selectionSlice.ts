@@ -232,7 +232,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
             if (cm === 0) continue;
             for (const p of c.path) {
                 if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight) {
-                    baseGrid.data[p.y * gridWidth + p.x] |= cm;
+                    baseGrid.WriteValue(p.x, p.y, cm);
                 }
             }
         }
@@ -305,14 +305,14 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                     if (cm === 0) continue;
                     for (const p of c.path) {
                         if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight) {
-                            fullMask.data[p.y * gridWidth + p.x] |= cm;
+                            fullMask.WriteValue(p.x, p.y, cm);
                         }
                     }
                 }
                 for (const b of bridgesToCreate) {
                     const bm = getMachineConfigById(b.machineId)!.mask.maxMask;
                     if (b.x >= 0 && b.x < gridWidth && b.y >= 0 && b.y < gridHeight) {
-                        fullMask.data[b.y * gridWidth + b.x] |= bm;
+                        fullMask.WriteValue(b.x, b.y, bm);
                     }
                 }
                 const fullMaskGrid = fullMask.data;
@@ -350,7 +350,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                             x: p.x, y: p.y,
                             rotation: 0,
                         });
-                        fullMaskGrid[p.y * gridWidth + p.x] |= bridgeMask;
+                        fullMask.WriteValue(p.x, p.y, bridgeMask);
                     }
 
                     for (const p of intersectionPoints) {

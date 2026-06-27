@@ -129,6 +129,16 @@ export class Mask {
     return new Mask(data, w, h, maskValue);
   }
 
+  // ── 单点写入 ──
+
+  /** 在 (x, y) 处按位或写入掩码值，同步更新 maxMask */
+  WriteValue(x: number, y: number, value: number): void {
+    const idx = y * this.width + x;
+    this.data[idx] |= value;
+    if (this.data[idx] > this.maxMask)
+      (this as { maxMask: number }).maxMask = this.data[idx];
+  }
+
   // ── 碰撞 ──
 
   /**
