@@ -24,17 +24,15 @@
 
 ## 🟢 低
 
-### 3. FromConnection 空路径崩溃
+### 3. ~~FromConnection 空路径崩溃~~ ✅ 已修复
 - **文件**: `mask.ts:108-129`
 - **现象**: `path.length === 0` 时包围盒为 Infinity，`new Uint8Array(-Infinity)` 抛 RangeError
-- **触发**: 当前无调用方（死代码）
 - **修复**: 加空路径守卫 `if (path.length === 0) return new Mask(new Uint8Array(0), 0, 0, 0)`
 
-### 4. `if (cm === 0) continue` 不统一
+### 4. ~~`if (cm === 0) continue` 不统一~~ ✅ 已修复
 - **文件**: `collision.ts:78` vs `occupancy.ts`, `connectionSlice.ts`, `selectionSlice.ts`
 - **现象**: 只在 `collision.ts` 加了零掩码跳过优化，其余三处连线循环未加
-- **触发**: 当前无害（Gas=0 未启用），但新增 PortType 时可能 `undefined`
-- **修复**: 统一在四处连线循环加 `if (cm === 0) continue`
+- **修复**: `occupancy.ts` + `connectionSlice.ts` + `selectionSlice.ts`×2 统一加 `if (cm === 0) continue`
 
 ### 5. Mask.data 直接写入绕过 maxMax 追踪
 - **文件**: `collision.ts:81`, `occupancy.ts:55`, `connectionSlice.ts:249`, `selectionSlice.ts:234,307,315,353`

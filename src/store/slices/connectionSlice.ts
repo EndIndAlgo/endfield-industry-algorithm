@@ -260,6 +260,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         }
         for (const c of connections) {
             const cm = portTypeToMask[c.portType];
+            if (cm === 0) continue;
             for (const p of c.path) {
                 if (p.x >= 0 && p.x < w3 && p.y >= 0 && p.y < h3) { fullMask.data[p.y * w3 + p.x] |= cm; }
             }

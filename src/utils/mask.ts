@@ -106,6 +106,7 @@ export class Mask {
    * 合并到画布网格时 offset = 包围盒的 (minX, minY)。
    */
   static FromConnection(path: Point[], portType: PortType): Mask {
+    if (path.length === 0) return new Mask(new Uint8Array(0), 0, 0, 0);
     const maskValue = portTypeToMask[portType];
     let minX = Infinity, minY = Infinity;
     let maxX = -Infinity, maxY = -Infinity;

@@ -229,6 +229,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
 
         for (const c of connections) {
             const cm = portTypeToMask[c.portType];
+            if (cm === 0) continue;
             for (const p of c.path) {
                 if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight) {
                     baseGrid.data[p.y * gridWidth + p.x] |= cm;
@@ -301,6 +302,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                 }
                 for (const c of connections) {
                     const cm = portTypeToMask[c.portType];
+                    if (cm === 0) continue;
                     for (const p of c.path) {
                         if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight) {
                             fullMask.data[p.y * gridWidth + p.x] |= cm;

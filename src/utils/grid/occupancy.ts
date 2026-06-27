@@ -48,6 +48,7 @@ export const buildMergedGrid = (
   for (const c of connections) {
     if (c.portType === portType) continue;
     const otherMask = portTypeToMask[c.portType];
+    if (otherMask === 0) continue;
     for (const p of c.path) {
       if (p.x >= 0 && p.x < gridW && p.y >= 0 && p.y < gridH) {
         grid.data[p.y * gridW + p.x] |= otherMask;
