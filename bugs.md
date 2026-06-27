@@ -15,10 +15,10 @@
 - **现象**: `getMachineConfigById(id)?.mask.maxMask ?? 0` — 旧代码 `getMachineMask` 找不到配置时返回 255（阻止一切），新代码返回 0（不阻止任何内容）
 - **修复**: `machineUtils.ts` 启动时验证 `REQUIRED_IDS = ['lbr', 'pbr', 'pco']`，缺失即 throw；桥掩码 3 处 `?.mask.maxMask ?? 0` 改为 `!.mask.maxMask`
 
-### 2. Machine.tsx 冗余配置查找
+### 2. ~~Machine.tsx 冗余配置查找~~ ✅ 已修复
 - **文件**: `Machine.tsx:125`
 - **现象**: 组件 L23 已通过 `getMachineConfig(data.machineId)` 拿到 `config`，L117 确认非空，L125 却重新 `getMachineConfigById` 再查一次 Map
-- **修复**: 直接用 `config.mask.maxMask`
+- **修复**: 直接用 `config.mask.maxMask`，移除 `getMachineConfigById` import
 
 ---
 
