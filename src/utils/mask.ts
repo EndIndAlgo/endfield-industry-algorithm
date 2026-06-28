@@ -185,10 +185,17 @@ export class Mask {
     this.mergeInPlaceInternal(other, ox, oy);
   }
 
-  /** 先判碰：无碰 → 返回合并后的新 Mask；有碰 → 返回 null */
+  /** 先判碰：无碰 → 返回合并后的新 Mask（不修改自身）；有碰 → 返回 null */
   TryMerge(other: Mask, ox: number, oy: number): Mask | null {
     if (this.HasCollision(other, ox, oy)) return null;
     return this.Merge(other, ox, oy);
+  }
+
+  /** 就地版 TryMerge：先判碰，无碰则原地合并，返回是否成功。零分配。 */
+  TryMergeInPlace(other: Mask, ox: number, oy: number): boolean {
+    if (this.HasCollision(other, ox, oy)) return false;
+    this.MergeInPlace(other, ox, oy);
+    return true;
   }
 
   // ── 工具 ──

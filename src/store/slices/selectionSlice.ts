@@ -219,7 +219,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         }));
 
         // ── 构建剩余实体的掩码网格 ──
-        let baseGrid = Mask.Uniform(gridWidth, gridHeight, 0);
+        const baseGrid = Mask.Uniform(gridWidth, gridHeight, 0);
 
         for (const m of machines) {
             const cfg = getMachineConfigById(m.machineId);
@@ -248,9 +248,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                 break;
             }
 
-            const result = baseGrid.TryMerge(rotated, m.x, m.y);
-            if (!result) { collision = true; break; }
-            baseGrid = result;
+            if (!baseGrid.TryMergeInPlace(rotated, m.x, m.y)) { collision = true; break; }
         }
 
         // ── 连线交叉检测 + 桥生成 ──

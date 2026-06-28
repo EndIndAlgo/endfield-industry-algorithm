@@ -42,11 +42,9 @@
 - **文件**: `occupancy.ts` 3 个 builder + `pathfinding.ts` + `routeValidation.ts` + `connectionSlice.ts`
 - **修复**: 3 个 builder 改为返回 Mask；下游 `trySingleLRoute`/`validateRouteConflicts`/`findRouteForMachine`/`findRouteToGround` 签名适配（`Uint8Array,gw` → `Mask`）；GridCache 类型适配；`routeManhattan` 删除（无调用方）
 
-### 7. TryMerge 每台机器分配全网格副本
+### 7. ~~TryMerge 每台机器分配全网格副本~~ ✅ 已修复
 - **文件**: `selectionSlice.ts:251-253`
-- **现象**: `TryMerge` → `Merge` → `Clone()` 对 N 台机器分配 N 次完整 `gridWidth * gridHeight` 大小的 Uint8Array
-- **影响**: 100×100=10KB × 50 台 = 500KB，批量移动非热路径，可接受但浪费
-- **修复**: 加 `TryMergeInPlace` 方法返回 bool，避免分配
+- **修复**: Mask 新增 `TryMergeInPlace` — HasCollision + MergeInPlace，零分配；`commitBatchMove` 逐台循环改用 `TryMergeInPlace`，`baseGrid` let→const
 
 ---
 
