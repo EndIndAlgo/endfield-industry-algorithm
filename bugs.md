@@ -48,29 +48,14 @@
 
 ---
 
-## ⚪ 无影响（已知、确认安全）
+## ⚪ 已验证关闭
 
-### 8. HasCollision 越界语义变化
-- **文件**: `mask.ts:141-158`
-- **变化**: 旧代码越界 `continue`（跳过），新代码越界 `return true`（碰撞）
-- **安全理由**: 两个调用方（`machinesSlice.ts`, `GhostPreview.tsx`）均提前做了越界检查
+### 8-11. 确认安全，关闭
+- **#8** HasCollision 越界语义：3 调用方均有前置越界守卫
+- **#9** readonly maxMask 类型转换：仅在私有方法内部
+- **#10** import type 循环依赖：编译期擦除，无运行时循环
+- **#11** Gas 端口掩码 0x00：预留字段，所有连线循环有 `if (cm === 0) continue`
 
-### 9. readonly maxMask 类型转换写入
-- **文件**: `mask.ts:208-209`
-- **现象**: `(this as { maxMask: number }).maxMask = newMax` 绕过 readonly
-- **安全理由**: 只在私有方法 `mergeInPlaceInternal` 内调用，外部不可见
-
-### 10. import type 循环依赖
-- **文件**: `types.ts:1` ↔ `mask.ts:2`
-- **现象**: `types.ts` 用 `import type { Mask }`，`mask.ts` 用 `import { portTypeToMask }`
-- **安全理由**: `verbatimModuleSyntax` 下 `import type` 编译期擦除，无运行时循环
-
-### 11. Gas 端口掩码 0x00
-- **文件**: `types.ts:136`, `mask.ts:151,201`
-- **现象**: Gas 掩码为 0，`HasCollision` 和 `MergeInPlace` 中 `if (v === 0) continue` 跳过
-- **安全理由**: Gas 是预留字段，`WIRE` 模式状态只允许 `Solid | Liquid`
-
-### 12. bridgeMask 预览/提交不一致
-- **文件**: `connectionSlice.ts:72` vs `connectionSlice.ts:233`
-- **现象**: `updatePreview` 用常量 `MASK_SOLID_LOGISTICS | MASK_LIQUID_LOGISTICS`，`commitConnection` 用配置查找 `getMachineConfigById(bridgeId)?.mask.maxMask`
-- **安全理由**: 两处最终值相同（3 和 7），只是取法不同
+### 12. ~~bridgeMask 预览/提交不一致~~ ✅ 已修复
+- **文件**: `connectionSlice.ts:80` vs `connectionSlice.ts:248`
+- **修复**: `updatePreview` 改为与 `commitConnection` 一致——`getMachineConfigById(bridgeId)!.mask.maxMask`；移除 `MASK_SOLID_LOGISTICS`/`MASK_LIQUID_LOGISTICS` import

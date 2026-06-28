@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { ConnectionSlice, GameState } from './types';
 import type { Connection, Point, Direction, PlacedMachine, PortType } from '@/types';
-import { portTypeToMask, MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS } from '@/types';
+import { portTypeToMask } from '@/types';
 import { Mask } from '@/utils/mask';
 import { getMachineConfigById } from '@/utils/machineUtils';
 import {
@@ -77,7 +77,8 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         const gw = gridWidth || 100;
         const gh = gridHeight || 100;
         const connMask = portTypeToMask[portType];
-        const bridgeMask = portType === 'Solid' ? MASK_SOLID_LOGISTICS : MASK_LIQUID_LOGISTICS;
+        const bridgeId = portType === 'Solid' ? 'lbr' : 'pbr';
+        const bridgeMask = getMachineConfigById(bridgeId)!.mask.maxMask;
 
         let mergedGrid: Mask;
         let sameConnGrid: Mask;
