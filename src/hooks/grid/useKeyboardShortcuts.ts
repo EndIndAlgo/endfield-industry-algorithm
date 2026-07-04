@@ -57,7 +57,6 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
         s.deleteSelected();
       } else if (e.key === 'F1') {
         e.preventDefault();
-        s.setBlueprintListMode('insert');
         s.setUiView('list');
       } else if (e.key.toLowerCase() === 'm') {
         if (hoverPosRef.current) {

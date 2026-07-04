@@ -60,16 +60,13 @@ export interface HistorySlice {
 
 export interface BlueprintSlice {
     uiView: 'list' | 'editor' | 'about' | 'settings';
-    blueprintListMode: 'manage' | 'insert';
     currentBlueprintId: string | null;
     currentBlueprintName: string | null;
     loadGame: (machines: PlacedMachine[], connections: Connection[], gridWidth: number, gridHeight: number, blueprintId: string | null, blueprintName: string) => void;
     setCurrentBlueprint: (id: string, name: string) => void;
     resetGame: () => void;
     setUiView: (view: 'list' | 'editor' | 'about' | 'settings') => void;
-    setBlueprintListMode: (mode: 'manage' | 'insert') => void;
     startInsertBlueprint: (blueprint: { data: { machines: PlacedMachine[], connections: Connection[] } }) => void;
-    startInsertBlueprintOnNewMap: (blueprint: { data: { machines: PlacedMachine[], connections: Connection[] } }) => void;
 }
 
 export interface GameState extends CanvasSlice, ModeSlice, MachinesSlice, ConnectionSlice, SelectionSlice, HistorySlice, BlueprintSlice {}

@@ -28,25 +28,13 @@ export default function App() {
   const redo = useGameStore(s => s.redo);
   const uiView = useGameStore(s => s.uiView);
   const setUiView = useGameStore(s => s.setUiView);
-  const blueprintListMode = useGameStore(s => s.blueprintListMode);
-  const setBlueprintListMode = useGameStore(s => s.setBlueprintListMode);
-
   useChineseConverter();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [pendingSaveData, setPendingSaveData] = useState<Blueprint['data'] | null>(null);
 
-  // ── 加载 / 新建回调 ──
-  const handleLoadBlueprint = useCallback((bp: Blueprint) => {
-    const data = bp.data as Blueprint['data'] & { gridWidth?: number; gridHeight?: number };
-    const gw = data.gridWidth ?? Math.max(data.actualWidth + DEFAULT_CONTENT_PADDING, 24);
-    const gh = data.gridHeight ?? Math.max(data.actualHeight + DEFAULT_CONTENT_PADDING, 24);
-    loadGame(bp.data.machines, bp.data.connections, gw, gh, bp.id, bp.name);
-    setLastBlueprintId(bp.id);
-    setUiView('editor');
-  }, [loadGame, setUiView]);
-
+  // ── 新建回调 ──
   const handleCreateNew = useCallback(() => {
     resetGame();
     setLastBlueprintId(null);
@@ -79,13 +67,18 @@ export default function App() {
     if (lastId) {
       const bp = loadBlueprint(lastId);
       if (bp) {
-        handleLoadBlueprint(bp);
+        const data = bp.data as Blueprint['data'] & { gridWidth?: number; gridHeight?: number };
+        const gw = data.gridWidth ?? Math.max(data.actualWidth + DEFAULT_CONTENT_PADDING, 24);
+        const gh = data.gridHeight ?? Math.max(data.actualHeight + DEFAULT_CONTENT_PADDING, 24);
+        loadGame(bp.data.machines, bp.data.connections, gw, gh, bp.id, bp.name);
+        setLastBlueprintId(bp.id);
+        setUiView('editor');
         return;
       }
     }
 
     handleCreateNew();
-    // 初始化逻辑，仅在挂载时执行一次 — 不添加 handleCreateNew/handleLoadBlueprint/loadGame/setUiView 到依赖数组
+    // 初始化逻辑，仅在挂载时执行一次 — 不添加 handleCreateNew/loadGame/setUiView 到依赖数组
   })(); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -207,9 +200,8 @@ export default function App() {
   }, [pendingSaveData]);
 
   const handleOpenList = useCallback(() => {
-    setBlueprintListMode('manage');
     setUiView('list');
-  }, [setBlueprintListMode, setUiView]);
+  }, [setUiView]);
 
   return (
     <>
@@ -236,9 +228,7 @@ export default function App() {
         <Suspense fallback={null}>
           {uiView === 'list' && (
             <BlueprintList
-              onSelect={handleLoadBlueprint}
               onCreateNew={handleCreateNew}
-              mode={blueprintListMode}
             />
           )}
 

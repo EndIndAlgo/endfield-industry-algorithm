@@ -3,19 +3,17 @@ import { Box, VStack, Text, Button, IconButton, Flex, Drawer, Badge } from '@cha
 import { FilePlus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { type Blueprint, deleteBlueprint, getBlueprints } from '@/utils/storage';
+import { generateShareUrl } from '@/utils/shareUtils';
 import { Z_INDEX } from '@/config/zIndex';
 
 import { useGameStore } from '@/store/gameStore';
 
 interface BlueprintListProps {
-    onSelect: (blueprint: Blueprint) => void;
     onCreateNew: () => void;
-    mode: 'manage' | 'insert';
 }
 
-export const BlueprintList = ({ onSelect, onCreateNew, mode }: BlueprintListProps) => {
+export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
     const startInsertBlueprint = useGameStore(s => s.startInsertBlueprint);
-    const startInsertBlueprintOnNewMap = useGameStore(s => s.startInsertBlueprintOnNewMap);
     const [blueprints, setBlueprints] = useState<Blueprint[]>(() => getBlueprints());
     const [selectedBlueprint, setSelectedBlueprint] = useState<Blueprint | null>(null);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -38,21 +36,16 @@ export const BlueprintList = ({ onSelect, onCreateNew, mode }: BlueprintListProp
         setIsDrawerOpen(true);
     };
 
-    const handleConfirmOpen = () => {
+    const handleOpenInNewTab = () => {
         if (selectedBlueprint) {
-            onSelect(selectedBlueprint);
+            const url = generateShareUrl(selectedBlueprint.data);
+            if (url) window.open(url, '_blank');
         }
     };
 
     const handlePasteInsert = () => {
         if (selectedBlueprint) {
             startInsertBlueprint(selectedBlueprint);
-        }
-    };
-
-    const handleNewMapInsert = () => {
-        if (selectedBlueprint) {
-            startInsertBlueprintOnNewMap(selectedBlueprint);
         }
     };
 
@@ -190,26 +183,16 @@ export const BlueprintList = ({ onSelect, onCreateNew, mode }: BlueprintListProp
                                     关闭
                                 </Button>
                             </Drawer.ActionTrigger>
-                            {mode === 'insert' ? (
-                                <>
-                                    <Button onClick={handlePasteInsert}
-                                        variant="outline"
-                                        className="yellow-btn">
-                                        贴上到当前
-                                    </Button>
-                                    <Button onClick={handleNewMapInsert}
-                                        variant="outline"
-                                        className="yellow-btn">
-                                        新建地图放置
-                                    </Button>
-                                </>
-                            ) : (
-                                <Button onClick={handleConfirmOpen}
-                                    variant="outline"
-                                    className="yellow-btn">
-                                    打开蓝图
-                                </Button>
-                            )}
+                            <Button onClick={handleOpenInNewTab}
+                                variant="outline"
+                                className="yellow-btn">
+                                打开蓝图
+                            </Button>
+                            <Button onClick={handlePasteInsert}
+                                variant="outline"
+                                className="yellow-btn">
+                                贴上到当前
+                            </Button>
                         </Drawer.Footer>
                     </Drawer.Content>
                 </Drawer.Positioner>
