@@ -18,7 +18,11 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
       const isPlacing = ms.kind === 'BUILD' && ms.placing !== null;
       const isConnecting = ms.kind === 'WIRE' && ms.connecting !== null;
 
-      if (e.key.toLowerCase() === 'e') {
+      // WASD 由 useWASDPan 独立处理，此处早期退出避免无效遍历
+      const key = e.key.toLowerCase();
+      if (key === 'w' || key === 'a' || key === 's' || key === 'd') return;
+
+      if (key === 'e') {
         if (isPlacing) return;
         if (ms.kind === 'WIRE' && ms.portType === 'Solid') {
           if (ms.connecting) {
@@ -30,7 +34,7 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
           if (isConnecting) s.cancelConnection();
           s.setMode('WIRE_SOLID');
         }
-      } else if (e.key.toLowerCase() === 'q') {
+      } else if (key === 'q') {
         if (isPlacing) return;
         if (ms.kind === 'WIRE' && ms.portType === 'Liquid') {
           if (ms.connecting) {
@@ -42,27 +46,27 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
           if (isConnecting) s.cancelConnection();
           s.setMode('WIRE_LIQUID');
         }
-      } else if (e.key.toLowerCase() === 'r') {
+      } else if (key === 'r') {
         if (isConnecting) {
           s.toggleLShape();
           if (hoverPosRef.current) s.updatePreview(hoverPosRef.current);
         } else {
           s.rotatePreview();
         }
-      } else if (e.key.toLowerCase() === 'x') {
+      } else if (key === 'x') {
         if (isPlacing) return;
         s.setMode(ms.kind === 'DEVICE_SELECT' ? 'BUILD' : 'DEVICE_SELECT');
-      } else if (e.key.toLowerCase() === 'f') {
+      } else if (key === 'f') {
         s.takeSnapshot();
         s.deleteSelected();
       } else if (e.key === 'F1') {
         e.preventDefault();
         s.setUiView('list');
-      } else if (e.key.toLowerCase() === 'm') {
+      } else if (key === 'm') {
         if (hoverPosRef.current) {
           s.startBatchMove();
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+      } else if ((e.ctrlKey || e.metaKey) && key === 'c') {
         if (hoverPosRef.current) {
           s.startCopySelection();
         }

@@ -5,6 +5,7 @@ import { usePanZoom } from './grid/usePanZoom';
 import { useWireMode } from './grid/useWireMode';
 import { useSelectionMode } from './grid/useSelectionMode';
 import { useKeyboardShortcuts } from './grid/useKeyboardShortcuts';
+import { useWASDPan } from './grid/useWASDPan';
 
 interface UseGridEventsReturn {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -37,6 +38,7 @@ export const useGridEvents = (): UseGridEventsReturn => {
   const wire = useWireMode({ getGridPos, hoverPosRef });
   const select = useSelectionMode({ getGridPos, hoverPosRef });
   useKeyboardShortcuts({ hoverPosRef });
+  useWASDPan();
 
   // ═══════════════════════════════════════════════════════════
   // 组合事件处理器

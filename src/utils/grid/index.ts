@@ -20,3 +20,6 @@ export { getCornerPoints, getMachinePortCheckPositions, splitConnectionAt, getPo
 // ── 路由校验 ──
 export { validateRouteConflicts, findRouteForMachine, findRouteToGround, checkStartOverlap } from './routeValidation';
 export type { RouteToMachineResult, RouteToGroundResult } from './routeValidation';
+
+// ── 视口 / 平移 ──
+export { clampPan } from './viewport';
