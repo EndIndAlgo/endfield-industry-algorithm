@@ -488,7 +488,7 @@ Bit : 7──2   2         1         0
 ## 部署
 
 - Cloudflare Pages（`public/_redirects` 配置 SPA 回退：`/* /index.html 200`）
-- Docker 多阶段构建（`node:20-slim` 构建 → `nginx:stable-alpine` 运行）
+
 
 ## TypeScript 约束
 
