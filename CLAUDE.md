@@ -40,7 +40,7 @@ src/
 ├── store/
 │   ├── gameStore.ts                  # Zustand thin wrapper (21行)：组合 7 个切片 + devtools 中间件
 │   ├── settingsStore.ts             # 独立 persist store：language ('zh-TW'|'zh-CN'), localStorage key='settings-storage'
-│   ├── selectors.ts                  # 类型窄化 selector (134行)：selectIsBuildMode/selectPlacing/selectSelectedMachineId/selectIsConnecting/selectHasSelection 等 25+ 个，含稳定空数组引用 EMPTY_ARRAY
+│   ├── selectors.ts                  # 类型窄化 selector (142行)：selectIsBuildMode/selectPlacing/selectSelectedMachineId/selectIsConnecting/selectHasSelection 等 29 个，含稳定空数组引用 EMPTY_ARRAY
 │   └── slices/
 │       ├── types.ts                  # 7 个切片接口定义 + HistorySnapshot + GameState 交集类型
 │       ├── canvasSlice.ts           # zoom(默认1), pan({0,0}), gridWidth/Height(默认24), hoverPosFrac(鼠标分数坐标); setZoom/setPan/setGridSize(含越界清理)/setHoverPosFrac
@@ -49,9 +49,9 @@ src/
 │       ├── connectionSlice.ts       # connections[]; startConnecting/updatePreview(含多端口同格方向选择+L形三态切换+输入端口吸附+自动续接)/commitConnection(交叉检测+桥生成+连线分割+合并衔接)/cancelConnection/toggleLShape(auto→垂直→同向 三态循环); + 模块级 _gridCache 缓存
 │       ├── selectionSlice.ts        # setBoxSelection/commitBoxSelection(shift=toggle)/clearSelection/deleteSelected(含级联删连线)/startBatchMove(过渡到 MOVE_SELECTION)/startCopySelection/commitBatchMove(碰撞+桥生成+连线分割)
 │       ├── historySlice.ts          # history: { past: HistorySnapshot[], future: HistorySnapshot[] }, takeSnapshot/undo/redo; 上限50步
-│       └── blueprintSlice.ts       # uiView, blueprintListMode, currentBlueprintId/Name; loadGame/resetGame/setUiView/setBlueprintListMode/setCurrentBlueprint/startInsertBlueprint/startInsertBlueprintOnNewMap(自选网格尺寸)
+│       └── blueprintSlice.ts       # uiView, currentBlueprintId/Name; loadGame/resetGame/setUiView/setCurrentBlueprint/startInsertBlueprint(蓝图插入→MOVE_SELECTION)
 ├── config/
-│   ├── machines.ts                   # MACHINES: 43 种机器 MachineConfig[] + getMachineConfig(id) 查找函数
+│   ├── machines.ts                   # MACHINES: 43 种机器 MachineConfig[] + getMachineConfig(id) O(n) 查找；machineUtils.getMachineConfigById(id) 为 O(1) Map 版本
 │   ├── materials.ts                  # MATERIALS: 76 种材料 Record<string, Material>
 │   ├── constants.ts                  # GRID_SIZE=40, GRID_PRESETS: 6 种网格尺寸, DEFAULT_CONTENT_PADDING, MAX_MEMBERS_DISPLAY, PORT_ARROW_ROTATION
 │   ├── memberInfo.ts                 # memberInfo: 团队成员数组 [{name,avatar,message,tags,mail,...}]
@@ -64,8 +64,10 @@ src/
 │   │   ├── occupancy.ts              # buildConnectionGrid, buildMergedGrid(掩码合并网格), buildExistingCornerGrid
 │   │   ├── pathfinding.ts            # routeManhattan(双L形), trySingleLRoute
 │   │   ├── port.ts                   # getCornerPoints, getMachinePortCheckPositions, splitConnectionAt, getPortOuterCells, getInputPortOuterCells, findPortOuterCellAt, findMachineAt, pickClosestPort
-│   │   └── routeValidation.ts        # validateRouteConflicts, findRouteForMachine, findRouteToGround, checkStartOverlap — updatePreview/commitConnection 拆出的纯函数
-│   ├── machineUtils.ts               # getRotatedDimensions, getRotatedPorts, buildPowerGrid, getMachineMask(物流掩码查表), getMachineCellMask
+│   │   ├── routeValidation.ts        # validateRouteConflicts, findRouteForMachine, findRouteToGround, checkStartOverlap — updatePreview/commitConnection 拆出的纯函数
+│   │   └── viewport.ts               # clampPan: 限制平移范围，防止无限滚入空白区域
+│   ├── mask.ts                       # Mask 类：封装二维掩码存储(Uint8Array)+碰撞检测+合并操作；Uniform/FromMask(旋转映射)/FromConnection 工厂方法
+│   ├── machineUtils.ts               # getMachineConfigById(O(1) Map查找), getRotatedDimensions, getRotatedPorts, buildPowerGrid; 内含 REQUIRED_IDS 启动校验
 │   ├── portPosition.ts               # getPortStyle(机器端口定位), getGhostArrowPosition, pathToPoints/extendPoint(SVG渲染工具)
 │   ├── shareUtils.ts                 # toBase64Url/fromBase64Url, encode/decode (V3二进制: 3字节ID+3字节位置), generateShareUrl, parseShareUrl, captureBlueprintScreenshot(html2canvas)
 │   ├── storage.ts                    # Blueprint 接口, getBlueprints/saveBlueprint/deleteBlueprint/loadBlueprint/getLastBlueprintId/setLastBlueprintId
@@ -74,12 +76,13 @@ src/
 │   └── cssCustomProps.ts             # machinePositionStyle: CSS自定义属性 --x/--y/--w/--h 的类型安全工厂函数
 ├── hooks/
 │   ├── useChineseConverter.ts        # 繁/简热切换：动态 import('opencc-js') + 遍历文本节点 + MutationObserver 监听增量变更 + cn→tw 回转换
-│   ├── useGridEvents.ts              # 画布事件调度层(130行)：组合 usePanZoom/useWireMode/useSelectionMode/useKeyboardShortcuts 四个子hook，按 ModeState.kind 分发DOM事件
+│   ├── useGridEvents.ts              # 画布事件调度层(133行)：组合 usePanZoom/useWireMode/useSelectionMode/useKeyboardShortcuts/useWASDPan 五个子hook，按 ModeState.kind 分发DOM事件
 │   └── grid/
 │       ├── usePanZoom.ts             # 平移/缩放/坐标转换：中键平移 + 滚轮缩放(锚定鼠标) + getGridPos 屏幕→网格坐标
 │       ├── useWireMode.ts            # WIRE 模式连线：单击开始/提交连线 + 鼠标移动实时预览
 │       ├── useSelectionMode.ts       # DEVICE_SELECT 框选 + MOVE_SELECTION 批量移动确认
-│       └── useKeyboardShortcuts.ts   # 全局快捷键：E/Q/R/X/F/F1/M/Ctrl+C/Escape 监听 window keydown
+│       ├── useKeyboardShortcuts.ts   # 全局快捷键：E/Q/R/X/F/F1/M/Ctrl+C/Escape 监听 window keydown
+│       └── useWASDPan.ts            # WASD 动量平移：rAF 驱动 + 对角线组合 + 惯性滑行衰减 (MAX_SPEED=600, FRICTION=0.88)
 ├── __tests__/
 │   ├── setup.ts                       # jsdom mock (ResizeObserver + scrollTo)
 │   ├── testWrapper.tsx                # ChakraProvider 包裹器
@@ -103,7 +106,7 @@ src/
 │   ├── Toolbar.tsx                   # 底部面板：Chakra Tabs(6分类: 核心/物流/仓储存取/基础生产/合成制造/电力) + 模式切换按钮(BUILD/WIRE_SOLID/WIRE_LIQUID/DEVICE_SELECT) + 机器按钮列表(按分类筛选)；使用 selectors.ts 的窄 selector
 │   ├── Toolbar.scss                  # 固定底部居中、毛玻璃背景、机器按钮hover上浮动画(translateY(-16px))
 │   ├── About.tsx                     # 关于页面：版权声明 + 成员卡片列表(作者+贡献者，含头像/标签/联系方式复制)
-│   ├── BlueprintList.tsx             # 蓝图管理：新建卡片 + 蓝图网格(名称/日期/尺寸) + Chakra Drawer详情(创建日期/尺寸/标签) + 插入模式(贴到当前/新建地图放置)
+│   ├── BlueprintList.tsx             # 蓝图管理：新建卡片 + 蓝图网格(名称/日期/尺寸) + Chakra Drawer详情(创建日期/尺寸/标签) + 贴到当前插入
 │   ├── Settings.tsx                  # 设置页面：Chakra Tabs语言切换(zh-TW/zh-CN)
 │   ├── ShareModal.tsx                # 分享弹窗：generateShareUrl + captureBlueprintScreenshot(requestAnimationFrame等DOM稳定) + 复制链接/下载图片
 │   ├── SaveDialog.tsx                # Chakra Dialog保存命名(Enter确认)
@@ -119,10 +122,8 @@ src/
 │       └── About.scss               # .member-icon-btn hover变黄
 ├── assets/
 │   ├── logo-header.png               # Header 用的 96px 高 logo（2x retina）
-
 │   ├── members/                      # 团队成员头像 (eddy3721.gif, tata.png)
 │   └── machines/                     # 机器图标 .webp (以machine.id命名, 如pco.webp)
-├── _archive/                         # 已移除的旧资产（fonts/NaikaiFont-Bold.woff2, items/132张.webp, logo.png）
 ```
 
 ## 核心架构
@@ -144,14 +145,14 @@ main.tsx (ChakraProvider)
     │   ├─ Toolbar.tsx         → useGameStore (selectIsBuildMode/selectIsDeviceSelectMode/selectSelectedMachineId 等 selector + inline WIRE 模式判断 + selectMachine/setMode actions)
     │   ├─ OperationHints.tsx  → useGameStore (modeState + 选区状态)
     │   └─ SaveDialog.tsx      → 纯UI，回调由App.tsx管理
-    ├─ [list]     → BlueprintList.tsx  → useGameStore (startInsertBlueprint/startInsertBlueprintOnNewMap)
+    ├─ [list]     → BlueprintList.tsx  → useGameStore (startInsertBlueprint)
     ├─ [about]    → About.tsx          → useGameStore (setUiView)
     └─ [settings] → Settings.tsx       → useSettingsStore (language, setLanguage)
 ```
 
 **数据流方向**: 用户交互 → 组件调用 store action → `set()` 更新状态 → React 重渲染受影响组件。
 **持久化**: 仅 explicit save → `storage.ts` → localStorage，无自动保存、无云端同步。
-**分享解析**: URL query param `?bp=` → `parseShareUrl()` → decode二进制 → `loadGame()` 或 `startInsertBlueprint*()`。
+**分享解析**: URL query param `?bp=` → `parseShareUrl()` → decode二进制 → `loadGame()` 或 `startInsertBlueprint()`。
 
 ### 状态管理：Zustand 切片模式
 
@@ -179,14 +180,14 @@ export const useGameStore = create<GameState>()(devtools((...a) => ({
 | Connection | `connectionSlice.ts` | `connections[]` | `startConnecting`, `updatePreview`(含多端口同格方向选择+L形三态切换+输入端口吸附+自动续接;模块级 _gridCache 以引用相等检测命中), `commitConnection`(交叉检测+桥生成+连线分割+合并衔接), `cancelConnection`, `toggleLShape`(auto→垂直→同向 三态循环) |
 | Selection | `selectionSlice.ts` | （无顶层字段，全部内嵌于 modeState） | `setBoxSelection`, `commitBoxSelection`(shift=toggle), `clearSelection`, `deleteSelected`(含级联删连线), `startBatchMove`(→MOVE_SELECTION), `startCopySelection`(→MOVE_SELECTION+isCopying), `commitBatchMove`(碰撞检测+桥生成+连线分割) |
 | History | `historySlice.ts` | `history: { past: HistorySnapshot[], future: HistorySnapshot[] }` | `takeSnapshot`, `undo`, `redo`（上限50步，超出丢弃最旧快照） |
-| Blueprint | `blueprintSlice.ts` | `uiView`, `blueprintListMode`, `currentBlueprintId/Name` | `loadGame`, `resetGame`, `setUiView`, `setBlueprintListMode`, `setCurrentBlueprint`, `startInsertBlueprint`, `startInsertBlueprintOnNewMap`(自选网格尺寸) |
+| Blueprint | `blueprintSlice.ts` | `uiView`, `currentBlueprintId`, `currentBlueprintName` | `loadGame`, `resetGame`, `setUiView`, `setCurrentBlueprint`, `startInsertBlueprint`(蓝图插入→MOVE_SELECTION variant) |
 
 **切片间交互关键路径**：
 - `modeSlice.cancelOperation()` 按 `modeState.kind` 分发：BUILD→还原拾取机器/清空placing；WIRE→`get().cancelConnection()` 或退回 BUILD；DEVICE_SELECT→清空选区并回 BUILD；MOVE_SELECTION→还原/丢弃移动快照
 - `machinesSlice.selectMachine()` / `rotatePreview()` / `pickupMachine()` 直接读写 `modeState.placing`
 - `selectionSlice.commitBatchMove()` / `deleteSelected()` 内部调用 `get().takeSnapshot()` 创建历史快照
 - `historySlice.undo()/redo()` 调用 `get().cancelOperation()` 清理中间状态
-- `blueprintSlice.startInsertBlueprint*()` 直接设置 `modeState` 为 MOVE_SELECTION variant
+- `blueprintSlice.startInsertBlueprint()` 直接设置 `modeState` 为 MOVE_SELECTION variant
 
 ### ModeState 判别联合
 
@@ -254,7 +255,7 @@ export type ModeState =
 
 ### Selector 层 (selectors.ts)
 
-`src/store/selectors.ts` (134 行) 提供类型窄化的 Zustand selector，从 `modeState` 判别联合中安全提取子状态：
+`src/store/selectors.ts` (142 行) 提供类型窄化的 Zustand selector，从 `modeState` 判别联合中安全提取子状态：
 
 ```typescript
 // 模式判别
@@ -262,6 +263,10 @@ selectIsBuildMode(s)           // s.modeState.kind === 'BUILD'
 selectIsWireMode(s)            // s.modeState.kind === 'WIRE'
 selectIsDeviceSelectMode(s)    // s.modeState.kind === 'DEVICE_SELECT'
 selectIsMoveSelectionMode(s)   // s.modeState.kind === 'MOVE_SELECTION'
+
+// WIRE 子类型判别
+selectIsWireSolid(s)           // WIRE 且 portType === 'Solid'
+selectIsWireLiquid(s)          // WIRE 且 portType === 'Liquid'
 
 // BUILD 子状态
 selectPlacing(s)               // modeState.placing (窄类型)
@@ -369,7 +374,8 @@ interface MachineConfig {
   outputs: PortConfig[];// 输出端口
   color: string;        // 背景色(rgba)
   supplyDistance: number;// 供电延伸格数(0=不供电)
-  mask: MachineMask;     // 每格掩码 (number=全同, number[][]=差异)
+  mask: Mask;            // 未旋转掩码（rot=0），封装在 src/utils/mask.ts
+  mask4?: Mask[];        // 4 种旋转后的掩码缓存 [rot0,rot1,rot2,rot3]，模块加载时填充
 }
 
 interface PortConfig {
@@ -401,18 +407,7 @@ const sideToDir: Record<Side, Direction> = { top: 0, right: 1, bottom: 2, left: 
 
 **图标覆盖**：43 台机器中仅 24 台有 `.webp` 图标，无图标时 `<img onError>` 自动隐藏仅显示文字。
 
-## 已解决历史问题（Sprint 1–9，2026-06-10 ~ 2026-06-22）
-
-20+ 个已知问题全部修复，关键里程碑：
-- **Sprint 1–2** (06-10)：性能止血 — 细粒度 selector + React.memo + useCallback + getBoundingBox 去重 + ErrorBoundary
-- **Sprint 3** (06-11)：功能修复 — 43 台机器补全 / commitBatchMove 连线碰撞 / 网格越界清除 / 历史上限 50 步 / 平移约束
-- **Sprint 4–5** (06-13)：类型安全 + 测试 — any 清零 / 繁→简收尾 / 5 文件 100+ 测试用例 / CI/CD
-- **Sprint 6** (06-13)：架构瘦身 — Grid.tsx 拆出 ConnectionSVGLayer + useGridEvents + GhostPreview + SelectionBox + BatchMovePreview；gridUtils 拆为 5 模块
-- **Sprint 7–8** (06-13)：技术债清尾 — ESLint 25→0 / framer-motion 移除 / `any` 清零
-- **Sprint 9** (06-13)：项目清理 — 垃圾文件 / 许可证修正 / 文档重写 / 数据结构化
-- **Sprint 10** (06-19)：占用网格重构 — 掩码系统 + buildMergedGrid 统一三处网格构建；useGridEvents 拆为 4 子hook；updatePreview 拆为 5 纯函数；路由懒加载；Zustand devtools；占用网格缓存；寻路边界测试(131 total)
-- **Sprint 11** (06-19)：资产瘦身 — logo 压缩(1.5MB→10KB) / 17MB 字体移除 / 幽灵 Inter 删除 / eslint-disable 消除(2处) / meta 标签补全
-- **Sprint 12** (06-19→06-22)：GameMode → ModeState 判别联合重构 — 5 个 commit(c1443a3→f59961a)：扁平字符串替换为带子状态的判别联合，CONVEYOR+PIPE→WIRE，BLUEPRINT_PLACE→MOVE_SELECTION，新增 modeSlice + selectors.ts；`_archive/items/` 132张死图归档 + opencc-js 延迟加载 + LoadingScreen 瘦身
+详细开发历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -448,10 +443,12 @@ Bit : 7──2   2         1         0
 
 ### 核心函数
 
+- `Mask` 类（`src/utils/mask.ts`）— 封装二维占用掩码：`get(x,y)` / `IsBlocked(x,y,mask)` / `HasCollision(other,ox,oy)` / `Merge(other,ox,oy)` / `TryMerge(other,ox,oy)`，使用一维 `Uint8Array` 存储
+- `Mask.Uniform(w, h, value)` — 创建全同值掩码
+- `Mask.FromMask(cfgMask, rotation)` — 从配置掩码 + 旋转创建新掩码（4 方向旋转映射）
+- `Mask.FromConnection(path, portType)` — 从连线路径创建掩码
 - `buildMergedGrid(machines, connections, gw, gh, portType)` — 机器掩码 OR + 异类型连线掩码 OR，同类型不进网格
-- `getMachineMask(machineId)` — 硬编码 12 种物流器返回 3/7，其余返回 255
 - `connZ(base, mask)` / `machineZ(base, mask)` — 渲染 z-index 计算
-- `getMachineCellMask(machineId, localX, localY)` — 逐格掩码查询（支持差异模式 `number[][]`）
 
 ### 渲染分层
 
@@ -463,25 +460,14 @@ Bit : 7──2   2         1         0
 
 ---
 
-## 当前改进方向（2026-06-22 更新）
+## 设计决策与已知限制
 
-### 🔵 搁置
+以下为刻意为之的设计决策，非待修复项。改进方向见 [ROADMAP.md](./ROADMAP.md)。
 
-- **`commitConnection` 重构** — 当前耦合在 store action 内（交叉检测+桥生成+连线分割+合并约 230 行），等待 ModeState 重构稳定后再拆为纯函数
-- **`selectionSlice.commitBatchMove` 重构** — 约 245 行，交叉检测+桥生成+连线分割全交织在 store action 中，与 `commitConnection` 逻辑高度重复，应提取为共享纯函数
-- **分享格式版本字节** — 当前未上线，未来重新设计分享格式时一并处理
-- **撤销历史不捕获视图状态** — 设计决策：撤销只还原数据，保留用户当前视口位置
-- **历史快照不去重** — 设计决策：去重引入比较开销，50 步上限已足够防止内存问题
+- **撤销历史不捕获视图状态**（zoom/pan）— 撤销只还原数据，保留用户当前视口位置
+- **历史快照不去重** — 去重引入比较开销，50 步上限已足够防止内存问题
 - **`Gas` 端口类型** — 为游戏未来内容保留，暂不实现渲染路径
-- **连线前端显示优化** — 优化 Connection 的前端显示逻辑，具体方向待进一步明确（2026-06-20 口述）
-- **重复材料图标** — 需游戏数据人工对照
-- **E2E 测试 / a11y / 移动端 / 国际化** — 不在当前范围内
-
-### 🟢 低优先级（锦上添花）
-
-- `connectionSlice.ts` 402 行（`commitConnection` 内部 230 行），仍可拆为纯函数，等逻辑稳定后处理
-
-
+- **分享格式版本字节** — 当前编码无版本号，未来重新设计分享格式时一并处理
 
 ---
 
