@@ -3,16 +3,14 @@ import type { ConnectionSlice, GameState } from './types';
 import type { Connection, Point, Direction, PlacedMachine, PortType } from '@/types';
 import { portTypeToMask } from '@/types';
 import { Mask } from '@/utils/mask';
-import { getMachineConfigById } from '@/utils/machineUtils';
+import { getMachineConfigById, resolveMachineMasks } from '@/utils/machineUtils';
 import {
     findMachineAt,
     splitConnectionAt,
-    buildMergedGrid,
     buildConnectionGrid,
     buildExistingCornerGrid,
     findRouteForMachine,
     findRouteToGround,
-    getCornerPoints,
     checkStartOverlap,
 } from '@/utils/grid';
 
@@ -93,7 +91,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             sameConnGrid = _gridCache.sameConnGrid;
             existingCornerGrid = _gridCache.existingCornerGrid;
         } else {
-            mergedGrid = buildMergedGrid(machines, connections, gw, gh, portType);
+            mergedGrid = Mask.FromOccupancy({ machines: resolveMachineMasks(machines), connections, gridW: gw, gridH: gh, excludePortType: portType });
             sameConnGrid = buildConnectionGrid(connections, gw, gh, portType);
             existingCornerGrid = buildExistingCornerGrid(connections, gw, gh, portType);
             _gridCache = { machines, connections, gw, gh, portType, mergedGrid, sameConnGrid, existingCornerGrid };
@@ -223,15 +221,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         // 已有同类型连线拐弯点 (桥不能放在已有线的拐弯处)
         const { gridWidth: gw2, gridHeight: gh2 } = get();
         const w = gw2 || 100; const h = gh2 || 100;
-        const existingCornerGrid2 = Mask.Uniform(w, h, 0);
-        for (const conn of connections) {
-            if (conn.portType !== wiringPortType) continue;
-            for (const cp of getCornerPoints(conn.path, conn.tailFacing, conn.headFacing)) {
-                if (cp.x >= 0 && cp.x < w && cp.y >= 0 && cp.y < h) {
-                    existingCornerGrid2.WriteValue(cp.x, cp.y, 1);
-                }
-            }
-        }
+        const existingCornerGrid2 = buildExistingCornerGrid(connections, w, h, wiringPortType);
 
         const intersectionPoints: Point[] = [];
         for (const p of path) {
@@ -252,19 +242,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         // 构建全量掩码网格 (机器 + 全部连线)
         const { gridWidth: gw3, gridHeight: gh3 } = get();
         const w3 = gw3 || 100; const h3 = gh3 || 100;
-        const fullMask = Mask.Uniform(w3, h3, 0);
-        for (const m of machines) {
-            const cfg = getMachineConfigById(m.machineId);
-            if (!cfg) continue;
-            fullMask.MergeInPlace(cfg.mask4![m.rotation], m.x, m.y);
-        }
-        for (const c of connections) {
-            const cm = portTypeToMask[c.portType];
-            if (cm === 0) continue;
-            for (const p of c.path) {
-                if (p.x >= 0 && p.x < w3 && p.y >= 0 && p.y < h3) { fullMask.WriteValue(p.x, p.y, cm); }
-            }
-        }
+        const fullMask = Mask.FromOccupancy({ machines: resolveMachineMasks(machines), connections, gridW: w3, gridH: h3 });
         const bridgesToCreate: PlacedMachine[] = [];
         for (const p of intersectionPoints) {
             const cellMask = fullMask.get(p.x, p.y);

@@ -6,7 +6,7 @@ export { getBoundingBox, checkPlacementCollision, calculateContentDimensions } f
 export type { BoundingBox } from './collision';
 
 // ── 占用网格 ──
-export { buildConnectionGrid, buildMergedGrid, buildExistingCornerGrid } from './occupancy';
+export { buildConnectionGrid, buildExistingCornerGrid } from './occupancy';
 
 // ── 方向工具 ──
 export { getVectorFromSide, dirFromPoints, computeHeadFacing } from './direction';

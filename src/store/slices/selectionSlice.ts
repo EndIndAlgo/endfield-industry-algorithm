@@ -4,8 +4,8 @@ import type { PlacedMachine, Connection, Point } from '@/types';
 import { portTypeToMask } from '@/types';
 import { MACHINES } from '@/config/machines';
 import { Mask } from '@/utils/mask';
-import { getMachinePortCheckPositions, getBoundingBox, getCornerPoints, splitConnectionAt } from '@/utils/grid';
-import { getRotatedDimensions, getMachineConfigById } from '@/utils/machineUtils';
+import { getMachinePortCheckPositions, getBoundingBox, getCornerPoints, splitConnectionAt, buildExistingCornerGrid } from '@/utils/grid';
+import { getRotatedDimensions, getMachineConfigById, resolveMachineMasks } from '@/utils/machineUtils';
 
 export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlice> = (set, get) => ({
 
@@ -219,23 +219,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         }));
 
         // ── 构建剩余实体的掩码网格 ──
-        const baseGrid = Mask.Uniform(gridWidth, gridHeight, 0);
-
-        for (const m of machines) {
-            const cfg = getMachineConfigById(m.machineId);
-            if (!cfg) continue;
-            baseGrid.MergeInPlace(cfg.mask4![m.rotation], m.x, m.y);
-        }
-
-        for (const c of connections) {
-            const cm = portTypeToMask[c.portType];
-            if (cm === 0) continue;
-            for (const p of c.path) {
-                if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight) {
-                    baseGrid.WriteValue(p.x, p.y, cm);
-                }
-            }
-        }
+        const baseGrid = Mask.FromOccupancy({ machines: resolveMachineMasks(machines), connections, gridW: gridWidth, gridH: gridHeight });
 
         // ── 逐机检测 + 累积掩码（TryMerge = HasCollision + Merge）──
         for (const m of placedMachines) {
@@ -282,31 +266,9 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                     }
                 }
 
-                const cornerGrid = Mask.Uniform(gridWidth, gridHeight, 0);
-                for (const c of connections) {
-                    if (c.portType !== pt) continue;
-                    for (const cp of getCornerPoints(c.path, c.tailFacing, c.headFacing)) {
-                        if (cp.x >= 0 && cp.x < gridWidth && cp.y >= 0 && cp.y < gridHeight) {
-                            cornerGrid.WriteValue(cp.x, cp.y, 1);
-                        }
-                    }
-                }
+                const cornerGrid = buildExistingCornerGrid(connections, gridWidth, gridHeight, pt);
 
-                const fullMask = Mask.Uniform(gridWidth, gridHeight, 0);
-                for (const m of allMachines) {
-                    const c2 = getMachineConfigById(m.machineId);
-                    if (!c2) continue;
-                    fullMask.MergeInPlace(c2.mask4![m.rotation], m.x, m.y);
-                }
-                for (const c of connections) {
-                    const cm = portTypeToMask[c.portType];
-                    if (cm === 0) continue;
-                    for (const p of c.path) {
-                        if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight) {
-                            fullMask.WriteValue(p.x, p.y, cm);
-                        }
-                    }
-                }
+                const fullMask = Mask.FromOccupancy({ machines: resolveMachineMasks(allMachines), connections, gridW: gridWidth, gridH: gridHeight });
                 for (const b of bridgesToCreate) {
                     const bm = getMachineConfigById(b.machineId)!.mask.maxMask;
                     if (b.x >= 0 && b.x < gridWidth && b.y >= 0 && b.y < gridHeight) {

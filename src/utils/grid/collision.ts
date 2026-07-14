@@ -1,7 +1,6 @@
 import type { Direction, PlacedMachine, Point } from '@/types';
-import { portTypeToMask } from '@/types';
 import { MACHINES } from '@/config/machines';
-import { getRotatedDimensions, getMachineConfigById } from '@/utils/machineUtils';
+import { getRotatedDimensions, getMachineConfigById, resolveMachineMasks } from '@/utils/machineUtils';
 import { Mask } from '@/utils/mask';
 
 /** 获取机器旋转后的矩形 */
@@ -61,26 +60,8 @@ export const checkPlacementCollision = (
   gridW: number,
   gridH: number
 ): boolean => {
-  // 构建已有实体占用网格
-  const grid = Mask.Uniform(gridW, gridH, 0);
-
-  // 已有机器掩码
-  for (const m of machines) {
-    const cfg = getMachineConfigById(m.machineId);
-    if (!cfg) continue;
-    grid.MergeInPlace(cfg.mask4![m.rotation], m.x, m.y);
-  }
-
-  // 已有连线掩码 (所有类型)
-  for (const c of connections) {
-    const cm = portTypeToMask[c.portType as keyof typeof portTypeToMask] ?? 0;
-    if (cm === 0) continue;
-    for (const p of c.path) {
-      if (p.x >= 0 && p.x < gridW && p.y >= 0 && p.y < gridH) {
-        grid.WriteValue(p.x, p.y, cm);
-      }
-    }
-  }
+  // 已有实体占用网格
+  const grid = Mask.FromOccupancy({ machines: resolveMachineMasks(machines), connections, gridW, gridH });
 
   // 候选机器每格掩码 vs 已有掩码
   const candidateCfg = getMachineConfigById(machineId);

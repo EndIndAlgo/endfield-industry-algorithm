@@ -1,6 +1,7 @@
 import type { Direction, PortConfig, PlacedMachine, MachineConfig } from '@/types';
 import { isHorizontal } from '@/types';
 import { MACHINES } from '@/config/machines';
+import type { MachineMaskEntry } from '@/utils/mask';
 
 /** 机器 ID → 配置的 O(1) 查找表 */
 const machineMap = new Map(MACHINES.map(m => [m.id, m]));
@@ -89,5 +90,16 @@ export const buildPowerGrid = (
     }
 
     return grid;
+};
+
+/** 将 PlacedMachine[] 解析为 Mask.FromOccupancy 需要的 MachineMaskEntry[] */
+export const resolveMachineMasks = (machines: PlacedMachine[]): MachineMaskEntry[] => {
+    const entries: MachineMaskEntry[] = [];
+    for (const m of machines) {
+        const cfg = getMachineConfigById(m.machineId);
+        if (!cfg) continue;
+        entries.push({ mask: cfg.mask4![m.rotation], x: m.x, y: m.y });
+    }
+    return entries;
 };
 

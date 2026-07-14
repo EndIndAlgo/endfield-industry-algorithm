@@ -5,7 +5,6 @@ import {
     getCornerPoints,
     splitConnectionAt,
     dirFromPoints,
-    buildMergedGrid,
     buildConnectionGrid,
     buildExistingCornerGrid,
     validateRouteConflicts,
@@ -14,6 +13,7 @@ import {
 } from '@/utils/grid';
 import { Mask } from '@/utils/mask';
 import { getRotatedPorts, getRotatedDimensions } from '@/utils/machineUtils';
+import { MACHINES } from '@/config/machines';
 import type { Connection, Direction, PortConfig, PortType, PlacedMachine } from '@/types';
 import { MASK_SOLID_LOGISTICS, DIR_RIGHT, DIR_DOWN, DIR_LEFT, DIR_UP } from '@/types';
 
@@ -330,24 +330,26 @@ describe('trySingleLRoute', () => {
 });
 
 // ======================================================================
-// buildMergedGrid
+// Mask.FromOccupancy (was buildMergedGrid)
 // ======================================================================
-describe('buildMergedGrid', () => {
-    const mkMachine = (overrides: Partial<PlacedMachine> = {}): PlacedMachine => ({
-        id: 'test-m', machineId: 'pco', x: 2, y: 2, rotation: DIR_UP, ...overrides,
-    });
+describe('Mask.FromOccupancy', () => {
+    const mkEntry = (overrides: Partial<PlacedMachine> = {}) => {
+        const cfg = MACHINES.find(m => m.id === (overrides.machineId || 'pco'))!;
+        const rot = overrides.rotation ?? DIR_UP;
+        return { mask: cfg.mask4![rot], x: overrides.x ?? 2, y: overrides.y ?? 2 };
+    };
 
     it('空机器和空连线返回全零网格', () => {
-        const grid = buildMergedGrid([], [], 10, 10, 'Solid');
+        const grid = Mask.FromOccupancy({ machines: [], connections: [], gridW: 10, gridH: 10 });
         expect(grid.data.every(v => v === 0)).toBe(true);
     });
 
     it('机器占用格非零', () => {
-        const grid = buildMergedGrid([mkMachine()], [], 10, 10, 'Solid');
+        const grid = Mask.FromOccupancy({ machines: [mkEntry()], connections: [], gridW: 10, gridH: 10 });
         expect(grid.data[2 * 10 + 2]).not.toBe(0);
     });
 
-    it('异类型连线进入网格，同类型不进入', () => {
+    it('excludePortType 排除同类型连线，异类型进入', () => {
         const solidConn: Connection = {
             id: 'c1', tailFacing: DIR_RIGHT, headFacing: DIR_RIGHT,
             path: [{ x: 5, y: 5 }], portType: 'Solid',
@@ -356,7 +358,7 @@ describe('buildMergedGrid', () => {
             id: 'c2', tailFacing: DIR_RIGHT, headFacing: DIR_RIGHT,
             path: [{ x: 6, y: 6 }], portType: 'Liquid',
         };
-        const grid = buildMergedGrid([], [solidConn, liqConn], 10, 10, 'Solid');
+        const grid = Mask.FromOccupancy({ machines: [], connections: [solidConn, liqConn], gridW: 10, gridH: 10, excludePortType: 'Solid' });
         expect(grid.data[5 * 10 + 5]).toBe(0);
         expect(grid.data[6 * 10 + 6]).not.toBe(0);
     });

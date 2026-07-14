@@ -1,6 +1,4 @@
-import type { PlacedMachine, Connection, PortType } from '@/types';
-import { portTypeToMask } from '@/types';
-import { getMachineConfigById } from '@/utils/machineUtils';
+import type { Connection, PortType } from '@/types';
 import { Mask } from '@/utils/mask';
 import { getCornerPoints } from './port';
 
@@ -24,42 +22,6 @@ export const buildConnectionGrid = (
 };
 
 /**
- * 构建合并占用网格 (8-bit 掩码)
- * 每格 = 所有机器掩码的 OR | 所有异类型连线掩码的 OR
- * 同类型连线不进入网格 (可通过, 后续在交叉点放桥)
- */
-export const buildMergedGrid = (
-  machines: PlacedMachine[],
-  connections: Connection[],
-  gridW: number,
-  gridH: number,
-  portType: PortType
-): Mask => {
-  const grid = Mask.Uniform(gridW, gridH, 0);
-
-  // 机器占用
-  for (const m of machines) {
-    const cfg = getMachineConfigById(m.machineId);
-    if (!cfg) continue;
-    grid.MergeInPlace(cfg.mask4![m.rotation], m.x, m.y);
-  }
-
-  // 异类型连线 (同类型跳过, 可通过放桥)
-  for (const c of connections) {
-    if (c.portType === portType) continue;
-    const otherMask = portTypeToMask[c.portType];
-    if (otherMask === 0) continue;
-    for (const p of c.path) {
-      if (p.x >= 0 && p.x < gridW && p.y >= 0 && p.y < gridH) {
-        grid.WriteValue(p.x, p.y, otherMask);
-      }
-    }
-  }
-
-  return grid;
-};
-
-/**
  * 构建已有同类型连线拐弯点网格
  * 桥不能放在已有线的拐弯上
  */
@@ -69,14 +31,12 @@ export const buildExistingCornerGrid = (
   gh: number,
   portType: PortType
 ): Mask => {
-  const grid = Mask.Uniform(gw, gh, 0);
+  const corners: import('@/types').Point[] = [];
   for (const conn of connections) {
     if (conn.portType !== portType) continue;
     for (const cp of getCornerPoints(conn.path, conn.tailFacing, conn.headFacing)) {
-      if (cp.x >= 0 && cp.x < gw && cp.y >= 0 && cp.y < gh) {
-        grid.WriteValue(cp.x, cp.y, 1);
-      }
+      corners.push(cp);
     }
   }
-  return grid;
+  return Mask.FromCornerPoints(corners, gw, gh);
 };

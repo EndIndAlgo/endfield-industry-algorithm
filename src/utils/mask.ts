@@ -1,6 +1,11 @@
 import type { Direction, PortType, Point } from '@/types';
 import { portTypeToMask, isHorizontal } from '@/types';
 
+/** FromOccupancy 需要的机器掩码条目（调用方负责从 MachineConfig 解析） */
+export interface MachineMaskEntry { mask: Mask; x: number; y: number }
+/** FromOccupancy 需要的连线最小字段 */
+interface ConnLike { path: Point[]; portType: string };
+
 /** 遍历 Uint8Array 取最大值 */
 const computeMaxMask = (data: Uint8Array): number => {
   let max = 0;
@@ -21,19 +26,27 @@ export class Mask {
   readonly data: Uint8Array;
   readonly width: number;
   readonly height: number;
-  /** 构造时预计算的最大掩码值（用于 z-index 分层） */
-  readonly maxMask: number;
+
+  /** 最大掩码值缓存。脏时由 getter 惰性重算。_dirty 日后扩展为通用非关键数据脏标志。 */
+  private _max_mask_cache = 0;
+  private _dirty = true;
+
+  get maxMask(): number {
+    if (this._dirty) {
+      this._max_mask_cache = computeMaxMask(this.data);
+      this._dirty = false;
+    }
+    return this._max_mask_cache;
+  }
 
   private constructor(
     data: Uint8Array,
     width: number,
     height: number,
-    maxMask?: number,
   ) {
     this.data = data;
     this.width = width;
     this.height = height;
-    this.maxMask = maxMask ?? computeMaxMask(data);
   }
 
   // ── 查询 ──
@@ -54,7 +67,10 @@ export class Mask {
   static Uniform(w: number, h: number, value: number): Mask {
     const data = new Uint8Array(w * h);
     if (value !== 0) data.fill(value);
-    return new Mask(data, w, h, value);
+    const m = new Mask(data, w, h);
+    m._max_mask_cache = value;
+    m._dirty = false;
+    return m;
   }
 
   /**
@@ -111,7 +127,7 @@ export class Mask {
    * 合并到画布网格时 offset = 包围盒的 (minX, minY)。
    */
   static FromConnection(path: Point[], portType: PortType): Mask {
-    if (path.length === 0) return new Mask(new Uint8Array(0), 0, 0, 0);
+    if (path.length === 0) return new Mask(new Uint8Array(0), 0, 0);
     const maskValue = portTypeToMask[portType];
     let minX = Infinity, minY = Infinity;
     let maxX = -Infinity, maxY = -Infinity;
@@ -131,17 +147,66 @@ export class Mask {
       data[(p.y - minY) * w + (p.x - minX)] = maskValue;
     }
 
-    return new Mask(data, w, h, maskValue);
+    const m = new Mask(data, w, h);
+    m._max_mask_cache = maskValue;
+    m._dirty = false;
+    return m;
+  }
+
+  /**
+   * 从机器列表 + 连线列表构建占用掩码（最常用的组合构建入口）
+   *
+   * 等价于：Uniform → 遍历机器 MergeInPlace → 遍历连线 WriteValue
+   * excludePortType 用于路由场景：同类型连线可通过故不进入掩码
+   */
+  static FromOccupancy(opts: {
+    machines: MachineMaskEntry[];
+    connections: ConnLike[];
+    gridW: number;
+    gridH: number;
+    excludePortType?: PortType;
+  }): Mask {
+    const { machines, connections, gridW, gridH, excludePortType } = opts;
+    const grid = Mask.Uniform(gridW, gridH, 0);
+
+    for (const m of machines) {
+      grid.MergeInPlace(m.mask, m.x, m.y);
+    }
+
+    for (const c of connections) {
+      if (excludePortType !== undefined && c.portType === excludePortType) continue;
+      const maskValue = portTypeToMask[c.portType as keyof typeof portTypeToMask] ?? 0;
+      if (maskValue === 0) continue;
+      for (const p of c.path) {
+        if (p.x >= 0 && p.x < gridW && p.y >= 0 && p.y < gridH) {
+          grid.WriteValue(p.x, p.y, maskValue);
+        }
+      }
+    }
+
+    return grid;
+  }
+
+  /**
+   * 从连线拐弯点列表构建掩码（每个拐弯点写 1）
+   * 调用方负责用 getCornerPoints 预计算拐弯点并通过 portType 过滤
+   */
+  static FromCornerPoints(corners: Point[], gridW: number, gridH: number): Mask {
+    const grid = Mask.Uniform(gridW, gridH, 0);
+    for (const cp of corners) {
+      if (cp.x >= 0 && cp.x < gridW && cp.y >= 0 && cp.y < gridH) {
+        grid.WriteValue(cp.x, cp.y, 1);
+      }
+    }
+    return grid;
   }
 
   // ── 单点写入 ──
 
-  /** 在 (x, y) 处按位或写入掩码值，同步更新 maxMask */
+  /** 在 (x, y) 处按位或写入掩码值 */
   WriteValue(x: number, y: number, value: number): void {
-    const idx = y * this.width + x;
-    this.data[idx] |= value;
-    if (this.data[idx] > this.maxMask)
-      (this as { maxMask: number }).maxMask = this.data[idx];
+    this.data[y * this.width + x] |= value;
+    this._dirty = true;
   }
 
   // ── 碰撞 ──
@@ -201,7 +266,10 @@ export class Mask {
   // ── 工具 ──
 
   Clone(): Mask {
-    return new Mask(new Uint8Array(this.data), this.width, this.height, this.maxMask);
+    const m = new Mask(new Uint8Array(this.data), this.width, this.height);
+    m._max_mask_cache = this._max_mask_cache;
+    m._dirty = this._dirty;
+    return m;
   }
 
   // ── 内部 ──
@@ -210,7 +278,6 @@ export class Mask {
     const { data: od, width: ow, height: oh } = other;
     const tw = this.width;
     const td = this.data;
-    let newMax = this.maxMask;
 
     for (let ly = 0; ly < oh; ly++) {
       const ty = oy + ly;
@@ -222,14 +289,11 @@ export class Mask {
         if (tx < 0 || tx >= tw) continue;
         const v = od[srcRow + lx];
         if (v === 0) continue;
-        const idx = dstRow + tx;
-        td[idx] |= v;
-        if (td[idx] > newMax) newMax = td[idx];
+        td[dstRow + tx] |= v;
       }
     }
 
-    // maxMask 是 readonly，但在私有方法中可以强制更新（构造后不变）
-    (this as { maxMask: number }).maxMask = newMax;
+    this._dirty = true;
     return this;
   }
 }
