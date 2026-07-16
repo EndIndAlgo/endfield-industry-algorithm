@@ -28,7 +28,7 @@ interface UseGridEventsReturn {
  */
 export const useGridEvents = (): UseGridEventsReturn => {
   // ── 共享基础设施 ──
-  const { containerRef, isPanning, getGridPos, getGridPosFrac, handleWheel, startPan, movePan, stopPan } =
+  const { containerRef, isPanning, getGridPos, getGridPosFrac, zoomAt, startPan, movePan, stopPan } =
     usePanZoom();
 
   // ── hover 状态（React state 驱动渲染，ref 供闭包读取最新值） ──
@@ -74,7 +74,7 @@ export const useGridEvents = (): UseGridEventsReturn => {
     hoverPosRef.current = pos;
     useGameStore.getState().setHoverPosFrac(getGridPosFrac(e));
     wire.onMouseMove(pos);
-    select.onMouseMove(pos, e);
+    select.onMouseMove(pos, e.buttons);
   }, [isPanning, getGridPos, getGridPosFrac, movePan, wire, select]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -134,6 +134,10 @@ export const useGridEvents = (): UseGridEventsReturn => {
     setHoverPos(null);
     stopPan();
   }, [stopPan]);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    zoomAt(e.clientX, e.clientY, e.deltaY);
+  }, [zoomAt]);
 
   return {
     containerRef,

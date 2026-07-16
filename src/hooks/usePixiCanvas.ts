@@ -4,8 +4,9 @@ import { PixiSceneManager } from '@/pixi/PixiSceneManager';
 /**
  * React hook：管理 PixiJS Application 的生命周期
  *
- * 返回一个 ref 挂到宿主 div 上，mount 时异步初始化 PixiJS，
- * unmount 时销毁 Application 释放资源。
+ * 返回 { containerRef, managerRef }：
+ * - containerRef 挂到宿主 div 上
+ * - managerRef 供 usePixiEvents 等 hook 获取 PixiSceneManager 实例
  */
 export function usePixiCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -20,9 +21,9 @@ export function usePixiCanvas() {
     managerRef.current = manager;
 
     manager.mount(el).then(() => {
-      // 如果在 init 完成前组件已卸载，立即销毁
       if (cancelled) {
         manager.destroy();
+        managerRef.current = null;
       }
     });
 
@@ -33,5 +34,5 @@ export function usePixiCanvas() {
     };
   }, []);
 
-  return containerRef;
+  return { containerRef, managerRef };
 }

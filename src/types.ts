@@ -121,6 +121,15 @@ export function isVirtualMachine(id: string): id is VirtualMachineId {
   return (VIRTUAL_MACHINE_IDS as readonly string[]).includes(id);
 }
 
+/** 指针事件最小接口 — DOM React.MouseEvent 和 PixiJS FederatedPointerEvent 均满足 */
+export interface GridPointerEvent {
+  clientX: number;
+  clientY: number;
+  button: number;
+  buttons: number;
+  shiftKey: boolean;
+}
+
 // ── 连线中的瞬态字段（WIRE variant 子状态）──
 export interface ConnectingFields {
   availablePorts: { pos: Point; facing: Direction }[];

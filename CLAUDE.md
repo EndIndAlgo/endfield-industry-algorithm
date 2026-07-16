@@ -142,13 +142,13 @@ main.tsx (ChakraProvider)
     │   ├─ Header.tsx          → useGameStore (gridWidth/gridHeight/uiView)
     │   │   └─ ShareModal.tsx  → generateShareUrl + captureBlueprintScreenshot
     │   ├─ BreadcrumbNav.tsx   → useGameStore (currentViewingNodeId/currentAncestorPath/blueprintRegistry)
-    │   ├─ PixiGrid.tsx        → PixiJS WebGL 画布 + useGridEvents DOM 事件层
+    │   ├─ PixiGrid.tsx        → PixiJS WebGL 画布 + usePixiEvents 事件层
     │   │   ├─ PixiSceneManager (命令式，非 React)  → Zustand subscribe 驱动增量更新
     │   │   │   ├─ GridLayer          → TilingSprite 网格背景
     │   │   │   ├─ MachineLayer       → MachineRenderer (机器 Container)
     │   │   │   ├─ ConnectionLayer    → ConnectionRenderer (连线 Graphics)
     │   │   │   └─ OverlayLayer       → OverlayRenderer (Ghost/选框/蓝图轮廓)
-    │   │   └─ useGridEvents (DOM 事件，透明覆盖层)
+    │   │   └─ usePixiEvents (PixiJS FederatedEvent, worldContainer.toLocal 坐标转换)
     │   ├─ Toolbar.tsx         → useGameStore (selector + actions)
     │   ├─ OperationHints.tsx  → useGameStore (modeState + 选区状态)
     │   └─ SaveDialog.tsx      → 纯UI，回调由App.tsx管理
@@ -314,8 +314,10 @@ selectDescendantConnections(s)   // 递归展开所有后代连线的展平数�
 | 平移/缩放 | `worldContainer.position` / `worldContainer.scale` | zoom 范围 0.18~3.0 |
 | 坐标转换 | `worldContainer.toLocal(pointerGlobal) / GRID_SIZE` | PixiJS 原生 transform |
 
-**事件架构**：PixiJS canvas 设为 `pointer-events: none`，DOM 事件穿透到外层 `grid-container`，
-复用现有 `useGridEvents` hooks（DOM 坐标转换 → store action）。PixiJS 仅负责视觉渲染。
+**事件架构**（Phase 6 完成）：PixiJS `FederatedEvent` 直接在 canvas 上捕获，
+`usePixiEvents` 绑定 pointerdown/move/up/click/wheel 到 `app.stage`，
+坐标转换通过 `worldContainer.toLocal(event.global) / GRID_SIZE`。
+`useGridEvents`（DOM 事件版本）保留作为后备。
 
 **PixiSceneManager**：命令式同步模式 — `useGameStore.subscribe()` 监听变化 → diff → 增量更新 PixiJS 场景图。
 每层渲染器（MachineRenderer / ConnectionRenderer / OverlayRenderer）暴露 `create` + `update` 静态方法。

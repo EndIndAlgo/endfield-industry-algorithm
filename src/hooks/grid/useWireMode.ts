@@ -1,26 +1,21 @@
 import { useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
-import type { Point } from '@/types';
+import type { Point, GridPointerEvent } from '@/types';
 import { findPortOuterCellAt, findMachineAt, getPortOuterCells } from '@/utils/grid';
 
 interface UseWireModeDeps {
-  getGridPos: (e: { clientX: number; clientY: number }) => Point;
+  /** 屏幕坐标 → 网格坐标（事件源无关：DOM 或 PixiJS） */
+  getGridPos: (e: GridPointerEvent) => Point;
   hoverPosRef: React.MutableRefObject<Point | null>;
 }
 
-/**
- * 连线模式 hook（传送带/管道）
- * 处理 WIRE 模式下的连线开始、提交、预览更新
- */
 export function useWireMode({ getGridPos, hoverPosRef }: UseWireModeDeps) {
-  /** 点击：开始连线或提交连线 */
-  const onClick = useCallback((e: React.MouseEvent) => {
+  const onClick = useCallback((e: GridPointerEvent) => {
     const pos = getGridPos(e);
     const s = useGameStore.getState();
     const ms = s.modeState;
     if (ms.kind !== 'WIRE') return;
 
-    // 正在进行连线 → 提交
     if (ms.connecting) {
       if (ms.connecting.isValidPath) {
         s.takeSnapshot();
@@ -29,10 +24,7 @@ export function useWireMode({ getGridPos, hoverPosRef }: UseWireModeDeps) {
       return;
     }
 
-    // 开始新连线：从 modeState 读取端口类型
     const portType = ms.portType;
-
-    // 尝试从机器端口开始
     const machine = findMachineAt(pos, s.machines);
     if (machine) {
       const ports = getPortOuterCells(machine, portType);
@@ -43,7 +35,6 @@ export function useWireMode({ getGridPos, hoverPosRef }: UseWireModeDeps) {
       return;
     }
 
-    // 尝试从端口外侧格子开始
     const outerResult = findPortOuterCellAt(pos, s.machines, portType);
     if (outerResult) {
       s.startConnecting([{ pos: outerResult.pos, facing: outerResult.facing }], portType);
@@ -51,7 +42,6 @@ export function useWireMode({ getGridPos, hoverPosRef }: UseWireModeDeps) {
     }
   }, [getGridPos, hoverPosRef]);
 
-  /** 鼠标移动：更新连线预览 */
   const onMouseMove = useCallback((pos: Point) => {
     const s = useGameStore.getState();
     const ms = s.modeState;

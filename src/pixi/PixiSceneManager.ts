@@ -8,7 +8,8 @@ import { preloadMachineTextures } from './TextureLoader';
 import { getMachineConfig } from '@/config/machines';
 import { getRotatedDimensions, buildPowerGrid } from '@/utils/machineUtils';
 import type { GameState } from '@/store/slices/types';
-import type { PlacedMachine, Connection, PortType } from '@/types';
+import type { PlacedMachine, Connection, PortType, Point } from '@/types';
+import { GRID_SIZE } from '@/config/constants';
 
 // 注册视口裁剪插件（提前于 Application.init）
 extensions.add(CullerPlugin);
@@ -63,7 +64,6 @@ export class PixiSceneManager {
     this.app.canvas.style.position = 'absolute';
     this.app.canvas.style.top = '0';
     this.app.canvas.style.left = '0';
-    this.app.canvas.style.pointerEvents = 'none';
 
     await preloadMachineTextures();
 
@@ -115,6 +115,26 @@ export class PixiSceneManager {
 
     this.root.addChild(this.world);
     this.app.stage.addChild(this.root);
+  }
+
+  // ── 坐标转换（供 PixiJS 事件 hook 使用） ──
+
+  /** 屏幕像素坐标 → 世界坐标 → 网格坐标（整数） */
+  screenToGrid(clientX: number, clientY: number): Point {
+    const local = this.world.toLocal({ x: clientX, y: clientY });
+    return {
+      x: Math.floor(local.x / GRID_SIZE),
+      y: Math.floor(local.y / GRID_SIZE),
+    };
+  }
+
+  /** 屏幕像素坐标 → 小数网格坐标 */
+  screenToGridFrac(clientX: number, clientY: number): Point {
+    const local = this.world.toLocal({ x: clientX, y: clientY });
+    return {
+      x: local.x / GRID_SIZE,
+      y: local.y / GRID_SIZE,
+    };
   }
 
   // ── Store 同步 ──
