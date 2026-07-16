@@ -74,61 +74,57 @@ src/
 │   ├── blueprintGuard.ts             # isViewingOwn: 判断实体是否属于当前 viewing 节点（蓝图嵌套时限制修改范围）
 │   ├── blueprintTree.ts              # syncStoreFromViewing/flattenBlueprint/rebuildMasks: 蓝图树同步与展平工具
 │   ├── flatten.ts                    # 蓝图递归展平：累加子蓝图偏移坐标，过滤虚拟机器，返回纯 machines+connections
-│   ├── portPosition.ts               # getPortStyle(机器端口定位), getGhostArrowPosition, pathToPoints/extendPoint(SVG渲染工具)
+│   ├── portPosition.ts               # getPortStyle(机器端口定位，被 MachineRenderer 复用)
 │   ├── shareUtils.ts                 # toBase64Url/fromBase64Url, encode/decode (V3二进制: 3字节ID+3字节位置), generateShareUrl, parseShareUrl, captureBlueprintScreenshot(html2canvas)
 │   ├── storage.ts                    # Blueprint 接口, getBlueprints/saveBlueprint/deleteBlueprint/loadBlueprint/getLastBlueprintId/setLastBlueprintId
 │   └── toaster.ts                    # createToaster({placement:'bottom-end'}) 单例
-├── styles/
-│   └── cssCustomProps.ts             # machinePositionStyle: CSS自定义属性 --x/--y/--w/--h 的类型安全工厂函数
+├── pixi/
+│   ├── PixiSceneManager.ts           # 核心场景管理器：Application 生命周期、场景图构建、Zustand subscribe → diff → 增量更新
+│   ├── TextureLoader.ts              # 机器图标纹理批量预加载 (Assets.load + skip 策略)
+│   ├── layers/
+│   │   └── GridLayer.ts              # 网格背景：TilingSprite 平铺 40×40 纹理 + Graphics 4px 边框
+│   └── renderers/
+│       ├── MachineRenderer.ts        # 机器渲染：Container 创建/更新（机身、图标、端口、标签、供电图标、选中高亮）
+│       ├── ConnectionRenderer.ts     # 连线渲染：Graphics 双线效果（outline+fill）、预览连线
+│       └── OverlayRenderer.ts        # 叠加层：Ghost 放置预览、选框、子蓝图轮廓、蓝图移动预览
 ├── hooks/
-│   ├── useChineseConverter.ts        # 繁/简热切换：动态 import('opencc-js') + 遍历文本节点 + MutationObserver 监听增量变更 + cn→tw 回转换
-│   ├── useGridEvents.ts              # 画布事件调度层：组合 usePanZoom/useWireMode/useSelectionMode/useKeyboardShortcuts/useWASDPan/useBlueprintSelectMode 六个子hook，按 ModeState.kind 分发DOM事件
+│   ├── useChineseConverter.ts        # 繁/简热切换
+│   ├── usePixiCanvas.ts              # React hook：管理 PixiJS Application 的 mount/unmount 生命周期
+│   ├── useGridEvents.ts              # 画布事件调度层：组合 6 个子 hook，按 ModeState.kind 分发 DOM 事件
 │   └── grid/
-│       ├── usePanZoom.ts             # 平移/缩放/坐标转换：中键平移 + 滚轮缩放(锚定鼠标) + getGridPos 屏幕→网格坐标
-│       ├── useWireMode.ts            # WIRE 模式连线：单击开始/提交连线 + 鼠标移动实时预览
+│       ├── usePanZoom.ts             # 平移/缩放/坐标转换
+│       ├── useWireMode.ts            # WIRE 模式连线交互
 │       ├── useSelectionMode.ts       # DEVICE_SELECT 框选 + MOVE_SELECTION 批量移动确认
-│       ├── useKeyboardShortcuts.ts   # 全局快捷键：E/Q/R/X/B/F/F1/M/Ctrl+C/Escape 监听 window keydown
-│       ├── useWASDPan.ts            # WASD 动量平移：rAF 驱动 + 对角线组合 + 惯性滑行衰减 (MAX_SPEED=600, FRICTION=0.88)
-│       └── useBlueprintSelectMode.ts # 蓝图选择模式：点击选中子蓝图 / 拖拽移动 / 从列表导入放置
+│       ├── useKeyboardShortcuts.ts   # 全局快捷键
+│       ├── useWASDPan.ts            # WASD 动量平移
+│       └── useBlueprintSelectMode.ts # 蓝图选择模式
 ├── __tests__/
-│   ├── setup.ts                       # jsdom mock (ResizeObserver + scrollTo)
+│   ├── setup.ts                       # jsdom mock
 │   ├── testWrapper.tsx                # ChakraProvider 包裹器
-│   ├── pureFunctions.test.ts          # 纯函数测试：碰撞检测/寻路/掩码/端口
-│   ├── store.test.ts                  # Zustand store 切片测试：machines/connections/selection/history
-│   ├── useChineseConverter.test.tsx   # 繁简转换 hook 测试
-│   ├── Machine.test.tsx               # Machine 组件渲染测试
-│   └── Toolbar.test.tsx               # Toolbar 组件渲染测试
+│   ├── pureFunctions.test.ts          # 纯函数测试
+│   ├── store.test.ts                  # Zustand store 切片测试
+│   ├── useChineseConverter.test.tsx   # 繁简转换测试
+│   └── Toolbar.test.tsx               # Toolbar 组件测试
 ├── components/
-│   ├── Grid.tsx                      # 核心画布(纯渲染外壳)：委托useGridEvents处理输入，组合 ConnectionSVGLayer + Machine×N + GhostPreview + SelectionBox + BatchMovePreview
-│   ├── Grid.scss                     # 网格背景(background-image linear-gradient)、连线/管道双线样式(outline+fill)、预影动画(@keyframes dash)、选中高亮、框选样式
-│   ├── ConnectionSVGLayer.tsx         # SVG连线图层组件(React.memo)：统一渲染已确认连线+预览路径，复用 pathToPoints() 消除重复
-│   ├── Machine.tsx                   # 已放置机器(React.memo + 细粒度selector)：端口渲染(输入/输出/双端口菱形)、长按500ms拾取、供电不足警告图标(@iconify uil:battery-bolt)、hover标签(机器名+操作提示)、端口碰撞检测缩容(getPortClasses: shrink-depth/shrink-length)
-│   ├── Machine.scss                  # 机器容器定位(CSS --x,--y,--w,--h)、端口尺寸/方向/缩容规则(.shrink-depth/.shrink-length)、输入/输出箭头旋转方向、clickable/active状态
-│   ├── GhostPreview.tsx              # BUILD 模式机器放置预览(React.memo)：ghost占位 + 供电范围虚线框 + 端口方向箭头
-│   ├── GhostPreview.scss             # ghost虚线边框动画(@keyframes dash)、invalid红色标记
-│   ├── SelectionBox.tsx              # DEVICE_SELECT 模式框选矩形(React.memo)
-│   ├── BatchMovePreview.tsx          # MOVE_SELECTION 批量移动预览(React.memo)：半透明机器虚影 + 半透明连线SVG
-│   ├── Header.tsx                    # 顶部栏：logo、Chakra Select(Root)网格尺寸选择(handleValueChange: takeSnapshot+setGridSize)、保存/蓝图列表/分享/设置/关于/重置视图6个IconButton
-│   ├── Header.scss                   # flex布局，center-actions右对齐，actions按钮hover效果
-│   ├── Toolbar.tsx                   # 底部面板：Chakra Tabs(6分类: 核心/物流/仓储存取/基础生产/合成制造/电力) + 模式切换按钮(BUILD/WIRE_SOLID/WIRE_LIQUID/DEVICE_SELECT/BLUEPRINT_SELECT) + 机器按钮列表(按分类筛选)；使用 selectors.ts 的窄 selector
-│   ├── Toolbar.scss                  # 固定底部居中、毛玻璃背景、机器按钮hover上浮动画(translateY(-16px))
-│   ├── About.tsx                     # 关于页面：版权声明 + 成员卡片列表(作者+贡献者，含头像/标签/联系方式复制)
-│   ├── BlueprintList.tsx             # 蓝图管理：新建卡片 + 蓝图网格(名称/日期/尺寸) + Chakra Drawer详情(创建日期/尺寸/标签) + 作为子蓝图插入当前 + 载入编辑
-│   ├── Settings.tsx                  # 设置页面：Chakra Tabs语言切换(zh-TW/zh-CN)
-│   ├── ShareModal.tsx                # 分享弹窗：generateShareUrl + captureBlueprintScreenshot(requestAnimationFrame等DOM稳定) + 复制链接/下载图片
-│   ├── SaveDialog.tsx                # Chakra Dialog保存命名(Enter确认)
-│   ├── IconButton.tsx                # 通用IconButton：@iconify/react Icon + CSS tooltip(绝对定位+箭头伪元素)
-│   ├── IconButton.scss              # 圆形36px按钮、tooltip淡入动画、::before箭头
-│   ├── OperationHints.tsx            # 操作提示面板：根据 modeState+hasSelection 动态显示快捷键组合(含鼠标图标)
-│   ├── OperationHints.scss          # 绝对定位右侧居中、JetBrains Mono字体、键盘图标样式
-│   ├── LoadingScreen.tsx             # 启动画面：纯 CSS 三阶段动画（fill 进度条 0→100% rAF 200ms → expand 展开 250ms → fade 淡出 200ms），无网络依赖
-│   ├── LoadingScreen.scss           # 暗底+黄色竖条展开动画(cubic-bezier)、左下角百分比+右上角logo(logo.svg)+"终末地牛逼"
-│   ├── ErrorBoundary.tsx             # React 错误边界类组件：包裹所有路由页面，捕获渲染错误并显示回退 UI
-│   ├── SubBlueprintOutline.tsx       # 子蓝图选中轮廓框(React.memo)：黄色虚线矩形，BLUEPRINT_SELECT 模式下渲染
-│   ├── BreadcrumbNav.tsx             # 蓝图嵌套层级面包屑导航：chevron 分隔的祖先路径，点击跳转
+│   ├── PixiGrid.tsx                  # PixiJS 画布组件：混合架构（PixiJS canvas 底层 + DOM 事件层顶层）
+│   ├── Grid.scss                     # grid-container 容器样式（.grid-container, .wiring-mode, .panning 等）
+│   ├── Header.tsx                    # 顶部栏：logo、网格尺寸选择、保存/蓝图列表/分享/设置/关于/重置视图
+│   ├── Header.scss                   # flex 布局
+│   ├── Toolbar.tsx                   # 底部面板：6 分类 Tabs + 模式切换按钮 + 机器按钮列表
+│   ├── Toolbar.scss                  # 固定底部居中、毛玻璃背景
+│   ├── About.tsx                     # 关于页面：版权声明 + 成员卡片
+│   ├── BlueprintList.tsx             # 蓝图管理：新建 + 网格列表 + Drawer 详情
+│   ├── Settings.tsx                  # 设置页面：语言切换
+│   ├── ShareModal.tsx                # 分享弹窗: generateShareUrl + captureBlueprintScreenshot
+│   ├── SaveDialog.tsx                # Chakra Dialog 保存命名
+│   ├── IconButton.tsx + .scss       # 通用 IconButton + tooltip
+│   ├── OperationHints.tsx + .scss   # 操作提示面板
+│   ├── LoadingScreen.tsx + .scss    # 启动加载动画
+│   ├── ErrorBoundary.tsx             # React 错误边界
+│   ├── BreadcrumbNav.tsx             # 蓝图嵌套面包屑导航
 │   └── ui/
-│       ├── tooltip.tsx               # Chakra Tooltip封装：支持showArrow/portalled/portalRef/contentProps，disabled时直接返回children
-│       └── About.scss               # .member-icon-btn hover变黄
+│       ├── tooltip.tsx               # Chakra Tooltip 封装
+│       └── About.scss               # .member-icon-btn hover 效果
 ├── assets/
 │   ├── logo-header.png               # Header 用的 96px 高 logo（2x retina）
 │   ├── members/                      # 团队成员头像 (eddy3721.gif, tata.png)
@@ -146,14 +142,14 @@ main.tsx (ChakraProvider)
     │   ├─ Header.tsx          → useGameStore (gridWidth/gridHeight/uiView)
     │   │   └─ ShareModal.tsx  → generateShareUrl + captureBlueprintScreenshot
     │   ├─ BreadcrumbNav.tsx   → useGameStore (currentViewingNodeId/currentAncestorPath/blueprintRegistry)
-    │   ├─ Grid.tsx            → useGameStore（核心画布，约10个细粒度selector）
-    │   │   ├─ ConnectionSVGLayer  → useGameStore（已确认连线 + 预览路径 SVG）
-    │   │   ├─ Machine.tsx ×N      → useGameStore（通过 selectors.ts 的窄 selector 读取 modeState 子状态）
-    │   │   ├─ GhostPreview        → useGameStore（BUILD 模式放置预览+供电虚线框+端口箭头）
-    │   │   ├─ SelectionBox        → useGameStore（DEVICE_SELECT 框选矩形）
-    │   │   ├─ BatchMovePreview    → useGameStore（MOVE_SELECTION 批量移动虚影）
-    │   │   └─ SubBlueprintOutline → useGameStore（BLUEPRINT_SELECT 子蓝图轮廓框）
-    │   ├─ Toolbar.tsx         → useGameStore (selectIsBuildMode/selectIsDeviceSelectMode/selectIsBlueprintSelectMode/selectSelectedMachineId 等 selector + inline WIRE 模式判断 + selectMachine/setMode actions)
+    │   ├─ PixiGrid.tsx        → PixiJS WebGL 画布 + useGridEvents DOM 事件层
+    │   │   ├─ PixiSceneManager (命令式，非 React)  → Zustand subscribe 驱动增量更新
+    │   │   │   ├─ GridLayer          → TilingSprite 网格背景
+    │   │   │   ├─ MachineLayer       → MachineRenderer (机器 Container)
+    │   │   │   ├─ ConnectionLayer    → ConnectionRenderer (连线 Graphics)
+    │   │   │   └─ OverlayLayer       → OverlayRenderer (Ghost/选框/蓝图轮廓)
+    │   │   └─ useGridEvents (DOM 事件，透明覆盖层)
+    │   ├─ Toolbar.tsx         → useGameStore (selector + actions)
     │   ├─ OperationHints.tsx  → useGameStore (modeState + 选区状态)
     │   └─ SaveDialog.tsx      → 纯UI，回调由App.tsx管理
     ├─ [list]     → BlueprintList.tsx  → useGameStore (startInsertChild/loadBlueprint)
@@ -306,18 +302,24 @@ selectDescendantConnections(s)   // 递归展开所有后代连线的展平数�
 
 `EMPTY_ARRAY` 常量提供稳定的空数组引用，避免 selector 每次返回新 `[]` 导致 Zustand 误判状态变更。
 
-### 画布系统（基于 DOM，非 `<canvas>`）
+### 画布系统（基于 PixiJS v8 WebGL）
+
+画布渲染已于 2026-07-16 从 DOM/CSS/SVG 迁移至 PixiJS v8 (WebGL)。
 
 | 层 | 实现方式 | 关键参数 |
 |----|----------|----------|
-| 网格线 | CSS `background-image` 双渐变 | `var(--grid-size)` = 40px, opacity 0.5 |
-| 机器 | 绝对定位 `div`，CSS 自定义属性 `--x`/`--y`/`--w`/`--h` | z-index = base + mask×2 + 1 (3段: 常态100/批量700/Ghost1300) |
-| 传送带连线 | SVG `<polyline>` 双线效果(outline描边+fill填充)，按 portType 分 SVG 层 | Solid=104, Liquid=108 (base=100) |
-| 平移/缩放 | CSS `transform: translate(panX, panY) scale(zoom)` | zoom范围0.18~3.0 |
-| 坐标转换 | `worldX = floor((screenX - panX) / (GRID_SIZE * zoom))` | GRID_SIZE硬编码为40 |
+| 网格线 | `TilingSprite` 平铺 40×40 纹理（1px 线） | GRID_SIZE=40, opacity 0.5 |
+| 机器 | `Container` + `Graphics` 矩形 + `Sprite` 图标 | zIndex = base + mask×2 + 1 |
+| 传送带连线 | `Graphics` 双线效果(outline thick + fill thin)，按 portType 分图层 | Solid/Gray, Liquid/Blue |
+| 平移/缩放 | `worldContainer.position` / `worldContainer.scale` | zoom 范围 0.18~3.0 |
+| 坐标转换 | `worldContainer.toLocal(pointerGlobal) / GRID_SIZE` | PixiJS 原生 transform |
 
-**缩放锚定鼠标位置**：缩放前后鼠标下的世界坐标保持不变，通过调整 `pan` 补偿。
-**GRID_SIZE**: 40px，定义在 `constants.ts`，`main.tsx` 启动时同步到 CSS 变量 `--grid-size`。
+**事件架构**：PixiJS canvas 设为 `pointer-events: none`，DOM 事件穿透到外层 `grid-container`，
+复用现有 `useGridEvents` hooks（DOM 坐标转换 → store action）。PixiJS 仅负责视觉渲染。
+
+**PixiSceneManager**：命令式同步模式 — `useGameStore.subscribe()` 监听变化 → diff → 增量更新 PixiJS 场景图。
+每层渲染器（MachineRenderer / ConnectionRenderer / OverlayRenderer）暴露 `create` + `update` 静态方法。
+
 
 ### 寻路系统（L 形曼哈顿路由 + 掩码碰撞）
 

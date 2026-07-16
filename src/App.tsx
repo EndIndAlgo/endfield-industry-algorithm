@@ -8,7 +8,7 @@ import { parseShareUrl } from '@/utils/shareUtils';
 import { getBoundingBox } from '@/utils/grid';
 import { DEFAULT_CONTENT_PADDING } from '@/config/constants';
 import { toaster } from '@/utils/toaster';
-import { Grid } from '@/components/Grid';
+import { PixiGrid } from '@/components/PixiGrid';
 import { Toolbar } from '@/components/Toolbar';
 import { Header } from '@/components/Header';
 import { BreadcrumbNav } from '@/components/BreadcrumbNav';
@@ -238,7 +238,7 @@ export default function App() {
               <Header onSave={handleTriggerSave} onOpen={handleOpenList} />
               <BreadcrumbNav />
               <div className="app-content">
-                <Grid />
+                <PixiGrid />
                 <Toolbar />
                 <OperationHints />
               </div>
