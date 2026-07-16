@@ -40,16 +40,19 @@ src/
 ├── store/
 │   ├── gameStore.ts                  # Zustand thin wrapper (21行)：组合 7 个切片 + devtools 中间件
 │   ├── settingsStore.ts             # 独立 persist store：language ('zh-TW'|'zh-CN'), localStorage key='settings-storage'
-│   ├── selectors.ts                  # 类型窄化 selector (142行)：selectIsBuildMode/selectPlacing/selectSelectedMachineId/selectIsConnecting/selectHasSelection 等 29 个，含稳定空数组引用 EMPTY_ARRAY
+│   ├── selectors.ts                  # 类型窄化 selector (184行)：selectIsBuildMode/selectPlacing/selectSelectedMachineId/selectIsConnecting/selectHasSelection 等 35 个，含稳定空数组引用 EMPTY_ARRAY
 │   └── slices/
 │       ├── types.ts                  # 7 个切片接口定义 + HistorySnapshot + GameState 交集类型
 │       ├── canvasSlice.ts           # zoom(默认1), pan({0,0}), gridWidth/Height(默认24), hoverPosFrac(鼠标分数坐标); setZoom/setPan/setGridSize(含越界清理)/setHoverPosFrac
-│       ├── modeSlice.ts             # modeState(ModeState 判别联合), setMode(BUILD/WIRE_SOLID/WIRE_LIQUID/DEVICE_SELECT), cancelOperation(统一 Escape：按 variant 分发→cancelConnection/还原拾取/清除选区/还原快照)
+│       ├── modeSlice.ts             # modeState(ModeState 判别联合), setMode(BUILD/WIRE_SOLID/WIRE_LIQUID/DEVICE_SELECT/BLUEPRINT_SELECT), cancelOperation(统一 Escape：按 variant 分发→cancelConnection/还原拾取/清除选区/还原快照/丢弃蓝图)
 │       ├── machinesSlice.ts         # machines[]; selectMachine(切换到 BUILD placing)/rotatePreview/addMachine(碰撞+连线网格双重检测,支持连续放置)/removeMachine(级联删连线)/pickupMachine(长按拾取→BUILD placing+backup)
 │       ├── connectionSlice.ts       # connections[]; startConnecting/updatePreview(含多端口同格方向选择+L形三态切换+输入端口吸附+自动续接)/commitConnection(交叉检测+桥生成+连线分割+合并衔接)/cancelConnection/toggleLShape(auto→垂直→同向 三态循环); + 模块级 _gridCache 缓存
 │       ├── selectionSlice.ts        # setBoxSelection/commitBoxSelection(shift=toggle)/clearSelection/deleteSelected(含级联删连线)/startBatchMove(过渡到 MOVE_SELECTION)/startCopySelection/commitBatchMove(碰撞+桥生成+连线分割)
 │       ├── historySlice.ts          # history: { past: HistorySnapshot[], future: HistorySnapshot[] }, takeSnapshot/undo/redo; 上限50步
-│       └── blueprintSlice.ts       # uiView, currentBlueprintId/Name; loadGame/resetGame/setUiView/setCurrentBlueprint/startInsertBlueprint(蓝图插入→MOVE_SELECTION)
+│       └── blueprintSlice.ts       # uiView, blueprintRegistry, currentViewingNodeId/AncestorPath; 蓝图树操作(createBlueprint/saveCurrentBlueprint/loadBlueprint/startInsertChild/commitInsert/commitMove/removeChild/navigateInto/navigateToParent/syncStoreFromViewing) + 兼容旧接口(loadGame/resetGame/setUiView)
+├── engine/
+│   ├── index.ts                     # 全局 blueprintLibrary 单例（RegistryEngine 实例，初始化时从 localStorage 加载）
+│   └── RegistryEngine.ts            # 蓝图注册引擎：CRUD + 掩码重算 + 版本管理 + 序列化/反序列化
 ├── config/
 │   ├── machines.ts                   # MACHINES: 43 种机器 MachineConfig[] + getMachineConfig(id) O(n) 查找；machineUtils.getMachineConfigById(id) 为 O(1) Map 版本
 │   ├── materials.ts                  # MATERIALS: 76 种材料 Record<string, Material>
@@ -68,6 +71,9 @@ src/
 │   │   └── viewport.ts               # clampPan: 限制平移范围，防止无限滚入空白区域
 │   ├── mask.ts                       # Mask 类：封装二维掩码存储(Uint8Array)+碰撞检测+合并操作；Uniform/FromMask(旋转映射)/FromConnection 工厂方法
 │   ├── machineUtils.ts               # getMachineConfigById(O(1) Map查找), getRotatedDimensions, getRotatedPorts, buildPowerGrid; 内含 REQUIRED_IDS 启动校验
+│   ├── blueprintGuard.ts             # isViewingOwn: 判断实体是否属于当前 viewing 节点（蓝图嵌套时限制修改范围）
+│   ├── blueprintTree.ts              # syncStoreFromViewing/flattenBlueprint/rebuildMasks: 蓝图树同步与展平工具
+│   ├── flatten.ts                    # 蓝图递归展平：累加子蓝图偏移坐标，过滤虚拟机器，返回纯 machines+connections
 │   ├── portPosition.ts               # getPortStyle(机器端口定位), getGhostArrowPosition, pathToPoints/extendPoint(SVG渲染工具)
 │   ├── shareUtils.ts                 # toBase64Url/fromBase64Url, encode/decode (V3二进制: 3字节ID+3字节位置), generateShareUrl, parseShareUrl, captureBlueprintScreenshot(html2canvas)
 │   ├── storage.ts                    # Blueprint 接口, getBlueprints/saveBlueprint/deleteBlueprint/loadBlueprint/getLastBlueprintId/setLastBlueprintId
@@ -76,13 +82,14 @@ src/
 │   └── cssCustomProps.ts             # machinePositionStyle: CSS自定义属性 --x/--y/--w/--h 的类型安全工厂函数
 ├── hooks/
 │   ├── useChineseConverter.ts        # 繁/简热切换：动态 import('opencc-js') + 遍历文本节点 + MutationObserver 监听增量变更 + cn→tw 回转换
-│   ├── useGridEvents.ts              # 画布事件调度层(133行)：组合 usePanZoom/useWireMode/useSelectionMode/useKeyboardShortcuts/useWASDPan 五个子hook，按 ModeState.kind 分发DOM事件
+│   ├── useGridEvents.ts              # 画布事件调度层：组合 usePanZoom/useWireMode/useSelectionMode/useKeyboardShortcuts/useWASDPan/useBlueprintSelectMode 六个子hook，按 ModeState.kind 分发DOM事件
 │   └── grid/
 │       ├── usePanZoom.ts             # 平移/缩放/坐标转换：中键平移 + 滚轮缩放(锚定鼠标) + getGridPos 屏幕→网格坐标
 │       ├── useWireMode.ts            # WIRE 模式连线：单击开始/提交连线 + 鼠标移动实时预览
 │       ├── useSelectionMode.ts       # DEVICE_SELECT 框选 + MOVE_SELECTION 批量移动确认
-│       ├── useKeyboardShortcuts.ts   # 全局快捷键：E/Q/R/X/F/F1/M/Ctrl+C/Escape 监听 window keydown
-│       └── useWASDPan.ts            # WASD 动量平移：rAF 驱动 + 对角线组合 + 惯性滑行衰减 (MAX_SPEED=600, FRICTION=0.88)
+│       ├── useKeyboardShortcuts.ts   # 全局快捷键：E/Q/R/X/B/F/F1/M/Ctrl+C/Escape 监听 window keydown
+│       ├── useWASDPan.ts            # WASD 动量平移：rAF 驱动 + 对角线组合 + 惯性滑行衰减 (MAX_SPEED=600, FRICTION=0.88)
+│       └── useBlueprintSelectMode.ts # 蓝图选择模式：点击选中子蓝图 / 拖拽移动 / 从列表导入放置
 ├── __tests__/
 │   ├── setup.ts                       # jsdom mock (ResizeObserver + scrollTo)
 │   ├── testWrapper.tsx                # ChakraProvider 包裹器
@@ -103,10 +110,10 @@ src/
 │   ├── BatchMovePreview.tsx          # MOVE_SELECTION 批量移动预览(React.memo)：半透明机器虚影 + 半透明连线SVG
 │   ├── Header.tsx                    # 顶部栏：logo、Chakra Select(Root)网格尺寸选择(handleValueChange: takeSnapshot+setGridSize)、保存/蓝图列表/分享/设置/关于/重置视图6个IconButton
 │   ├── Header.scss                   # flex布局，center-actions右对齐，actions按钮hover效果
-│   ├── Toolbar.tsx                   # 底部面板：Chakra Tabs(6分类: 核心/物流/仓储存取/基础生产/合成制造/电力) + 模式切换按钮(BUILD/WIRE_SOLID/WIRE_LIQUID/DEVICE_SELECT) + 机器按钮列表(按分类筛选)；使用 selectors.ts 的窄 selector
+│   ├── Toolbar.tsx                   # 底部面板：Chakra Tabs(6分类: 核心/物流/仓储存取/基础生产/合成制造/电力) + 模式切换按钮(BUILD/WIRE_SOLID/WIRE_LIQUID/DEVICE_SELECT/BLUEPRINT_SELECT) + 机器按钮列表(按分类筛选)；使用 selectors.ts 的窄 selector
 │   ├── Toolbar.scss                  # 固定底部居中、毛玻璃背景、机器按钮hover上浮动画(translateY(-16px))
 │   ├── About.tsx                     # 关于页面：版权声明 + 成员卡片列表(作者+贡献者，含头像/标签/联系方式复制)
-│   ├── BlueprintList.tsx             # 蓝图管理：新建卡片 + 蓝图网格(名称/日期/尺寸) + Chakra Drawer详情(创建日期/尺寸/标签) + 贴到当前插入
+│   ├── BlueprintList.tsx             # 蓝图管理：新建卡片 + 蓝图网格(名称/日期/尺寸) + Chakra Drawer详情(创建日期/尺寸/标签) + 作为子蓝图插入当前 + 载入编辑
 │   ├── Settings.tsx                  # 设置页面：Chakra Tabs语言切换(zh-TW/zh-CN)
 │   ├── ShareModal.tsx                # 分享弹窗：generateShareUrl + captureBlueprintScreenshot(requestAnimationFrame等DOM稳定) + 复制链接/下载图片
 │   ├── SaveDialog.tsx                # Chakra Dialog保存命名(Enter确认)
@@ -117,6 +124,8 @@ src/
 │   ├── LoadingScreen.tsx             # 启动画面：纯 CSS 三阶段动画（fill 进度条 0→100% rAF 200ms → expand 展开 250ms → fade 淡出 200ms），无网络依赖
 │   ├── LoadingScreen.scss           # 暗底+黄色竖条展开动画(cubic-bezier)、左下角百分比+右上角logo(logo.svg)+"终末地牛逼"
 │   ├── ErrorBoundary.tsx             # React 错误边界类组件：包裹所有路由页面，捕获渲染错误并显示回退 UI
+│   ├── SubBlueprintOutline.tsx       # 子蓝图选中轮廓框(React.memo)：黄色虚线矩形，BLUEPRINT_SELECT 模式下渲染
+│   ├── BreadcrumbNav.tsx             # 蓝图嵌套层级面包屑导航：chevron 分隔的祖先路径，点击跳转
 │   └── ui/
 │       ├── tooltip.tsx               # Chakra Tooltip封装：支持showArrow/portalled/portalRef/contentProps，disabled时直接返回children
 │       └── About.scss               # .member-icon-btn hover变黄
@@ -136,23 +145,25 @@ main.tsx (ChakraProvider)
     ├─ [editor]
     │   ├─ Header.tsx          → useGameStore (gridWidth/gridHeight/uiView)
     │   │   └─ ShareModal.tsx  → generateShareUrl + captureBlueprintScreenshot
+    │   ├─ BreadcrumbNav.tsx   → useGameStore (currentViewingNodeId/currentAncestorPath/blueprintRegistry)
     │   ├─ Grid.tsx            → useGameStore（核心画布，约10个细粒度selector）
     │   │   ├─ ConnectionSVGLayer  → useGameStore（已确认连线 + 预览路径 SVG）
     │   │   ├─ Machine.tsx ×N      → useGameStore（通过 selectors.ts 的窄 selector 读取 modeState 子状态）
     │   │   ├─ GhostPreview        → useGameStore（BUILD 模式放置预览+供电虚线框+端口箭头）
     │   │   ├─ SelectionBox        → useGameStore（DEVICE_SELECT 框选矩形）
-    │   │   └─ BatchMovePreview    → useGameStore（MOVE_SELECTION 批量移动虚影）
-    │   ├─ Toolbar.tsx         → useGameStore (selectIsBuildMode/selectIsDeviceSelectMode/selectSelectedMachineId 等 selector + inline WIRE 模式判断 + selectMachine/setMode actions)
+    │   │   ├─ BatchMovePreview    → useGameStore（MOVE_SELECTION 批量移动虚影）
+    │   │   └─ SubBlueprintOutline → useGameStore（BLUEPRINT_SELECT 子蓝图轮廓框）
+    │   ├─ Toolbar.tsx         → useGameStore (selectIsBuildMode/selectIsDeviceSelectMode/selectIsBlueprintSelectMode/selectSelectedMachineId 等 selector + inline WIRE 模式判断 + selectMachine/setMode actions)
     │   ├─ OperationHints.tsx  → useGameStore (modeState + 选区状态)
     │   └─ SaveDialog.tsx      → 纯UI，回调由App.tsx管理
-    ├─ [list]     → BlueprintList.tsx  → useGameStore (startInsertBlueprint)
+    ├─ [list]     → BlueprintList.tsx  → useGameStore (startInsertChild/loadBlueprint)
     ├─ [about]    → About.tsx          → useGameStore (setUiView)
     └─ [settings] → Settings.tsx       → useSettingsStore (language, setLanguage)
 ```
 
 **数据流方向**: 用户交互 → 组件调用 store action → `set()` 更新状态 → React 重渲染受影响组件。
 **持久化**: 仅 explicit save → `storage.ts` → localStorage，无自动保存、无云端同步。
-**分享解析**: URL query param `?bp=` → `parseShareUrl()` → decode二进制 → `loadGame()` 或 `startInsertBlueprint()`。
+**分享解析**: URL query param `?bp=` → `parseShareUrl()` → decode二进制 → `loadGame()` 加载为新蓝图。
 
 ### 状态管理：Zustand 切片模式
 
@@ -175,64 +186,44 @@ export const useGameStore = create<GameState>()(devtools((...a) => ({
 | 切片 | 文件 | 状态字段 | 关键方法 |
 |------|------|----------|----------|
 | Canvas | `canvasSlice.ts` | `zoom`, `pan`, `gridWidth`, `gridHeight`, `hoverPosFrac` | `setZoom`, `setPan`, `setGridSize`(含越界机器/连线清理), `setHoverPosFrac` |
-| Mode | `modeSlice.ts` | `modeState: ModeState`(判别联合) | `setMode(BUILD\|WIRE_SOLID\|WIRE_LIQUID\|DEVICE_SELECT)`, `cancelOperation`(统一Escape：按 variant 分发→cancelConnection/还原拾取机器/清除选区/还原或丢弃移动快照) |
+| Mode | `modeSlice.ts` | `modeState: ModeState`(判别联合，6 种 variant) | `setMode(BUILD\|WIRE_SOLID\|WIRE_LIQUID\|DEVICE_SELECT\|BLUEPRINT_SELECT)`, `cancelOperation`(统一Escape：按 variant 分发→cancelConnection/还原拾取机器/清除选区/还原或丢弃移动快照/丢弃或取消蓝图移动) |
 | Machines | `machinesSlice.ts` | `machines[]` | `selectMachine`(切换到 BUILD placing + 还原拾取中的机器), `rotatePreview`, `addMachine`(碰撞+连线网格双重检测,支持连续放置,保留拾取时的UUID), `removeMachine`(级联删除端口连线), `pickupMachine`(长按→移出 machines[] + BUILD placing + backup) |
 | Connection | `connectionSlice.ts` | `connections[]` | `startConnecting`, `updatePreview`(含多端口同格方向选择+L形三态切换+输入端口吸附+自动续接;模块级 _gridCache 以引用相等检测命中), `commitConnection`(交叉检测+桥生成+连线分割+合并衔接), `cancelConnection`, `toggleLShape`(auto→垂直→同向 三态循环) |
 | Selection | `selectionSlice.ts` | （无顶层字段，全部内嵌于 modeState） | `setBoxSelection`, `commitBoxSelection`(shift=toggle), `clearSelection`, `deleteSelected`(含级联删连线), `startBatchMove`(→MOVE_SELECTION), `startCopySelection`(→MOVE_SELECTION+isCopying), `commitBatchMove`(碰撞检测+桥生成+连线分割) |
 | History | `historySlice.ts` | `history: { past: HistorySnapshot[], future: HistorySnapshot[] }` | `takeSnapshot`, `undo`, `redo`（上限50步，超出丢弃最旧快照） |
-| Blueprint | `blueprintSlice.ts` | `uiView`, `currentBlueprintId`, `currentBlueprintName` | `loadGame`, `resetGame`, `setUiView`, `setCurrentBlueprint`, `startInsertBlueprint`(蓝图插入→MOVE_SELECTION variant) |
+| Blueprint | `blueprintSlice.ts` | `uiView`, `blueprintRegistry`(全局注册表), `currentViewingNodeId`(当前编辑节点), `currentAncestorPath`(祖先路径) | `createBlueprint`, `saveCurrentBlueprint`, `loadBlueprint`, `startInsertChild`(→BLUEPRINT_MOVE), `commitInsert`, `commitMove`, `removeChild`, `navigateInto`, `navigateToParent`, `syncStoreFromViewing`(从引擎同步到 store) + 兼容旧接口 `loadGame`/`resetGame`/`setUiView` |
 
 **切片间交互关键路径**：
-- `modeSlice.cancelOperation()` 按 `modeState.kind` 分发：BUILD→还原拾取机器/清空placing；WIRE→`get().cancelConnection()` 或退回 BUILD；DEVICE_SELECT→清空选区并回 BUILD；MOVE_SELECTION→还原/丢弃移动快照
+- `modeSlice.cancelOperation()` 按 `modeState.kind` 分发：BUILD→还原拾取机器/清空placing；WIRE→`get().cancelConnection()` 或退回 BUILD；DEVICE_SELECT→清空选区并回 BUILD；MOVE_SELECTION→还原/丢弃移动快照；BLUEPRINT_SELECT→回 BUILD；BLUEPRINT_MOVE→丢弃插入(isInserting)或还原移动(回到BLUEPRINT_SELECT)
 - `machinesSlice.selectMachine()` / `rotatePreview()` / `pickupMachine()` 直接读写 `modeState.placing`
 - `selectionSlice.commitBatchMove()` / `deleteSelected()` 内部调用 `get().takeSnapshot()` 创建历史快照
-- `historySlice.undo()/redo()` 调用 `get().cancelOperation()` 清理中间状态
-- `blueprintSlice.startInsertBlueprint()` 直接设置 `modeState` 为 MOVE_SELECTION variant
+- `historySlice.undo()/redo()` 调用 `get().cancelOperation()` 清理中间状态，并恢复 `blueprintRegistry`
+- `blueprintSlice.startInsertChild()` 直接设置 `modeState` 为 BLUEPRINT_MOVE variant
 
 ### ModeState 判别联合
 
-`modeState` 是单一状态字段，通过判别联合的 `kind` 属性区分当前模式。CONVEYOR 和 PIPE 合并为 WIRE（用 `portType` 区分子类型），BLUEPRINT_PLACE 合并为 MOVE_SELECTION（用 `isCopying` 区分子类型）。
+`modeState` 是单一状态字段，通过判别联合的 `kind` 属性区分当前模式。CONVEYOR 和 PIPE 合并为 WIRE（用 `portType` 区分子类型），BLUEPRINT_PLACE 合并为 MOVE_SELECTION（用 `isCopying` 区分子类型）。蓝图树引入后新增 BLUEPRINT_SELECT 和 BLUEPRINT_MOVE。
 
 ```typescript
-// src/types.ts:83-122
+// src/types.ts:139-196
 export type ModeState =
   // BUILD：placing 判 null 区分 idle/placing/pickup
-  | {
-      kind: 'BUILD';
-      placing: {
-        selectedMachineId: string;
-        previewRotation: Direction;
-        buildOffset: Point;          // 放置偏移（工具栏选机=中心，拾取=鼠标在机器内的精确位置）
-        movingMachineBackup: PlacedMachine | null;  // null=工具栏选的，object=从画布拾取的
-      } | null;                       // null=空闲
-    }
+  | { kind: 'BUILD'; placing: { ... } | null; }
 
   // WIRE：CONVEYOR+PIPE 合并，portType 区分物流类型
-  | {
-      kind: 'WIRE';
-      portType: 'Solid' | 'Liquid';  // Solid=传送带(E键), Liquid=管道(Q键)
-      connecting: ConnectingFields | null;  // null=空闲, object=连线中
-    }
+  | { kind: 'WIRE'; portType: 'Solid' | 'Liquid'; connecting: ConnectingFields | null; }
 
   // DEVICE_SELECT
-  | {
-      kind: 'DEVICE_SELECT';
-      selectionStart: Point | null;   // null=空闲, object=拖拽中
-      selectionEnd: Point | null;
-      selectedMachineIds: string[];
-      selectedConnectionIds: string[];
-    }
+  | { kind: 'DEVICE_SELECT'; selectionStart/End: Point | null; selectedMachineIds/ConnectionIds: string[]; }
 
   // MOVE_SELECTION：M键移动+Ctrl+C复制+蓝图插入合并
-  | {
-      kind: 'MOVE_SELECTION';
-      moveAnchor: Point;
-      movingMachinesSnapshot: PlacedMachine[];
-      movingConnectionsSnapshot: Connection[];
-      isCopying: boolean;             // false=移动, true=复制/蓝图插入
-      originSelectedMachineIds: string[];
-      originSelectedConnectionIds: string[];
-    };
+  | { kind: 'MOVE_SELECTION'; moveAnchor: Point; movingMachinesSnapshot: PlacedMachine[]; movingConnectionsSnapshot: Connection[]; isCopying: boolean; originSelectedMachineIds/ConnectionIds: string[]; }
+
+  // BLUEPRINT_SELECT：B 键进入，点击子蓝图内机器选中整个子蓝图
+  | { kind: 'BLUEPRINT_SELECT'; selectedChildNodeId: string | null; }
+
+  // BLUEPRINT_MOVE：拖拽放置子蓝图（插入或移动已有子蓝图）
+  | { kind: 'BLUEPRINT_MOVE'; childNodeId: string; childSnapshot: BlueprintSnapshot; moveAnchor: Point; previewOffset: Point | null; isCopying: boolean; isInserting: boolean; isValidPosition: boolean; };
 ```
 
 | variant | 触发方式 | 鼠标操作 | 渲染差异 |
@@ -242,7 +233,9 @@ export type ModeState =
 | WIRE(portType='Solid') | E键/工具栏传送带按钮 | 点击输出口开始、点击输入口/地面完成 | 传送带预览SVG(虚线动画/实线)，无效时变红 |
 | WIRE(portType='Liquid') | Q键/工具栏管道按钮 | 点击输出口开始、点击输入口/地面完成 | 管道预览SVG(虚线动画/实线)，无效时变红 |
 | DEVICE_SELECT | X键/工具栏框选按钮 | 拖拽框选 | 蓝色选择矩形(.selection-box) + Shift反选 |
-| MOVE_SELECTION | M键(有选区时)/拖拽已选中项/Ctrl+C/蓝图插入 | 移动坐标系→单击放置 | 批量半透明机器虚影 + 批量连线SVG |
+| MOVE_SELECTION | M键(有选区时)/拖拽已选中项/Ctrl+C | 移动坐标系→单击放置 | 批量半透明机器虚影 + 批量连线SVG |
+| BLUEPRINT_SELECT | B键/工具栏蓝图选择按钮 | 点击子蓝图机器选中整个子蓝图 | 选中子蓝图的黄色虚线轮廓框(SubBlueprintOutline) |
+| BLUEPRINT_MOVE | B键选中后拖拽 / 蓝图列表插入 | 移动坐标系→单击放置/取消 | 子蓝图内机器半透明虚影 |
 
 `cancelOperation()` (Escape/右键) 统一处理各模式返回干净状态（实现在 `modeSlice.ts`）：
 - BUILD(placing≠null, backup≠null) → 归还机器到 `machines[]`，回到 BUILD(idle)
@@ -252,46 +245,63 @@ export type ModeState =
 - DEVICE_SELECT → 回到 BUILD(idle)
 - MOVE_SELECTION(isCopying=true) → 丢弃复制/蓝图，回到 DEVICE_SELECT(空选区)
 - MOVE_SELECTION(isCopying=false) → 还原 `machines[]`/`connections[]` + 原选区，回到 DEVICE_SELECT
+- BLUEPRINT_SELECT → 回到 BUILD(idle)
+- BLUEPRINT_MOVE(isInserting=true) → 丢弃插入，回到 BUILD(idle)
+- BLUEPRINT_MOVE(isInserting=false) → 取消移动，回到 BLUEPRINT_SELECT(保持选中)
 
 ### Selector 层 (selectors.ts)
 
-`src/store/selectors.ts` (142 行) 提供类型窄化的 Zustand selector，从 `modeState` 判别联合中安全提取子状态：
+`src/store/selectors.ts` (184 行) 提供类型窄化的 Zustand selector，从 `modeState` 判别联合中安全提取子状态：
 
 ```typescript
 // 模式判别
-selectIsBuildMode(s)           // s.modeState.kind === 'BUILD'
-selectIsWireMode(s)            // s.modeState.kind === 'WIRE'
-selectIsDeviceSelectMode(s)    // s.modeState.kind === 'DEVICE_SELECT'
-selectIsMoveSelectionMode(s)   // s.modeState.kind === 'MOVE_SELECTION'
+selectIsBuildMode(s)             // s.modeState.kind === 'BUILD'
+selectIsWireMode(s)              // s.modeState.kind === 'WIRE'
+selectIsDeviceSelectMode(s)      // s.modeState.kind === 'DEVICE_SELECT'
+selectIsMoveSelectionMode(s)     // s.modeState.kind === 'MOVE_SELECTION'
+selectIsBlueprintSelectMode(s)   // s.modeState.kind === 'BLUEPRINT_SELECT'
+selectIsBlueprintMoveMode(s)     // s.modeState.kind === 'BLUEPRINT_MOVE'
 
 // WIRE 子类型判别
-selectIsWireSolid(s)           // WIRE 且 portType === 'Solid'
-selectIsWireLiquid(s)          // WIRE 且 portType === 'Liquid'
+selectIsWireSolid(s)             // WIRE 且 portType === 'Solid'
+selectIsWireLiquid(s)            // WIRE 且 portType === 'Liquid'
 
 // BUILD 子状态
-selectPlacing(s)               // modeState.placing (窄类型)
-selectIsPlacing(s)             // placing !== null
-selectSelectedMachineId(s)     // placing.selectedMachineId
-selectPreviewRotation(s)       // placing.previewRotation
-selectBuildOffset(s)           // placing.buildOffset
-selectIsPickup(s)              // placing?.movingMachineBackup !== null
+selectPlacing(s)                 // modeState.placing (窄类型)
+selectIsPlacing(s)               // placing !== null
+selectSelectedMachineId(s)       // placing.selectedMachineId
+selectPreviewRotation(s)         // placing.previewRotation
+selectBuildOffset(s)             // placing.buildOffset
+selectIsPickup(s)                // placing?.movingMachineBackup !== null
 
 // WIRE 子状态
-selectWirePortType(s)          // modeState.portType
-selectIsConnecting(s)          // connecting !== null
-selectConnecting(s)            // modeState.connecting (窄类型)
-selectAvailablePorts(s)        // connecting.availablePorts
-selectLShapeMode(s)            // connecting.lShapeMode
-selectIsContinuing(s)          // connecting.isContinuing
+selectWirePortType(s)            // modeState.portType
+selectIsConnecting(s)            // connecting !== null
+selectConnecting(s)              // modeState.connecting (窄类型)
+selectAvailablePorts(s)          // connecting.availablePorts
+selectLShapeMode(s)              // connecting.lShapeMode
+selectIsContinuing(s)            // connecting.isContinuing
 
 // DEVICE_SELECT / MOVE_SELECTION 子状态
-selectSelectionStart/End(s)    // modeState.selectionStart/End
-selectSelectedMachineIds(s)    // DEVICE_SELECT/MOVE_SELECTION 下分别取
-selectHasSelection(s)          // 直接读 modeState 避免创建中间数组
-selectMoveAnchor(s)            // modeState.moveAnchor
+selectSelectionStart/End(s)      // modeState.selectionStart/End
+selectSelectedMachineIds(s)      // DEVICE_SELECT/MOVE_SELECTION 下分别取
+selectHasSelection(s)            // 直接读 modeState 避免创建中间数组
+selectMoveAnchor(s)              // modeState.moveAnchor
 selectMovingMachinesSnapshot(s)
 selectMovingConnectionsSnapshot(s)
-selectIsCopying(s)             // modeState.isCopying
+selectIsCopying(s)               // modeState.isCopying
+
+// BLUEPRINT_SELECT / BLUEPRINT_MOVE 子状态
+selectSelectedChildNodeId(s)     // modeState.selectedChildNodeId
+selectBlueprintMoveChildNodeId(s)// modeState.childNodeId
+selectBlueprintMovePreviewOffset(s)
+selectBlueprintMoveIsValid(s)    // modeState.isValidPosition
+
+// 蓝图树导航
+selectViewingNodeId(s)           // 当前编辑的蓝图节点 ID
+selectViewingAncestorPath(s)     // 祖先节点 ID 路径
+selectDescendantMachines(s)      // 递归展开所有后代机器的展平数组
+selectDescendantConnections(s)   // 递归展开所有后代连线的展平数组
 ```
 
 `EMPTY_ARRAY` 常量提供稳定的空数组引用，避免 selector 每次返回新 `[]` 导致 Zustand 误判状态变更。
@@ -328,7 +338,7 @@ selectIsCopying(s)             // modeState.isCopying
 
 ### 撤销/重做
 
-- 快照粒度为完整 `{ machines, connections }` 浅拷贝
+- 快照粒度为完整 `{ machines, connections, blueprintRegistry }` 浅拷贝
 - `takeSnapshot()` 在 mutation 前由各切片内部调用，推入 `history.past`，清空 `history.future`
 - `undo()` 先将当前状态推入 `future`，再恢复 `past.pop()`，同时调用 `cancelOperation()` 清理活跃操作
 - `redo()` 对称处理

@@ -11,7 +11,7 @@
 - **可视化编辑器**：基于 DOM 的网格画布，支持缩放/平移，机器放置、旋转、传送带与管道连接
 - **43 台机器**：涵盖核心、物流、仓储存取、基础生产、合成制造、电力六大分类
 - **智能连线**：L 形曼哈顿路由自动寻路，点击端口自动吸附，自动放置物流桥/管道桥，支持续接
-- **蓝图系统**：保存/加载蓝图到本地，支持框选+批量移动/复制/删除，紧凑二进制分享链接
+- **蓝图系统**：嵌套蓝图树（子蓝图可递归包含）、面包屑导航、保存/加载到本地、批量移动/复制/删除、紧凑二进制分享链接
 - **撤销/重做**：50 步历史记录，Ctrl+Z/Y
 - **繁简切换**：opencc-js 实时繁简中文转换，MutationObserver 监听增量 DOM
 
@@ -71,6 +71,15 @@ npm run preview      # 预览生产构建
 | 完成连线 | 点击目标机器输入端口 |
 | 取消连线 | `Escape` 或 右键 |
 
+### 蓝图选择模式 (B)
+
+| 操作 | 说明 |
+|------|------|
+| 选中子蓝图 | 点击子蓝图内的任意机器 |
+| 移动子蓝图 | 选中后拖拽放置 |
+| 插入子蓝图 | 从蓝图列表导入后拖拽放置 |
+| 取消 | `Escape` 或 右键 |
+
 ### 框选模式 (X)
 
 | 操作 | 说明 |
@@ -86,8 +95,10 @@ npm run preview      # 预览生产构建
 | 操作 | 快捷键 |
 |------|--------|
 | 打开蓝图列表 | `F1` |
-| 插入蓝图到当前地图 | 蓝图列表 → 选择插入模式 |
-| 插入蓝图到新地图 | 蓝图列表 → 新建地图放置 |
+| 进入子蓝图编辑 | 面包屑导航或从列表加载 |
+| 返回上级蓝图 | 面包屑导航 |
+| 插入子蓝图到当前 | 蓝图列表 → 插入模式 → 拖拽放置 |
+| 移动已有子蓝图 | B 键选中 → 拖拽放置 |
 
 ## 项目结构
 
@@ -103,7 +114,7 @@ src/
 ├── store/
 │   ├── gameStore.ts                 # Zustand thin wrapper（组合 7 个切片 + devtools）
 │   ├── settingsStore.ts             # 独立 persist store（语言设置）
-│   ├── selectors.ts                 # 类型窄化 selector（25+ 个，从 modeState 提取子状态）
+│   ├── selectors.ts                 # 类型窄化 selector（35 个，从 modeState 提取子状态）
 │   └── slices/
 │       ├── types.ts                 # 7 个切片接口 + HistorySnapshot
 │       ├── canvasSlice.ts           # zoom / pan / gridWidth / gridHeight / hoverPosFrac
@@ -112,7 +123,10 @@ src/
 │       ├── connectionSlice.ts       # connections[] / 连线流程 / 预览 / 提交
 │       ├── selectionSlice.ts        # 框选 / 批量移动 / 复制 / 删除
 │       ├── historySlice.ts          # 撤销/重做（50 步上限）
-│       └── blueprintSlice.ts        # uiView / 蓝图列表 / 加载 / 插入
+│       └── blueprintSlice.ts        # uiView / 蓝图注册表 / 蓝图树操作 / 导航
+├── engine/
+│   ├── index.ts                     # 全局 blueprintLibrary 单例 + 导出
+│   └── RegistryEngine.ts            # 蓝图注册引擎（CRUD + 掩码重算 + 版本管理）
 ├── config/
 │   ├── machines.ts                  # 43 台机器配置
 │   ├── materials.ts                 # 76 种材料
@@ -129,18 +143,24 @@ src/
 │   │   ├── port.ts                  # 端口坐标 / 分割连线 / 吸附
 │   │   └── routeValidation.ts       # 路径冲突验证
 │   ├── machineUtils.ts              # 旋转尺寸/端口 + 供电网格 + 机器掩码
+│   ├── blueprintGuard.ts            # 蓝图所有权判断（只允许修改 viewing 节点内的实体）
+│   ├── blueprintTree.ts             # 蓝图树同步工具（展平 + 重建掩码 + 从引擎同步）
+│   ├── flatten.ts                   # 蓝图递归展平（坐标累加偏移）
+│   ├── mask.ts                      # Mask 类（二维占用掩码 + 碰撞检测）
 │   ├── portPosition.ts              # 端口定位样式 + SVG 路径渲染
 │   ├── shareUtils.ts                # 紧凑二进制分享编码/解码 + 截图
 │   ├── storage.ts                   # localStorage 蓝图 CRUD
 │   └── toaster.ts                   # Toast 单例
 ├── hooks/
-│   ├── useGridEvents.ts             # 画布事件调度层（组合 4 个子 hook）
+│   ├── useGridEvents.ts             # 画布事件调度层（组合 6 个子 hook）
 │   ├── useChineseConverter.ts       # 繁简实时转换
 │   └── grid/
 │       ├── usePanZoom.ts            # 平移/缩放/坐标转换
 │       ├── useWireMode.ts           # WIRE 模式连线（Solid 传送带 / Liquid 管道）
 │       ├── useSelectionMode.ts      # 框选 + 批量移动
-│       └── useKeyboardShortcuts.ts  # 全局快捷键
+│       ├── useKeyboardShortcuts.ts  # 全局快捷键
+│       ├── useWASDPan.ts            # WASD 动量平移（rAF 驱动 + 惯性滑行衰减）
+│       └── useBlueprintSelectMode.ts # 蓝图选择模式（选中/移动/插入子蓝图）
 ├── styles/
 │   └── cssCustomProps.ts            # CSS 自定义属性工厂函数
 ├── components/
@@ -167,6 +187,8 @@ src/
 │   ├── LoadingScreen.tsx            # 启动加载画面
 │   ├── LoadingScreen.scss           # 启动动画
 │   ├── ErrorBoundary.tsx            # React 错误边界
+│   ├── SubBlueprintOutline.tsx      # 子蓝图黄色虚线轮廓框（React.memo）
+│   ├── BreadcrumbNav.tsx            # 蓝图嵌套层级面包屑导航
 │   ├── IconButton.tsx               # 通用图标按钮
 │   ├── IconButton.scss              # 按钮 + tooltip 样式
 │   └── ui/
@@ -182,14 +204,19 @@ src/
 │   └── useChineseConverter.test.tsx # 繁简转换测试
 └── assets/
     ├── logo-header.png              # Header 用 logo（96px 高，2x retina）
-
     ├── members/                     # 团队成员头像
     └── machines/                    # 机器图标 .webp（24 台）
+
+public/
+├── logo.svg                        # SVG logo
+├── favicon.png                     # 网站图标
+└── _redirects                      # Cloudflare Pages SPA 回退规则
 
 _archive/                           # 已移除的旧资产
 ├── fonts/                          # NaikaiFont-Bold.woff2 (17MB)
 ├── items/                          # 132 张材料图标 .webp
-└── logo.png                        # 旧 logo (1.5MB)
+├── logo.png                        # 旧 logo (1.5MB)
+└── loading.png                     # 旧启动画面背景 (360KB)
 ```
 
 ## 许可证
