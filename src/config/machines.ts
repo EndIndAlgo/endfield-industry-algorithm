@@ -1,5 +1,5 @@
 import type { MachineConfig } from '@/types';
-import { MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS, MASK_REGULAR_MACHINE, DIR_UP, DIR_RIGHT, DIR_DOWN, DIR_LEFT } from '@/types';
+import { MASK_SOLID_LOGISTICS, MASK_LIQUID_LOGISTICS, MASK_REGULAR_MACHINE, VIRTUAL_MACHINE_MASK, DIR_UP, DIR_RIGHT, DIR_DOWN, DIR_LEFT } from '@/types';
 import { Mask } from '@/utils/mask';
 /*顺序：
 协议核心
@@ -796,6 +796,48 @@ export const MACHINES: MachineConfig[] = [
         outputs: [],
         mask: Mask.Uniform(2, 2, MASK_REGULAR_MACHINE),
         color: 'rgba(255, 255, 255, 0.3)',
+    },
+
+    // ── 虚拟机器（蓝图对外接口引脚）──
+    {
+        id: 'sin', name: 'Solid 输入', power: 0, supplyDistance: 0,
+        width: 1, height: 1,
+        inputs: [
+            { x: 0, y: 0, side: 'top', type: 'Solid', autoConnect: false },
+        ],
+        outputs: [],
+        mask: Mask.Uniform(1, 1, VIRTUAL_MACHINE_MASK),
+        color: 'rgba(255, 200, 100, 0.35)',
+    },
+    {
+        id: 'sot', name: 'Solid 输出', power: 0, supplyDistance: 0,
+        width: 1, height: 1,
+        inputs: [],
+        outputs: [
+            { x: 0, y: 0, side: 'top', type: 'Solid', autoConnect: false },
+        ],
+        mask: Mask.Uniform(1, 1, VIRTUAL_MACHINE_MASK),
+        color: 'rgba(255, 200, 100, 0.35)',
+    },
+    {
+        id: 'lin', name: 'Liquid 输入', power: 0, supplyDistance: 0,
+        width: 1, height: 1,
+        inputs: [
+            { x: 0, y: 0, side: 'top', type: 'Liquid', autoConnect: false },
+        ],
+        outputs: [],
+        mask: Mask.Uniform(1, 1, VIRTUAL_MACHINE_MASK),
+        color: 'rgba(170, 221, 255, 0.35)',
+    },
+    {
+        id: 'lot', name: 'Liquid 输出', power: 0, supplyDistance: 0,
+        width: 1, height: 1,
+        inputs: [],
+        outputs: [
+            { x: 0, y: 0, side: 'top', type: 'Liquid', autoConnect: false },
+        ],
+        mask: Mask.Uniform(1, 1, VIRTUAL_MACHINE_MASK),
+        color: 'rgba(170, 221, 255, 0.35)',
     },
 ];
 

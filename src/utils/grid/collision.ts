@@ -50,7 +50,8 @@ export const getBoundingBox = (
   return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
 };
 
-/** 掩码级放置碰撞检测：用 Mask 对象统一构建占用网格并逐格 AND 候选掩码 */
+/** 掩码级放置碰撞检测：用 Mask 对象统一构建占用网格并逐格 AND 候选掩码。
+ *  @param totalMask 可选预计算掩码（蓝图系统传入），不传则内部重建 */
 export const checkPlacementCollision = (
   machineId: string,
   x: number, y: number,
@@ -58,12 +59,13 @@ export const checkPlacementCollision = (
   machines: PlacedMachine[],
   connections: { path: Point[]; portType: string }[],
   gridW: number,
-  gridH: number
+  gridH: number,
+  totalMask?: Mask,
 ): boolean => {
-  // 已有实体占用网格
-  const grid = Mask.FromOccupancy({ machines: resolveMachineMasks(machines), connections, gridW, gridH });
+  const grid = totalMask
+    ? totalMask
+    : Mask.FromOccupancy({ machines: resolveMachineMasks(machines), connections, gridW, gridH });
 
-  // 候选机器每格掩码 vs 已有掩码
   const candidateCfg = getMachineConfigById(machineId);
   if (!candidateCfg) return false;
   return grid.HasCollision(candidateCfg.mask4![rotation], x, y);

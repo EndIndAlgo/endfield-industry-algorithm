@@ -383,3 +383,281 @@ describe('selectionSlice', () => {
     });
   });
 });
+
+// ======================================================================
+// Phase 3 验证：BlueprintSlice 新 API
+// ======================================================================
+describe('blueprintSlice (蓝图树)', () => {
+  beforeEach(() => {
+    useGameStore.setState({
+      machines: [],
+      connections: [],
+      modeState: { kind: 'BUILD', placing: null },
+      zoom: 1, pan: { x: 0, y: 0 },
+      gridWidth: 24, gridHeight: 24,
+      history: { past: [], future: [] },
+      hoverPosFrac: null,
+      blueprintRegistry: {},
+      currentViewingNodeId: null,
+      currentAncestorPath: [],
+    });
+  });
+
+  it('createBlueprint 创建空蓝图并设为 viewing', () => {
+    const nodeId = useGameStore.getState().createBlueprint();
+    expect(nodeId).toBeTruthy();
+    const s = useGameStore.getState();
+    expect(s.currentViewingNodeId).toBe(nodeId);
+    expect(s.blueprintRegistry[nodeId]).toBeDefined();
+    expect(s.blueprintRegistry[nodeId].name).toBe('未命名蓝图');
+    expect(s.blueprintRegistry[nodeId].version).toBe(1);
+  });
+
+  it('createBlueprint 后 machines/connections 为空', () => {
+    useGameStore.getState().createBlueprint();
+    const s = useGameStore.getState();
+    expect(s.machines).toHaveLength(0);
+    expect(s.connections).toHaveLength(0);
+  });
+
+  it('syncStoreFromViewing 展平 viewing 到 store', () => {
+    const nodeId = useGameStore.getState().createBlueprint();
+    // 在 store 中放置一台机器（模拟 addMachine）
+    useGameStore.setState({
+      machines: [
+        { id: 'm1', machineId: 'lbr', x: 3, y: 3, rotation: 0 as const, blueprintNodeId: nodeId },
+      ],
+    });
+    useGameStore.getState().syncStoreFromViewing();
+    const s2 = useGameStore.getState();
+    expect(s2.machines).toHaveLength(1);
+    expect(s2.machines[0].blueprintNodeId).toBe(nodeId);
+  });
+
+  it('loadBlueprint 导航到已有蓝图', () => {
+    const nodeId = useGameStore.getState().createBlueprint();
+    // 创建第二个蓝图
+    useGameStore.getState().createBlueprint();
+    // 导航回第一个
+    useGameStore.getState().loadBlueprint(nodeId);
+    expect(useGameStore.getState().currentViewingNodeId).toBe(nodeId);
+  });
+
+  it('loadGame 兼容旧接口并创建 snapshot', () => {
+    useGameStore.getState().loadGame(
+      [{ id: 'm1', machineId: 'lbr', x: 0, y: 0, rotation: 0 }],
+      [],
+      24, 24,
+      null, '测试蓝图',
+    );
+    const s = useGameStore.getState();
+    expect(s.currentViewingNodeId).toBeTruthy();
+    expect(s.blueprintRegistry[s.currentViewingNodeId!]).toBeDefined();
+    expect(s.machines[0].blueprintNodeId).toBe(s.currentViewingNodeId);
+  });
+
+  it('resetGame 清空画布但不删除已保存蓝图', () => {
+    useGameStore.getState().createBlueprint();
+    useGameStore.getState().resetGame();
+    const s = useGameStore.getState();
+    // registry 保留（已保存的蓝图不丢失）
+    expect(Object.keys(s.blueprintRegistry).length).toBeGreaterThanOrEqual(1);
+    expect(s.currentViewingNodeId).toBeNull();
+    expect(s.currentAncestorPath).toEqual([]);
+    expect(s.machines).toEqual([]);
+  });
+});
+
+// ======================================================================
+// Phase 5 验证：ModeState & Selector
+// ======================================================================
+describe('ModeState & Selector (Phase 5)', () => {
+  beforeEach(() => {
+    useGameStore.setState({
+      modeState: { kind: 'BUILD', placing: null },
+      currentViewingNodeId: null,
+      currentAncestorPath: [],
+      blueprintRegistry: {},
+      machines: [],
+      connections: [],
+    });
+  });
+
+  it('setMode BLUEPRINT_SELECT 进入蓝图选择模式', () => {
+    useGameStore.getState().setMode('BLUEPRINT_SELECT');
+    const ms = useGameStore.getState().modeState;
+    expect(ms.kind).toBe('BLUEPRINT_SELECT');
+    if (ms.kind === 'BLUEPRINT_SELECT') {
+      expect(ms.selectedChildNodeId).toBeNull();
+    }
+  });
+
+  it('cancelOperation 从 BLUEPRINT_SELECT 回到 BUILD', () => {
+    useGameStore.getState().setMode('BLUEPRINT_SELECT');
+    useGameStore.getState().cancelOperation();
+    expect(useGameStore.getState().modeState.kind).toBe('BUILD');
+  });
+
+  it('cancelOperation 从 BLUEPRINT_MOVE(isInserting) 丢弃回到 BUILD', () => {
+    useGameStore.setState({
+      modeState: {
+        kind: 'BLUEPRINT_MOVE',
+        childNodeId: 'test',
+        childSnapshot: { nodeId: 'test', blueprintId: 'bp', name: '', version: 1, machines: [], connections: [], children: [], ownMask: null!, childrenMask: null!, totalMask: null!, createdAt: 0, updatedAt: 0 },
+        moveAnchor: { x: 0, y: 0 },
+        previewOffset: null,
+        isCopying: true,
+        isInserting: true,
+        isValidPosition: true,
+      },
+    });
+    useGameStore.getState().cancelOperation();
+    expect(useGameStore.getState().modeState.kind).toBe('BUILD');
+  });
+
+  it('selector selectIsBlueprintSelectMode 正确返回', async () => {
+    const { selectIsBlueprintSelectMode } = await import('@/store/selectors');
+    useGameStore.getState().setMode('BLUEPRINT_SELECT');
+    expect(selectIsBlueprintSelectMode(useGameStore.getState())).toBe(true);
+
+    useGameStore.getState().setMode('BUILD');
+    expect(selectIsBlueprintSelectMode(useGameStore.getState())).toBe(false);
+  });
+
+  it('selector selectViewingNodeId / selectDescendantMachines', async () => {
+    const { selectViewingNodeId, selectDescendantMachines } = await import('@/store/selectors');
+    const nodeId = useGameStore.getState().createBlueprint();
+    expect(selectViewingNodeId(useGameStore.getState())).toBe(nodeId);
+
+    // 加入一台后代机器
+    const machines = [{ id: 'm1', machineId: 'lbr', x: 0, y: 0, rotation: 0 as const, blueprintNodeId: 'other-node' }];
+    useGameStore.setState({ machines });
+    expect(selectDescendantMachines(useGameStore.getState())).toHaveLength(1);
+  });
+});
+
+// ======================================================================
+// 端到端测试：创建 → 放置 → 保存 → 导入子蓝图
+// ======================================================================
+describe('蓝图树端到端流程', () => {
+  beforeEach(() => {
+    useGameStore.setState({
+      machines: [],
+      connections: [],
+      modeState: { kind: 'BUILD', placing: null },
+      zoom: 1, pan: { x: 0, y: 0 },
+      gridWidth: 24, gridHeight: 24,
+      history: { past: [], future: [] },
+      hoverPosFrac: null,
+      blueprintRegistry: {},
+      currentViewingNodeId: null,
+      currentAncestorPath: [],
+    });
+  });
+
+  it('完整流程：创建蓝图 → 加机器 → 保存 → 验证 snapshot 含机器', () => {
+    const { createBlueprint, addMachine, saveCurrentBlueprint } = useGameStore.getState();
+
+    // 1. 创建蓝图
+    const nodeId = createBlueprint();
+    expect(nodeId).toBeTruthy();
+    expect(useGameStore.getState().currentViewingNodeId).toBe(nodeId);
+
+    // 2. 放置一台机器（带上 blueprintNodeId）
+    useGameStore.getState().takeSnapshot();
+    addMachine('lbr', 5, 5, 0);
+    let s = useGameStore.getState();
+    expect(s.machines).toHaveLength(1);
+    expect(s.machines[0].blueprintNodeId).toBe(nodeId);
+
+    // 3. 保存（Fork 新版本）
+    saveCurrentBlueprint('测试蓝图');
+    s = useGameStore.getState();
+    const newNodeId = s.currentViewingNodeId;
+    expect(newNodeId).toBeTruthy();
+    expect(newNodeId).not.toBe(nodeId); // 保存应生成新 ID
+
+    // 4. 验证新 snapshot 包含机器
+    const saved = s.blueprintRegistry[newNodeId!];
+    expect(saved).toBeDefined();
+    expect(saved.machines).toHaveLength(1);
+    expect(saved.machines[0].machineId).toBe('lbr');
+
+    // 5. 验证旧版本保留（引擎不自动 GC）
+    expect(s.blueprintRegistry[nodeId]).toBeDefined();
+
+    // 6. 验证 store 中机器的 blueprintNodeId 已更新为新 nodeId
+    expect(s.machines[0].blueprintNodeId).toBe(newNodeId);
+  });
+
+  it('完整流程：保存后再次放置机器，再次保存不丢失', () => {
+    const { createBlueprint, addMachine, saveCurrentBlueprint } = useGameStore.getState();
+
+    createBlueprint();
+    useGameStore.getState().takeSnapshot();
+    addMachine('lbr', 3, 3, 0);
+
+    // 第一次保存
+    saveCurrentBlueprint('v1');
+
+    // 放置第二台机器
+    useGameStore.getState().takeSnapshot();
+    addMachine('spl', 7, 7, 0);
+    expect(useGameStore.getState().machines).toHaveLength(2);
+
+    // 第二次保存
+    saveCurrentBlueprint('v2');
+    const afterSave2 = useGameStore.getState().currentViewingNodeId!;
+
+    // 验证 snapshot 包含两台机器
+    const snap = useGameStore.getState().blueprintRegistry[afterSave2];
+    expect(snap).toBeDefined();
+    expect(snap.machines).toHaveLength(2);
+  });
+
+  it('完整流程：导入子蓝图后 store 包含子蓝图机器', () => {
+    const { createBlueprint, addMachine, saveCurrentBlueprint } = useGameStore.getState();
+
+    // --- 建立一个"子蓝图" ---
+    createBlueprint();
+    useGameStore.getState().takeSnapshot();
+    addMachine('lbr', 2, 2, 0);
+    saveCurrentBlueprint('子蓝图');
+    const childNodeId = useGameStore.getState().currentViewingNodeId!;
+    // 子蓝图包含 1 台 lbr 在 (2,2)
+
+    // --- 建立"父蓝图" ---
+    createBlueprint();
+    const parentNodeId = useGameStore.getState().currentViewingNodeId!;
+
+    // 模拟 startInsertChild + commitInsert
+    useGameStore.setState({
+      modeState: {
+        kind: 'BLUEPRINT_MOVE',
+        childNodeId,
+        childSnapshot: useGameStore.getState().blueprintRegistry[childNodeId]!,
+        moveAnchor: { x: 0, y: 0 },
+        previewOffset: null,
+        isCopying: true,
+        isInserting: true,
+        isValidPosition: true,
+      },
+    });
+    useGameStore.getState().commitInsert(10, 5);
+
+    // 验证：store.machines 包含父蓝图自有机器（0台）+ 子蓝图机器（lbr 偏移到 12,7）
+    const s = useGameStore.getState();
+    expect(s.machines.length).toBeGreaterThanOrEqual(1);
+    const childMachine = s.machines.find(m => m.blueprintNodeId === childNodeId);
+    expect(childMachine).toBeDefined();
+    expect(childMachine!.x).toBe(12); // 2 + 10
+    expect(childMachine!.y).toBe(7);  // 2 + 5
+
+    // 验证：父蓝图 registry 中有 childRef
+    const parent = s.blueprintRegistry[parentNodeId];
+    expect(parent.children).toHaveLength(1);
+    expect(parent.children[0].childNodeId).toBe(childNodeId);
+    expect(parent.children[0].x).toBe(10);
+    expect(parent.children[0].y).toBe(5);
+  });
+});

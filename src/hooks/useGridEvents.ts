@@ -6,6 +6,7 @@ import { useWireMode } from './grid/useWireMode';
 import { useSelectionMode } from './grid/useSelectionMode';
 import { useKeyboardShortcuts } from './grid/useKeyboardShortcuts';
 import { useWASDPan } from './grid/useWASDPan';
+import { useBlueprintSelectMode } from './grid/useBlueprintSelectMode';
 
 interface UseGridEventsReturn {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -37,6 +38,7 @@ export const useGridEvents = (): UseGridEventsReturn => {
   // ── 子 hook ──
   const wire = useWireMode({ getGridPos, hoverPosRef });
   const select = useSelectionMode({ getGridPos, hoverPosRef });
+  const bpSelect = useBlueprintSelectMode({ getGridPos });
   useKeyboardShortcuts({ hoverPosRef });
   useWASDPan();
 
@@ -93,6 +95,22 @@ export const useGridEvents = (): UseGridEventsReturn => {
       return;
     }
 
+    // ── 蓝图选择模式 ──
+    if (ms.kind === 'BLUEPRINT_SELECT') {
+      bpSelect.onClick(e);
+      return;
+    }
+
+    // ── 蓝图移动模式 ──
+    if (ms.kind === 'BLUEPRINT_MOVE') {
+      const pos = s.hoverPosFrac
+        ? { x: Math.round(s.hoverPosFrac.x), y: Math.round(s.hoverPosFrac.y) }
+        : getGridPos(e);
+      s.takeSnapshot();
+      s.commitInsert(pos.x, pos.y);
+      return;
+    }
+
     // ── 建造模式 ──
     if (ms.kind === 'BUILD' && ms.placing) {
       const { buildOffset, selectedMachineId, previewRotation } = ms.placing;
@@ -105,7 +123,7 @@ export const useGridEvents = (): UseGridEventsReturn => {
         s.selectMachine(null);
       }
     }
-  }, [isPanning, getGridPos, wire, select]);
+  }, [isPanning, getGridPos, wire, select, bpSelect]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

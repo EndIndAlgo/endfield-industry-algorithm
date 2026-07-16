@@ -4,6 +4,7 @@ import type { PlacedMachine, Direction, Point } from '@/types';
 import { MACHINES } from '@/config/machines';
 import { checkPlacementCollision, getMachinePortCheckPositions } from '@/utils/grid';
 import { getRotatedDimensions } from '@/utils/machineUtils';
+import { isViewingOwn } from '@/utils/blueprintGuard';
 
 export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice> = (set, get) => ({
     machines: [],
@@ -90,7 +91,10 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
             finalId = ms.placing.movingMachineBackup.id;
         }
 
-        const newMachine: PlacedMachine = { id: finalId, machineId, x, y, rotation };
+        const newMachine: PlacedMachine = {
+            id: finalId, machineId, x, y, rotation,
+            blueprintNodeId: get().currentViewingNodeId ?? undefined,
+        };
 
         // 放置后保持 placing 状态（清空 movingMachineBackup），支持连续放置
         const newPlacing = ms.kind === 'BUILD' && ms.placing
@@ -107,6 +111,8 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
 
     removeMachine: (instanceId) => {
         const machine = get().machines.find(m => m.id === instanceId);
+        // Guard：只能删除 viewing 自有的机器
+        if (machine && !isViewingOwn(machine, get().currentViewingNodeId)) return;
         const portSet = new Set(
             (machine ? getMachinePortCheckPositions(machine) : []).map(p => `${p.x},${p.y}`)
         );
@@ -124,6 +130,8 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
         const { machines, hoverPosFrac } = get();
         const machine = machines.find(m => m.id === instanceId);
         if (!machine) return;
+        // Guard：只能拾取 viewing 自有的机器
+        if (!isViewingOwn(machine, get().currentViewingNodeId)) return;
 
         // 记录拾取时鼠标在机器内的相对位置
         let offset: Point;

@@ -4,6 +4,7 @@ import type { Connection, Point, Direction, PlacedMachine, PortType } from '@/ty
 import { portTypeToMask } from '@/types';
 import { Mask } from '@/utils/mask';
 import { getMachineConfigById, resolveMachineMasks } from '@/utils/machineUtils';
+import { isViewingOwn } from '@/utils/blueprintGuard';
 import {
     findMachineAt,
     splitConnectionAt,
@@ -33,13 +34,18 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
     connections: [],
 
     startConnecting: (ports, portType) => {
-        // 过滤越界端口（边缘机器朝外端口的外侧格可能在地图外）
-        const { gridWidth, gridHeight } = get();
+        // Guard + 边界过滤
+        const { gridWidth, gridHeight, currentViewingNodeId, machines } = get();
         const gw = gridWidth || 100;
         const gh = gridHeight || 100;
-        const validPorts = ports.filter(p =>
-            p.pos.x >= 0 && p.pos.x < gw && p.pos.y >= 0 && p.pos.y < gh
-        );
+        const validPorts = ports.filter((p) => {
+            if (p.pos.x < 0 || p.pos.x >= gw || p.pos.y < 0 || p.pos.y >= gh) return false;
+            const m = machines.find((x) =>
+                x.x <= p.pos.x && p.pos.x < x.x + 1 && x.y <= p.pos.y && p.pos.y < x.y + 1,
+            );
+            if (m && !isViewingOwn(m, currentViewingNodeId)) return false;
+            return true;
+        });
         if (validPorts.length === 0) return;
 
         const first = validPorts[0];
@@ -179,7 +185,8 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         const ms = get().modeState;
         if (ms.kind !== 'WIRE' || !ms.connecting) return;
 
-        const { connections, machines } = get();
+        const { connections, machines, currentViewingNodeId } = get();
+        const viewingNodeId = currentViewingNodeId ?? undefined;
         const { activeTailFacing, previewPath, previewHeadFacing, isValidPath, isContinuing, previewTargetIsMachine } = ms.connecting;
         const wiringPortType = ms.portType;
 
@@ -253,6 +260,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
                 machineId: bridgeId,
                 x: p.x, y: p.y,
                 rotation: 0,
+                blueprintNodeId: viewingNodeId,
             });
         }
 
@@ -286,6 +294,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             path,
             headFacing,
             portType: wiringPortType,
+            blueprintNodeId: viewingNodeId,
         }];
         for (const p of intersectionPoints) {
             newConns = newConns.flatMap(c => splitConnectionAt(c, p));

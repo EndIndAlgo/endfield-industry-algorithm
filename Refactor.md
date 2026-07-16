@@ -1,339 +1,325 @@
 # 蓝图树重构计划
 
-## 概述
+## 核心理念
 
-将当前扁平蓝图列表重构为**蓝图树**模型。每个节点是蓝图（BlueprintSnapshot），节点间通过 `children` 构成树形关系。蓝图不可变——编辑 = fork，保存 = 新 snapshot 替换 viewing 指向。
-
----
-
-## 核心概念
-
-- **BlueprintSnapshot**：不可变蓝图快照。包含本节点机器/连接、子蓝图引用列表、三层掩码。`nodeId` 跨版本唯一，`blueprintId` 跨版本稳定。
-- **BlueprintRegistry**：`Record<nodeId, BlueprintSnapshot>` 扁平注册表。所有快照存在此表，通过 nodeId 引用。
-- **Fork 模型**：编辑时操作的是当前 viewing 快照的复制品（store 中的 machines/connections）。保存时生成新 snapshot（新 nodeId），旧 snapshot 保留给其他引用者。
-- **不可变引用**：子蓝图以 `BlueprintChildRef { childNodeId, x, y }` 挂载，零碰撞约束——子蓝图总掩码与父蓝图总掩码不得有任何重叠（含同类型传送带交叉，不生成桥）。
-- **复制**：深拷贝目标蓝图的机器/连接（新 UUID），子蓝图仍按不可变引用处理。
+**蓝图 = 集成电路。** 一个蓝图封装一组机器和连线，对外表现为一台"大机器"——有固定空间占用、有接口引脚、可被选中/移动/删除。内部实现对外部透明。蓝图可以嵌套（子蓝图 = 子组件），形成树形结构。
 
 ---
 
 ## 数据模型
 
-### 新增类型 (`src/types.ts`)
+### BlueprintSnapshot（不可变）
 
 ```typescript
-// ── 蓝图快照（不可变）──
-export interface BlueprintSnapshot {
-  nodeId: string;            // 每次保存生成新 UUID，跨版本唯一
-  blueprintId: string;       // 跨版本稳定，标识"同一个蓝图"
+interface BlueprintSnapshot {
+  nodeId: string;               // 每次保存生成新 UUID，全局唯一
+  blueprintId: string;          // 跨版本稳定，标识"同一个蓝图"
   name: string;
-  version: number;           // 每次保存 +1
-  machines: PlacedMachine[]; // 仅本节点直接拥有的机器
-  connections: Connection[]; // 仅本节点直接拥有的连接
+  version: number;              // 每次保存 +1
+  machines: PlacedMachine[];    // 仅本节点直接拥有（含虚拟机器）
+  connections: Connection[];    // 仅本节点直接拥有
   children: BlueprintChildRef[];
-  mask: Mask;                // ownMask：本节点机器+连接的包围盒掩码
-  childrenMask: Mask;        // 所有子节点 totalMask 按偏移 OR
-  totalMask: Mask;           // mask OR childrenMask（快速总查询）
-  bbox: { width: number; height: number; minX: number; minY: number };
-  refCount: number;          // 被多少个其他 snapshot.children 引用
+  ownMask: Mask;                // 本节点机器+连接
+  childrenMask: Mask;           // 所有子节点 totalMask 的 OR
+  totalMask: Mask;              // ownMask | childrenMask（不持久化，加载时重算）
   createdAt: number;
   updatedAt: number;
 }
 
-export interface BlueprintChildRef {
-  childNodeId: string;       // → BlueprintSnapshot.nodeId
-  x: number; y: number;      // 子蓝图在父坐标系中的偏移
+interface BlueprintChildRef {
+  childNodeId: string;          // → BlueprintSnapshot.nodeId
+  x: number; y: number;         // 子蓝图在父坐标系中的偏移
 }
 
-export type BlueprintRegistry = Record<string, BlueprintSnapshot>;
+type BlueprintRegistry = Record<string, BlueprintSnapshot>;
 ```
 
-### PlacedMachine / Connection 扩展
+- `PlacedMachine` / `Connection` 新增 `blueprintNodeId: string` 字段。
+- 四个 Mask 字段**不持久化**（含 `Uint8Array`，不可 JSON 序列化），加载时由 `Mask.FromOccupancy` 重建。
+- 旧 `storage.ts` 的 `Blueprint` 接口（`id/name/data`）整体替换。
+
+### 虚拟机器（接口引脚）
+
+四种，掩码均为 `0x00`（物理上不存在）：
+
+| ID | 名称 | 流向 |
+|----|------|------|
+| `sin` | Solid 输入 | 物流进入 |
+| `sot` | Solid 输出 | 物流离开 |
+| `lin` | Liquid 输入 | 物流进入 |
+| `lot` | Liquid 输出 | 物流离开 |
+
+- 可放在任何格上——空地、传送带上、机器上、甚至叠在其它虚拟机器上，不产生任何阻挡。
+- 方向字段表示物流朝向。
+- 只表示**本层级**的对外接口。父蓝图只能连直属子蓝图的虚拟机器，不能穿透到孙子层级。
+- 展平/模拟时直接丢弃，内部外部连线自然对接。
+
+---
+
+## 不变式
+
+### 零重叠
+
+子蓝图 `totalMask` 与父蓝图（不含该子蓝图）在任何坐标下 `HasCollision === false`。
+
+**后果**：
+- `totalMask = ownMask | childrenMask`（每位最多一个贡献源）
+- `ClearRegion(childMask, ox, oy)` = `data[p] &= ~childMask[p]`，无需通用减法
+- 碰撞检测时无需区分位源
+
+### 层级可见性
+
+- 父蓝图可连接直属子蓝图的虚拟机器接口
+- 不能穿透：A 的子蓝图 B 内部有子蓝图 C → A 看不到 C 的虚拟机器
+- 自己的虚拟机器自己不用（只给上级用）
+
+---
+
+## 展平
+
+展平 = 递归展开所有后代到同一层，移除虚拟机器，拼接跨层级连线。结果是一份纯 `machines[] + connections[]`。
+
+**仅在以下场景使用**：
+1. 克隆/复制：深拷贝为独立蓝图
+2. 未来模拟系统：计算整个工厂的物流网络
+
+正常编辑模式不展平。
+
+---
+
+## Store 策略：全量进入 store
+
+`syncStoreFromViewing` 将 viewing 节点及其所有后代展平写入 `store.machines/connections`。每台机器/连线带 `blueprintNodeId` 标记归属。
+
+### 理由
+
+| 维度 | 全量进入 store | 只存 viewing 自有 |
+|------|:-------------:|:---------------:|
+| 渲染 | Grid 一个循环 | Grid 两个循环（store + registry walk） |
+| 模拟 | 直接读 store，零额外步骤 | 每次展平 → 计算 → 丢弃 |
+| 数据源 | store 是唯一运行时真相 | store 和 registry 两个源需同步 |
+| mutation guard | 需要 | 不需要 |
+
+模拟是明确的需求，全量进入 store 避免了重复展平。
+
+### Guard 工具函数
+
+所有 mutation 通过工具函数收敛写保护：
 
 ```typescript
-interface PlacedMachine {
-  // ... 现有字段不变
-  blueprintNodeId: string;   // NEW: 归属节点
-}
-
-interface Connection {
-  // ... 现有字段不变
-  blueprintNodeId: string;   // NEW: 归属节点
-}
+isViewingOwn(machineOrConn, viewingNodeId): boolean   // blueprintNodeId === viewingNodeId
+isDescendant(machineOrConn, viewingNodeId): boolean    // blueprintNodeId !== viewingNodeId
 ```
 
-### 不变式
+mutation 前置 guard 模式：
 
-1. Registry 中 `nodeId` 全局唯一；`blueprintId` 可重复（同蓝图多版本）
-2. `refCount` = registry 中所有其他 snapshot 的 `children` 引用此 nodeId 的次数
-3. 子蓝图 totalMask 与父蓝图 totalMask（不含该子蓝图）在任何坐标下 `HasCollision === false`
-4. Store 中的 machines/connections 是当前 viewing 节点及其所有后代的展平结果
+```typescript
+if (!isViewingOwn(m, get().currentViewingNodeId)) return;
+```
+
+需 guard 的位置：
+- `machinesSlice`: `addMachine`, `removeMachine`, `pickupMachine`
+- `connectionSlice`: `startConnecting`(findMachineAt), `updatePreview`(findMachineAt)
+- `selectionSlice`: `deleteSelected`, `commitBatchMove`
+
+### undo/redo
+
+`HistorySnapshot` 新增 `blueprintRegistry` 字段。快照体积增大，50 步上限继续兜底。
 
 ---
 
 ## Store 变更
 
-### BlueprintSlice 重写 (`src/store/slices/blueprintSlice.ts`)
+### BlueprintSlice 重写
 
-**State 新增：**
 ```
-blueprintRegistry: BlueprintRegistry     // 所有快照注册表
-currentViewingNodeId: string | null      // 当前编辑的节点
-currentAncestorPath: string[]            // 根→当前节点的 nodeId 链（面包屑导航）
+状态:
+  blueprintRegistry: BlueprintRegistry
+  currentViewingNodeId: string | null
+  currentAncestorPath: string[]            // 面包屑导航
+
+方法:
+  createBlueprint()
+  saveBlueprint(name)                      // fork: 新 nodeId，旧版保留
+  loadBlueprint(nodeId)                    // 设为 viewing，展平到 store
+  startInsertChild(nodeId)                 // → BLUEPRINT_MOVE
+  commitInsert(ox, oy)                     // 碰撞通过，children.push
+  moveChild(nodeId)                        // → BLUEPRINT_MOVE
+  commitMove(ox, oy)                       // 新位置碰撞通过
+  removeChild(nodeId)                      // 删引用
+  navigateInto(nodeId)                     // 进入子蓝图编辑
+  navigateToParent()
+  syncStoreFromViewing()                   // 内部：展平到 store
 ```
 
-**Actions：**
-| Action | 说明 |
-|--------|------|
-| `createBlueprint()` | 新建空根节点 → registry |
-| `saveBlueprint(name)` | 固化当前工作副本 → 新 snapshot，旧版 refCount 不变，viewing 切换到新 nodeId |
-| `startImportToCurrent(nodeId, mode)` | 进入 BLUEPRINT_MOVE 定位，`mode: 'reference' \| 'copy'` |
-| `commitImport(ox, oy)` | 确认导入：碰撞检查通过后展平机器/连接，更新子蓝图引用计数 |
-| `startMoveChild(nodeId)` | 进入 BLUEPRINT_MOVE 移动已有子蓝图 |
-| `commitMoveChild(ox, oy)` | 确认移动位置 |
-| `removeChildBlueprint(nodeId)` | 从 children 移除，移除展平机器/连接，refCount-- |
-| `deleteBlueprintNode(nodeId)` | 从 registry 删除（仅 refCount=0 时可操作） |
-| `navigateIntoChild(nodeId)` | 切换 viewing 为子节点（进入子蓝图编辑） |
-| `navigateToParent()` | ancestorPath 回退，恢复父节点为 viewing |
-| `syncStoreFromViewing()` | 内部方法：根据 viewing 节点递归展平 → store.machines/connections |
-
-**Fork / Save 流程：**
-1. 用户打开 blueprint → fork：展平快照到 store，`currentViewingNodeId = snapshot.nodeId`
-2. 用户在编辑器中操作 → 正常修改 store.machines/connections
-3. 保存 → 从 store 筛选 `blueprintNodeId === viewingNodeId` 的数据
-4. 计算 ownMask/childrenMask/totalMask → 构建新 BlueprintSnapshot（新 nodeId，version++）
-5. 旧 snapshot refCount 不变（仍被其他引用者持有）
-6. 新 snapshot 写入 registry
-7. `currentViewingNodeId` 更新为新 nodeId
-8. **其他引用旧版本的节点保持不变**（= fork 成功）
-
-**不可变引用导入流程：**
-1. 从 registry 取 childSnapshot
-2. 进入 BLUEPRINT_MOVE → 用户拖拽定位
-3. 实时 `HasCollision(viewingTotalMask, child.totalMask, ox, oy)` → 必须 false
-4. 确认：viewing 快照 children 新增 `{ childNodeId, ox, oy }`
-5. childSnapshot.refCount++
-6. 递归展平 child 机器/连接（blueprintNodeId 用 child 及后代的各自 nodeId，坐标加累积偏移）
-7. 追加到 store.machines/connections
-
-**复制导入流程：**
-1. 深拷贝 childSnapshot 的本节点机器/连接（新 UUID，blueprintNodeId = viewingNodeId）
-2. childSnapshot.children 列表的引用保留（同 childNodeId），各 child refCount++
-3. 碰撞检查用**正常规则**（同类型交叉允许生成桥）
-4. 展平复制品及其子蓝图到 store
-
-### HistorySlice 扩展 (`src/store/slices/historySlice.ts`)
+### HistorySnapshot 扩展
 
 ```typescript
 interface HistorySnapshot {
   machines: PlacedMachine[];
   connections: Connection[];
-  blueprintRegistry: BlueprintRegistry;  // 浅拷贝（snapshot 本身不可变）
+  blueprintRegistry: BlueprintRegistry;   // NEW（浅拷贝引用）
 }
 ```
 
-撤销/重做时恢复 registry 引用，同步 store。
-
-### ModeSlice 新增 variant (`src/store/slices/modeSlice.ts`)
-
-```typescript
-// BLUEPRINT_SELECT — 子蓝图选择（快捷键 B）
-| {
-    kind: 'BLUEPRINT_SELECT';
-    selectedChildNodeId: string | null;   // 选中的子节点
-  }
-
-// BLUEPRINT_MOVE — 子蓝图移动/导入
-| {
-    kind: 'BLUEPRINT_MOVE';
-    childNodeId: string;
-    startOffset: Point;
-    currentOffset: Point;
-    isValidPlacement: boolean;
-    isImporting: boolean;                 // true=导入中，false=移动已有
-    importMode?: 'reference' | 'copy';
-  }
-```
-
-Escape 处理：
-- BLUEPRINT_SELECT → 清空选中，回到 BUILD
-- BLUEPRINT_MOVE(isImporting=true) → 取消导入，丢弃加载的机器/连接
-- BLUEPRINT_MOVE(isImporting=false) → 还原子蓝图位置
-
-### Selector 新增 (`src/store/selectors.ts`)
+### ModeState 新增
 
 ```
-selectIsBlueprintSelectMode(s)     // modeState.kind === 'BLUEPRINT_SELECT'
-selectIsBlueprintMoveMode(s)       // modeState.kind === 'BLUEPRINT_MOVE'
-selectSelectedChildNodeId(s)       // modeState.selectedChildNodeId
-selectViewingNode(s)               // registry[currentViewingNodeId]
-selectViewingChildren(s)           // viewing 节点的 children 列表
-selectChildSnapshot(s, nodeId)     // registry[nodeId]
+BLUEPRINT_SELECT:
+  进入 (B键) → 单击子蓝图内机器 → 选中整个子蓝图
+  Escape → BUILD
+  有选中 + M → BLUEPRINT_MOVE
+  有选中 + Delete → 删引用
+
+BLUEPRINT_MOVE:
+  拖拽实时 HasCollision(totalMask, childTotalMask, ox, oy)
+  Escape(导入) → 取消，清理
+  Escape(移动) → 还原原位
+```
+
+### Selector 新增
+
+```
+selectIsBlueprintSelectMode(s)
+selectIsBlueprintMoveMode(s)
+selectSelectedChildNodeId(s)
+selectViewingNode(s)
+selectViewingChildren(s)
+selectChildSnapshot(s, nodeId)
+selectDescendantMachines(s)       // store 中所有非 viewing 自有机器
+selectDescendantConnections(s)    // store 中所有非 viewing 自有连线
 ```
 
 ---
 
-## 掩码系统 (`src/utils/grid/blueprintMask.ts` — 新增文件)
+## 渲染
 
-```typescript
-// 计算本节点自己的掩码
-computeBlueprintOwnMask(machines, connections): { mask: Mask; bbox: BoundingBox }
-  → 遍历所有机器和连接，在包围盒尺寸下构建 Mask
+### 数据流程
 
-// 计算所有子蓝图的合并掩码
-computeBlueprintChildrenMask(children, registry): { mask: Mask; bbox: BoundingBox }
-  → 遍历 children，从 registry 读取 child.totalMask，MergeInPlace at offset
-
-// 计算总掩码
-computeBlueprintTotalMask(ownResult, childrenResult): { mask: Mask; bbox: BoundingBox }
-  → ownMask.Clone().MergeInPlace(childrenMask, 0, 0) with proper coordinate alignment
+```
+registry + viewingNodeId
+        │
+        ▼
+syncStoreFromViewing()
+        │
+        ▼
+store.machines[] + store.connections[]     ← 全量展平，每项带 blueprintNodeId
+        │
+        ▼
+Grid.tsx: 一个 map 渲染全部机器
+  └─ Machine.tsx: blueprintNodeId !== viewingNodeId → 只读样式
+ConnectionSVGLayer.tsx: 一个 map 渲染全部连线
+  └─ 后代连线: 半透明样式
 ```
 
-**掩码更新时机：**
-- 保存（saveBlueprint）→ 每次更新 snapshot 的三个 mask
-- 导入/移除子蓝图 → 重新计算 childrenMask 和 totalMask
-- 机器放置/连线提交 → 运行时使用 totalMask 做碰撞检测（无需每次重建）
+### 只读样式（子蓝图机器）
 
-**碰撞检测适配：**
-- `checkPlacementCollision` → 接受预计算 `totalMask` 参数替代每次重建
-- `buildMergedGrid` / `updatePreview` → 同上
-- 子蓝图导入碰撞 → `viewingTotalMask.HasCollision(childTotalMask, ox, oy)`（零重叠）
-- 子蓝图移动碰撞 → `(viewingTotalMask 排除该子节点).HasCollision(childTotalMask, ox, oy)`
-
----
-
-## 渲染变更
-
-### Machine.tsx
-
-子蓝图机器（`blueprintNodeId !== currentViewingNodeId`）：
-- 边框色改为半透明蓝色（CSS 类 `.machine-readonly`）
-- 端口隐藏
+- 蓝边（CSS `.machine-readonly`）
+- 端口不渲染
 - 长按拾取禁用
-- 选中禁用（不在 DEVICE_SELECT 范围内）
-- hover 标签底部追加子蓝图名称行（小字灰色，从 registry 读 snapshot.name）
-- 供电范围虚线不渲染
+- DEVICE_SELECT 不可选
+- 供电范围不绘制
+- hover 标签底部追加所属子蓝图名称
 
-### GhostPreview.tsx
+### 虚拟机器渲染
 
-只在 viewing 蓝图区域渲染预览。子蓝图机器格 → 不渲染预览。
+特殊图标/颜色区分四种类型，方向箭头指示物流流向。
 
-### ConnectionSVGLayer.tsx
+### BLUEPRINT_SELECT 高亮
 
-子蓝图的连线正常渲染。连线创建时起点/终点检查 `machine.blueprintNodeId === viewingNodeId`。
-
-### BLUEPRINT_SELECT 选中高亮
-
-选中子蓝图时绘制包围盒矩形（CSS 类 `.blueprint-selection-box`，区别于 `.selection-box`）：
-- 黄色粗虚线边框
-- 读取 childSnapshot.bbox 计算屏幕尺寸
+读取 `childSnapshot.totalMask` 的包围盒，黄色虚线圈选。
 
 ### BLUEPRINT_MOVE 预览
 
-复用或扩展 `BatchMovePreview.tsx` 变体：显示子蓝图整体虚影（半透明机器 + 连线），实时碰撞无效时变红。
-
----
-
-## BlueprintList 重构 (`src/components/BlueprintList.tsx`)
-
-### 布局
-
-从扁平网格改为**树形列表**：
-
-```
-[新建蓝图] 按钮
-
-根节点列表（registry 中不被任何 children 引用的快照）
-  ├─ 蓝图A (v3, 2台机器, 3连线, 被1处引用)
-  │   ├─ 子蓝图B (v2, 0台, 0连线, ref:0)
-  │   └─ 子蓝图C (v1, 5台, 8连线, ref:0)
-  ├─ 蓝图D (v5, 10台, 15连线, 被2处引用)
-  └─ ...
-```
-
-### 三种操作
-
-每个节点提供三个操作：
-| 操作 | 说明 | 结果 |
-|------|------|------|
-| **编辑** | Fork 为 viewing 蓝图 | 导航到编辑器，关闭列表 |
-| **导入(引用)** | 不可变引用导入 | 若已有 viewing 蓝图 → BLUEPRINT_MOVE；否则提示先打开蓝图 |
-| **导入(复制)** | 复制导入 | 同上，走 copy 逻辑 |
-
-若当前不在编辑器（无 viewing 蓝图），"导入"按钮 disabled + tooltip 提示。
-
-"删除"按钮仅 `refCount === 0` 时可用。
-
----
-
-## 交互流程
-
-### 快捷键
-
-| 键 | 模式 | 行为 |
-|----|------|------|
-| B | 任意模式 | 进入 BLUEPRINT_SELECT（仅当 viewing 有 children） |
-| M | BLUEPRINT_SELECT(有选中) | 进入 BLUEPRINT_MOVE（移动当前选中子蓝图） |
-| Delete / F | BLUEPRINT_SELECT(有选中) | 删除选中子蓝图引用 |
-| Escape | BLUEPRINT_SELECT | 回到 BUILD |
-| Escape | BLUEPRINT_MOVE | 取消移动/导入，回 BLUEPRINT_SELECT |
-
-### 子蓝图操作流程
-
-1. **选中**：B 键 → 光标变十字 → 单击子蓝图内任意机器 → 选中整个子蓝图（包围盒高亮）
-2. **移动**：选中后按 M 或直接拖拽选中框 → BLUEPRINT_MOVE → 跟随鼠标预览新位置
-3. **放置**：单击确认新位置 → 更新子蓝图偏移 → 重新计算掩码
-4. **删除**：选中后按 Delete → 确认弹窗 → 级联移除容器和所有后代机器/连接
+子蓝图虚影：半透明包围盒 + 内部机器/连线。碰撞无效变红。
 
 ### 面包屑导航
 
-编辑器顶部（Header 下方）显示面包屑：
+Header 下方：
+
 ```
-[根蓝图名称] > [子蓝图A] > [当前编辑的蓝图名]
+[根蓝图名] > [子蓝图A] > [当前编辑的蓝图名]
 ```
-点击面包屑节点 → `navigateIntoChild` 或 `navigateToParent`。
+
+点击节点跳转。
 
 ---
 
-## 工具栏变更 (`src/components/Toolbar.tsx`)
+## BlueprintList 重构
 
-新增按钮：
-- **B 按钮** → BLUEPRINT_SELECT（仅当 viewing 有 children 时可用/显示）
+扁平方格 → 树形列表。根节点 = registry 中不被任何 `children` 引用的 snapshot。
+
+每个节点三种操作：
+
+| 操作 | 行为 |
+|------|------|
+| 编辑 | Fork → viewing → 导航到编辑器 |
+| 导入(引用) | BLUEPRINT_MOVE，需先有 viewing 蓝图 |
+| 导入(复制) | 同上，走 copy 逻辑 |
+
+删除仅当 `refCount === 0` 时可用。
+
+---
+
+## 掩码系统协作
+
+### 使用 Mask 现有方法
+
+| 场景 | 调用的 Mask 方法 |
+|------|-----------------|
+| 保存时计算 ownMask | `FromOccupancy({ machines, connections, ... })` |
+| childrenMask | 遍历 children，`MergeInPlace(child.totalMask, ox, oy)` |
+| totalMask | `ownMask.Clone().MergeInPlace(childrenMask, 0, 0)` |
+| 插入/移动碰撞 | `totalMask.HasCollision(childTotalMask, ox, oy)` |
+| 移除子蓝图 | `totalMask.ClearRegion(childTotalMask, ox, oy)` |
+| 加载时重建 | `FromOccupancy` ×3 |
+
+### 待新增：ClearRegion
+
+```typescript
+// 从 this 中清除 other 在 (ox, oy) 处的掩码位
+// 依赖零重叠不变式：每位只有一个贡献源
+ClearRegion(other: Mask, ox: number, oy: number): this
+```
+
+不改 `_dirty`（maxMask 偏大不影响正确性），位与补码。
+
+### 碰撞检测适配
+
+`checkPlacementCollision` 接受预计算 `totalMask` 替代每次从 machines/connections 重建。受影响的调用方：
+
+- `machinesSlice.addMachine`
+- `connectionSlice.updatePreview`
+- `selectionSlice.commitBatchMove`
 
 ---
 
 ## 实施顺序
 
-| # | 阶段 | 文件 | 预估 |
-|---|------|------|------|
-| 1 | 数据模型 | `types.ts`, `store/slices/types.ts` | 新增 BlueprintSnapshot/Registry/ChildRef 类型；PlacedMachine/Connection 加 `blueprintNodeId` 字段；ModeState 加 BLUEPRINT_SELECT/BLUEPRINT_MOVE variant；BlueprintSlice 接口重写；HistorySnapshot 扩展 |
-| 2 | Mask 计算 | `utils/grid/blueprintMask.ts` (新文件) | computeBlueprintOwnMask、computeBlueprintChildrenMask、computeBlueprintTotalMask |
-| 3 | BlueprintSlice 核心 | `store/slices/blueprintSlice.ts` | registry + fork/save/load/flatten/sync + insertChild/removeChild + navigateInto/ToParent |
-| 4 | HistorySlice 扩展 | `store/slices/historySlice.ts` | 快照加 blueprintRegistry |
-| 5 | ModeState + Selector | `store/slices/modeSlice.ts`, `store/selectors.ts` | 新 variant + cancelOperation 处理 + 新 selector |
-| 6 | Machine 只读渲染 | `components/Machine.tsx`, `components/Machine.scss` | `.machine-readonly` 样式 + 端口隐藏 + 子蓝图名显示 |
-| 7 | GhostPreview 适配 | `components/GhostPreview.tsx` | 子蓝图区域跳过预览 |
-| 8 | BLUEPRINT_SELECT 交互 | `hooks/grid/useBlueprintSelectMode.ts` (新文件), `SelectionBox.tsx` | B 键监听 + 单击选中子蓝图 + 包围盒高亮 |
-| 9 | BLUEPRINT_MOVE 交互 | hooks 同上, `BatchMovePreview.tsx` | 拖拽移动 + 实时碰撞检测 + 确认/取消 |
-| 10 | Connection 适配 | `store/slices/connectionSlice.ts` | 连线端点检查 blueprintNodeId；碰撞检测用预计算 mask |
-| 11 | Machines 适配 | `store/slices/machinesSlice.ts` | 碰撞检测用预计算 mask；blueprintNodeId 处理 |
-| 12 | BlueprintList 重构 | `components/BlueprintList.tsx` | 树形列表 + 三种操作 |
-| 13 | 面包屑导航 | `components/Header.tsx` 或新组件 | 路径显示 + 点击导航 |
-| 14 | Toolbar 按钮 | `components/Toolbar.tsx` | B 按钮 |
+| # | 阶段 | 涉及文件 |
+|---|------|---------|
+| 1 | 数据模型 | `types.ts` — BlueprintSnapshot/BlueprintChildRef/BlueprintRegistry/虚拟机器 config；PlacedMachine + Connection 加 `blueprintNodeId`；`config/machines.ts` — 四种虚拟机器定义 |
+| 2 | Mask.ClearRegion | `mask.ts` — 位与补码 |
+| 3 | BlueprintSlice + History | `blueprintSlice.ts` 重写；`historySlice.ts` 扩展；`storage.ts` 适配 registry |
+| 4 | Guard 工具函数 | `machineUtils.ts` 或新文件 — `isViewingOwn` / `isDescendant` |
+| 5 | ModeState + Selector | `modeSlice.ts` 新增 variant + B键映射；`selectors.ts` 新增 selector |
+| 6 | 渲染适配 | `Machine.tsx/scss` 只读样式；`Grid.tsx` 单循环；`ConnectionSVGLayer.tsx` 后代连线半透明 |
+| 7 | BLUEPRINT_SELECT 交互 | `useBlueprintSelectMode.ts`（新）；选中高亮；选中后 M/Delete |
+| 8 | BLUEPRINT_MOVE 交互 | `useBlueprintMoveMode.ts`（新）；虚影复用 BatchMovePreview |
+| 9 | 连线适配 | `connectionSlice.ts` — 端点识别虚拟机器；`checkPlacementCollision` 接受 totalMask |
+| 10 | 碰撞适配 | `machinesSlice.ts` / `selectionSlice.ts` — 使用 totalMask + guard |
+| 11 | BlueprintList 重构 | `BlueprintList.tsx` — 树形视图 + 三操作 |
+| 12 | 面包屑 + 导航 | 新组件；`navigateInto` / `navigateToParent` |
+| 13 | 展平工具 | 独立工具函数（克隆/模拟用） |
 
-**依赖关系**：
-- 1 → 全部
-- 2, 5 → 3
-- 3 → 8, 9, 10, 11, 12
-- 5 → 8, 9
-- 6, 7 可与 3 并行开发
-- 12, 13 独立性强，可在 3 完成后并行
-- 10, 11 可与 3 并行（只需知道蓝图节点 id 如何获取）
+1 → 全部；2 独立；3 依赖 1；4-5 依赖 1；6-10 依赖 1-5。
 
 ---
 
-## 暂不纳入本期范围
+## 暂不纳入
 
-- 子蓝图旋转（数据结构保留，实现延后）
+- 子蓝图旋转
 - 分享格式重设计
-- Git 式 diff/merge 两个版本
+- 蓝图 diff/merge
 - 跨蓝图供电
+- 真实模拟系统

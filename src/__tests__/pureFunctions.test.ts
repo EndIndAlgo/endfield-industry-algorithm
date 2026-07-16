@@ -583,3 +583,139 @@ describe('findRouteToGround', () => {
         expect(result.isValid).toBe(false);
     });
 });
+
+// ======================================================================
+// Phase 2 验证：Mask.ClearRegion
+// ======================================================================
+describe('Mask.ClearRegion', () => {
+    it('清除矩形区域后对应位置为 0', () => {
+        const m = Mask.Uniform(10, 10, 0xFF);
+        const region = Mask.Uniform(3, 3, 0x01);
+        m.ClearRegion(region, 2, 2);
+        // 区域内的值应该变为 0xFE（~0x01 & 0xFF）
+        expect(m.get(2, 2)).toBe(0xFE);
+        expect(m.get(3, 3)).toBe(0xFE);
+        expect(m.get(4, 4)).toBe(0xFE);
+        // 区域外不变
+        expect(m.get(1, 1)).toBe(0xFF);
+        expect(m.get(5, 5)).toBe(0xFF);
+    });
+
+    it('Merge 后 ClearRegion 恢复原状', () => {
+        const base = Mask.Uniform(10, 10, 0x0F);
+        const overlay = Mask.Uniform(3, 3, 0xF0);
+        base.MergeInPlace(overlay, 3, 3);
+        expect(base.get(3, 3)).toBe(0xFF); // 0x0F | 0xF0
+
+        base.ClearRegion(overlay, 3, 3);
+        expect(base.get(3, 3)).toBe(0x0F); // 清除后恢复
+        expect(base.get(5, 5)).toBe(0x0F); // 恢复
+    });
+
+    it('边界以外的部分被忽略', () => {
+        const m = Mask.Uniform(5, 5, 0xFF);
+        const region = Mask.Uniform(3, 3, 0x01);
+        // 不会抛出异常
+        expect(() => m.ClearRegion(region, 4, 4)).not.toThrow();
+    });
+});
+
+// ======================================================================
+// Phase 4 验证：Guard 函数
+// ======================================================================
+describe('blueprintGuard', () => {
+    it('isViewingOwn: 匹配 viewingNodeId 返回 true', async () => {
+        const { isViewingOwn } = await import('@/utils/blueprintGuard');
+        const m = { id: '1', machineId: 'lbr', x: 0, y: 0, rotation: 0 as const, blueprintNodeId: 'node-a' };
+        expect(isViewingOwn(m, 'node-a')).toBe(true);
+        expect(isViewingOwn(m, 'node-b')).toBe(false);
+    });
+
+    it('isViewingOwn: viewingNodeId 为 null 时始终返回 true', async () => {
+        const { isViewingOwn } = await import('@/utils/blueprintGuard');
+        const m = { id: '1', machineId: 'lbr', x: 0, y: 0, rotation: 0 as const, blueprintNodeId: 'node-a' };
+        expect(isViewingOwn(m, null)).toBe(true);
+    });
+
+    it('isDescendant: 不同 nodeId 返回 true', async () => {
+        const { isDescendant } = await import('@/utils/blueprintGuard');
+        const m = { id: '1', machineId: 'lbr', x: 0, y: 0, rotation: 0 as const, blueprintNodeId: 'child' };
+        const c = { id: '2', tailFacing: 0 as const, headFacing: 0 as const, path: [], portType: 'Solid' as const, blueprintNodeId: 'child' };
+        expect(isDescendant(m, 'parent')).toBe(true);
+        expect(isDescendant(c, 'parent')).toBe(true);
+    });
+});
+
+// ======================================================================
+// Phase 1+3 验证：虚拟机器 & blueprintTree 工具
+// ======================================================================
+describe('虚拟机器 & blueprintTree', () => {
+    it('4 台虚拟机器全部在 MACHINES 中定义', () => {
+        const ids = ['sin', 'sot', 'lin', 'lot'];
+        for (const id of ids) {
+            const cfg = MACHINES.find(m => m.id === id);
+            expect(cfg).toBeDefined();
+            expect(cfg!.mask.maxMask).toBe(0x00); // 不阻挡
+        }
+    });
+
+    it('isVirtualMachine 正确判断', async () => {
+        const { isVirtualMachine } = await import('@/types');
+        expect(isVirtualMachine('sin')).toBe(true);
+        expect(isVirtualMachine('sot')).toBe(true);
+        expect(isVirtualMachine('lin')).toBe(true);
+        expect(isVirtualMachine('lot')).toBe(true);
+        expect(isVirtualMachine('lbr')).toBe(false);
+        expect(isVirtualMachine('pco')).toBe(false);
+    });
+
+    it('RegistryEngine.rebuildMasks 重建掩码', async () => {
+        const { RegistryEngine } = await import('@/engine/RegistryEngine');
+        const engine = new RegistryEngine();
+        const empty = RegistryEngine.createEmpty('test', 24, 24);
+        const machines: PlacedMachine[] = [
+            { id: '1', machineId: 'lbr', x: 5, y: 5, rotation: 0 },
+        ];
+        const rebuilt = engine.rebuildMasks(empty, machines, [], 24, 24);
+        expect(rebuilt.ownMask.get(5, 5)).toBeGreaterThan(0);
+        expect(rebuilt.ownMask.get(0, 0)).toBe(0);
+    });
+
+    it('flattenBlueprint 递归展平', async () => {
+        const { flattenBlueprint } = await import('@/utils/blueprintTree');
+        const { RegistryEngine } = await import('@/engine/RegistryEngine');
+        const engine = new RegistryEngine();
+
+        const emptyMask = Mask.Uniform(24, 24, 0);
+        const childEmpty = RegistryEngine.createEmpty('子', 24, 24);
+        const childRebuilt = engine.rebuildMasks(
+            childEmpty,
+            [{ id: 'm1', machineId: 'lbr', x: 2, y: 2, rotation: 0 }], [],
+            24, 24,
+        );
+        const child: import('@/types').BlueprintSnapshot = {
+            ...childRebuilt,
+            machines: childRebuilt.machines.map(m => ({ ...m, blueprintNodeId: 'child-1' })),
+        };
+
+        const parentEmpty = RegistryEngine.createEmpty('父', 24, 24);
+        const parentRebuilt = engine.rebuildMasks(
+            parentEmpty,
+            [{ id: 'm0', machineId: 'lbr', x: 0, y: 0, rotation: 0 }], [],
+            24, 24,
+        );
+        const parent: import('@/types').BlueprintSnapshot = {
+            ...parentRebuilt,
+            machines: parentRebuilt.machines.map(m => ({ ...m, blueprintNodeId: 'parent-1' })),
+            children: [{ childNodeId: 'child-1', x: 10, y: 0 }],
+            childrenMask: emptyMask.Clone(),
+            totalMask: emptyMask.Clone(),
+        };
+
+        const registry = { 'child-1': child, 'parent-1': parent };
+        const result = flattenBlueprint('parent-1', registry);
+        expect(result.machines).toHaveLength(2);
+        const childMachine = result.machines.find(m => m.x === 12 && m.y === 2);
+        expect(childMachine).toBeDefined();
+    });
+});

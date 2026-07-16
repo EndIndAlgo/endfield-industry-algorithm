@@ -1,8 +1,10 @@
-import type { Point, PlacedMachine, Connection, Direction, PortType, ModeState } from '@/types';
+import type { Point, PlacedMachine, Connection, Direction, PortType, ModeState, BlueprintRegistry } from '@/types';
 
 export interface HistorySnapshot {
     machines: PlacedMachine[];
     connections: Connection[];
+    /** 蓝图注册表（浅拷贝引用，undo/redo 时恢复） */
+    blueprintRegistry?: BlueprintRegistry;
 }
 
 export interface CanvasSlice {
@@ -19,7 +21,7 @@ export interface CanvasSlice {
 
 export interface ModeSlice {
     modeState: ModeState;
-    setMode: (kind: 'BUILD' | 'WIRE_SOLID' | 'WIRE_LIQUID' | 'DEVICE_SELECT') => void;
+    setMode: (kind: 'BUILD' | 'WIRE_SOLID' | 'WIRE_LIQUID' | 'DEVICE_SELECT' | 'BLUEPRINT_SELECT') => void;
     cancelOperation: () => void;
 }
 
@@ -60,13 +62,26 @@ export interface HistorySlice {
 
 export interface BlueprintSlice {
     uiView: 'list' | 'editor' | 'about' | 'settings';
-    currentBlueprintId: string | null;
-    currentBlueprintName: string | null;
-    loadGame: (machines: PlacedMachine[], connections: Connection[], gridWidth: number, gridHeight: number, blueprintId: string | null, blueprintName: string) => void;
-    setCurrentBlueprint: (id: string, name: string) => void;
+    blueprintRegistry: BlueprintRegistry;
+    currentViewingNodeId: string | null;
+    currentAncestorPath: string[];
+    // 蓝图树操作
+    createBlueprint: () => string;
+    saveCurrentBlueprint: (name: string) => void;
+    loadBlueprint: (nodeId: string) => void;
+    startInsertChild: (nodeId: string) => void;
+    commitInsert: (ox: number, oy: number) => void;
+    commitMove: (nodeId: string, ox: number, oy: number) => void;
+    removeChild: (nodeId: string) => void;
+    navigateInto: (nodeId: string) => void;
+    navigateToParent: () => void;
+    syncStoreFromViewing: () => void;
+    // 兼容旧接口
+    loadGame: (machines: import('@/types').PlacedMachine[], connections: import('@/types').Connection[], gridWidth: number, gridHeight: number, blueprintId: string | null, blueprintName: string) => void;
     resetGame: () => void;
     setUiView: (view: 'list' | 'editor' | 'about' | 'settings') => void;
-    startInsertBlueprint: (blueprint: { data: { machines: PlacedMachine[], connections: Connection[] } }) => void;
+    /** @deprecated 使用 startInsertChild 替代 */
+    startInsertBlueprint: (blueprint: { data: { machines: import('@/types').PlacedMachine[], connections: import('@/types').Connection[] } }) => void;
 }
 
 export interface GameState extends CanvasSlice, ModeSlice, MachinesSlice, ConnectionSlice, SelectionSlice, HistorySlice, BlueprintSlice {}

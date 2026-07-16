@@ -22,6 +22,7 @@ export const ConnectionSVGLayer: React.FC<ConnectionSVGLayerProps> = memo(({ por
   const isConnecting = useGameStore(selectIsConnecting);
   const connecting = useGameStore(selectConnecting);
   const connectPortType = useGameStore(selectWirePortType);
+  const viewingNodeId = useGameStore(s => s.currentViewingNodeId);
 
   const svgSize = {
     width: gridWidth * GRID_SIZE,
@@ -50,9 +51,10 @@ export const ConnectionSVGLayer: React.FC<ConnectionSVGLayerProps> = memo(({ por
         const pts = pathToPoints(conn.path, conn.tailFacing, conn.headFacing);
         const cls = (base: string) => classNames(base, { selected: selectedConnectionIds.includes(conn.id) });
         const linePrefix = conn.portType === 'Liquid' ? 'pipe' : 'conveyor';
+        const isDescendantConn = viewingNodeId != null && conn.blueprintNodeId != null && conn.blueprintNodeId !== viewingNodeId;
 
         return (
-          <g key={conn.id}>
+          <g key={conn.id} opacity={isDescendantConn ? 0.5 : 1}>
             <polyline points={pts} className={cls(`${linePrefix}-line-outline`)} />
             <polyline points={pts} className={cls(`${linePrefix}-line-fill`)} />
           </g>

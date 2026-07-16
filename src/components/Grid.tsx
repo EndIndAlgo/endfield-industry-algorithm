@@ -5,6 +5,7 @@ import { ConnectionSVGLayer } from './ConnectionSVGLayer';
 import { GhostPreview } from './GhostPreview';
 import { SelectionBox } from './SelectionBox';
 import { BatchMovePreview } from './BatchMovePreview';
+import { SubBlueprintOutline } from './SubBlueprintOutline';
 import { useGridEvents } from '@/hooks/useGridEvents';
 import { getMachineConfig } from '@/config/machines';
 import classNames from 'classnames';
@@ -22,6 +23,11 @@ export const Grid = () => {
   const machines = useGameStore(s => s.machines);
   const modeKind = useGameStore(s => s.modeState.kind);
   const selectedMachineIds = useGameStore(selectSelectedMachineIds);
+  const viewingNodeId = useGameStore(s => s.currentViewingNodeId);
+  const blueprintRegistry = useGameStore(s => s.blueprintRegistry);
+  const blueprintMoveChildNodeId = useGameStore(s =>
+    s.modeState.kind === 'BLUEPRINT_MOVE' ? s.modeState.childNodeId : null,
+  );
 
   // ── 供电网格 ──
   const poweredMachineIds = useMemo(() => {
@@ -99,6 +105,7 @@ export const Grid = () => {
             data={m}
             isSelected={selectedMachineIds.includes(m.id)}
             isPowered={poweredMachineIds.has(m.id)}
+            isReadonly={viewingNodeId != null && m.blueprintNodeId != null && m.blueprintNodeId !== viewingNodeId}
           />
         ))}
 
@@ -107,6 +114,29 @@ export const Grid = () => {
 
         {/* 框选矩形 */}
         <SelectionBox />
+
+        {/* 子蓝图轮廓（BLUEPRINT_SELECT 模式） */}
+        <SubBlueprintOutline />
+
+        {/* 蓝图移动预览（BLUEPRINT_MOVE 模式，跟随 hoverPos） */}
+        {hoverPos && blueprintMoveChildNodeId && blueprintRegistry[blueprintMoveChildNodeId] && (() => {
+          const snap = blueprintRegistry[blueprintMoveChildNodeId];
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                left: hoverPos.x * GRID_SIZE,
+                top: hoverPos.y * GRID_SIZE,
+                width: snap.totalMask.width * GRID_SIZE,
+                height: snap.totalMask.height * GRID_SIZE,
+                border: '2px dashed rgba(100, 200, 255, 0.8)',
+                backgroundColor: 'rgba(100, 200, 255, 0.1)',
+                pointerEvents: 'none',
+                zIndex: 98,
+              }}
+            />
+          );
+        })()}
 
         {/* 批量移动预览 */}
         <BatchMovePreview hoverPos={hoverPos} />

@@ -6,6 +6,7 @@ import { MACHINES } from '@/config/machines';
 import { Mask } from '@/utils/mask';
 import { getMachinePortCheckPositions, getBoundingBox, getCornerPoints, splitConnectionAt, buildExistingCornerGrid } from '@/utils/grid';
 import { getRotatedDimensions, getMachineConfigById, resolveMachineMasks } from '@/utils/machineUtils';
+import { isViewingOwn } from '@/utils/blueprintGuard';
 
 export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlice> = (set, get) => ({
 
@@ -85,10 +86,23 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         const { selectedMachineIds, selectedConnectionIds } = ms;
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;
 
-        const { machines, connections } = get();
+        const { machines, connections, currentViewingNodeId } = get();
 
-        const machinesToRemove = new Set(selectedMachineIds);
-        const connectionsToRemove = new Set(selectedConnectionIds);
+        // Guard：过滤掉后代机器/连线（不可删除）
+        const machinesToRemove = new Set(
+            selectedMachineIds.filter((id) => {
+                const m = machines.find((x) => x.id === id);
+                return m ? isViewingOwn(m, currentViewingNodeId) : false;
+            }),
+        );
+        const connectionsToRemove = new Set(
+            selectedConnectionIds.filter((id) => {
+                const c = connections.find((x) => x.id === id);
+                return c ? isViewingOwn(c, currentViewingNodeId) : false;
+            }),
+        );
+
+        if (machinesToRemove.size === 0 && connectionsToRemove.size === 0) return;
 
         const deletedPortPositions = new Set<string>();
         for (const m of machines) {
@@ -174,16 +188,18 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
 
         const idMap: Record<string, string> = {};
 
+        const viewingNodeId = get().currentViewingNodeId ?? undefined;
         const newMachines: PlacedMachine[] = sourceMachines.map(m => {
             const newId = crypto.randomUUID();
             idMap[m.id] = newId;
-            return { ...m, id: newId };
+            return { ...m, id: newId, blueprintNodeId: viewingNodeId };
         });
 
         const newConnections: Connection[] = sourceConnections.map(c => ({
             ...c,
             id: crypto.randomUUID(),
-            path: c.path.map(p => ({ ...p }))
+            path: c.path.map(p => ({ ...p })),
+            blueprintNodeId: viewingNodeId,
         }));
 
         set({
@@ -205,7 +221,8 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         const { moveAnchor, movingMachinesSnapshot, movingConnectionsSnapshot } = ms;
         if (!moveAnchor) return;
 
-        const { machines, gridWidth, gridHeight, connections } = get();
+        const { machines, gridWidth, gridHeight, connections, currentViewingNodeId } = get();
+        const viewingNodeId = currentViewingNodeId ?? undefined;
 
         const offsetX = targetPos.x - moveAnchor.x;
         const offsetY = targetPos.y - moveAnchor.y;
@@ -307,6 +324,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                             machineId: bridgeId,
                             x: p.x, y: p.y,
                             rotation: 0,
+                            blueprintNodeId: viewingNodeId,
                         });
                         fullMask.WriteValue(p.x, p.y, bridgeMask);
                     }

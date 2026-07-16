@@ -140,3 +140,45 @@ export const selectMovingConnectionsSnapshot = (s: GameState): Connection[] =>
 /** 是否复制模式（含蓝图插入） */
 export const selectIsCopying = (s: GameState) =>
     s.modeState.kind === 'MOVE_SELECTION' && s.modeState.isCopying;
+
+// ── BLUEPRINT_SELECT ──
+
+export const selectIsBlueprintSelectMode = (s: GameState): boolean =>
+    s.modeState.kind === 'BLUEPRINT_SELECT';
+
+export const selectSelectedChildNodeId = (s: GameState): string | null =>
+    s.modeState.kind === 'BLUEPRINT_SELECT' ? s.modeState.selectedChildNodeId : null;
+
+// ── BLUEPRINT_MOVE ──
+
+export const selectIsBlueprintMoveMode = (s: GameState): boolean =>
+    s.modeState.kind === 'BLUEPRINT_MOVE';
+
+export const selectBlueprintMoveChildNodeId = (s: GameState): string | null =>
+    s.modeState.kind === 'BLUEPRINT_MOVE' ? s.modeState.childNodeId : null;
+
+export const selectBlueprintMovePreviewOffset = (s: GameState): Point | null =>
+    s.modeState.kind === 'BLUEPRINT_MOVE' ? s.modeState.previewOffset : null;
+
+export const selectBlueprintMoveIsValid = (s: GameState): boolean =>
+    s.modeState.kind === 'BLUEPRINT_MOVE' ? s.modeState.isValidPosition : false;
+
+// ── 蓝图树 ──
+
+export const selectViewingNodeId = (s: GameState): string | null =>
+    s.currentViewingNodeId;
+
+export const selectViewingAncestorPath = (s: GameState): string[] =>
+    s.currentAncestorPath;
+
+export const selectDescendantMachines = (s: GameState): PlacedMachine[] => {
+    const nid = s.currentViewingNodeId;
+    if (!nid) return EMPTY_ARRAY;
+    return s.machines.filter((m) => m.blueprintNodeId != null && m.blueprintNodeId !== nid);
+};
+
+export const selectDescendantConnections = (s: GameState): Connection[] => {
+    const nid = s.currentViewingNodeId;
+    if (!nid) return EMPTY_ARRAY;
+    return s.connections.filter((c) => c.blueprintNodeId != null && c.blueprintNodeId !== nid);
+};

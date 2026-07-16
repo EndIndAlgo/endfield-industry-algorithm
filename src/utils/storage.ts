@@ -1,84 +1,46 @@
-import type { PlacedMachine, Connection } from '@/types';
+const REGISTRY_KEY = 'zmd_registry';
 
-export interface Blueprint {
-    id: string;
-    name: string;
-    createdAt: number;
-    updatedAt: number;
-    data: {
-        machines: PlacedMachine[];
-        connections: Connection[];
-        actualWidth: number;
-        actualHeight: number;
-    };
+/** 清理旧格式数据 + 空快照（引擎初始化前调用） */
+export function clearLegacyData(): void {
+  localStorage.removeItem('zmd_blueprints');
+  localStorage.removeItem('zmd_last_blueprint_id');
+  try {
+    const raw = localStorage.getItem(REGISTRY_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    const filtered = (data.snapshots ?? []).filter(
+      (s: Record<string, unknown>) => (s.machines as unknown[])?.length > 0
+        || (s.connections as unknown[])?.length > 0
+        || (s.children as unknown[])?.length > 0,
+    );
+    if (filtered.length < (data.snapshots ?? []).length) {
+      data.snapshots = filtered;
+      localStorage.setItem(REGISTRY_KEY, JSON.stringify(data));
+    }
+  } catch { /* ignore */ }
 }
 
-const STORAGE_KEY = 'zmd_blueprints';
-const LAST_BP_KEY = 'zmd_last_blueprint_id';
+// ── 兼容旧 Blueprint 接口（被废弃） ──
 
-export const getBlueprints = (): Blueprint[] => {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-        console.error('Failed to load blueprints', e);
-        return [];
-    }
-};
+/** @deprecated 旧 Blueprint 接口已废弃 */
+export interface Blueprint {
+  id: string; name: string; createdAt: number; updatedAt: number;
+  data: {
+    machines: import('@/types').PlacedMachine[];
+    connections: import('@/types').Connection[];
+    actualWidth: number; actualHeight: number;
+  };
+}
 
-export const saveBlueprint = (id: string | null, name: string, data: Blueprint['data']): Blueprint => {
-    const blueprints = getBlueprints();
-    const now = Date.now();
-
-    if (id) {
-        // Update existing
-        const index = blueprints.findIndex(b => b.id === id);
-        if (index !== -1) {
-            const updated: Blueprint = {
-                ...blueprints[index],
-                name,
-                updatedAt: now,
-                data
-            };
-            blueprints[index] = updated;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(blueprints));
-            return updated;
-        }
-    }
-
-    // Create new
-    const newBlueprint: Blueprint = {
-        id: crypto.randomUUID(),
-        name,
-        createdAt: now,
-        updatedAt: now,
-        data
-    };
-
-    blueprints.push(newBlueprint);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blueprints));
-    return newBlueprint;
-};
-
-export const deleteBlueprint = (id: string) => {
-    const blueprints = getBlueprints();
-    const filtered = blueprints.filter(b => b.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-};
-
-export const loadBlueprint = (id: string): Blueprint | undefined => {
-    const blueprints = getBlueprints();
-    return blueprints.find(b => b.id === id);
-};
-
-export const getLastBlueprintId = (): string | null => {
-    return localStorage.getItem(LAST_BP_KEY);
-};
-
-export const setLastBlueprintId = (id: string | null) => {
-    if (id) {
-        localStorage.setItem(LAST_BP_KEY, id);
-    } else {
-        localStorage.removeItem(LAST_BP_KEY);
-    }
-};
+/** @deprecated */
+export const getBlueprints = (): Blueprint[] => [];
+/** @deprecated */
+export const saveBlueprint = (): Blueprint => { throw new Error('已废弃，使用 blueprintLibrary'); };
+/** @deprecated */
+export const deleteBlueprint = (): void => {};
+/** @deprecated */
+export const loadBlueprint = (): Blueprint | undefined => undefined;
+/** @deprecated */
+export const getLastBlueprintId = (): string | null => null;
+/** @deprecated */
+export const setLastBlueprintId = (): void => {};

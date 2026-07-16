@@ -23,6 +23,14 @@
     box-shadow: none;
     box-sizing: border-box;
 
+    &.readonly {
+        border-color: var(--blue, #4488ff);
+        opacity: 0.85;
+        .port { display: none; }
+        .machine-icon { opacity: 0.5; }
+        cursor: default;
+    }
+
     .machine-label {
         position: absolute;
         top: 100%;
@@ -310,4 +318,22 @@
     .port-inner {
         background: var(--yellow-light);
     }
+}
+
+/* ── 虚拟机器（蓝图接口引脚）── */
+.machine-body.virtual-pin {
+    border-style: dashed;
+    border-width: 2px;
+    opacity: 0.8;
+
+    &.pin-sin, &.pin-sot {
+        border-color: #ffaa33;
+        background: rgba(255, 170, 51, 0.15);
+    }
+    &.pin-lin, &.pin-lot {
+        border-color: #3399ff;
+        background: rgba(51, 153, 255, 0.15);
+    }
+
+    .port { display: none; }
 }

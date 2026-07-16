@@ -67,14 +67,58 @@ export interface PlacedMachine {
   x: number;
   y: number;
   rotation: Direction; // Default 0
+  /** 归属的蓝图节点 ID（蓝图树系统），undefined 表示旧数据或未分配 */
+  blueprintNodeId?: string;
 }
 
 export interface Connection {
   id: string;
-  tailFacing: Direction; // path[0] 處傳送帶的走向 (遠離來源機器輸出端口)
+  tailFacing: Direction; // path[0] 处传送带的走向 (远离来源机器输出端口)
   path: Point[];
-  headFacing: Direction; // path[last] 處傳送帶的走向 (朝向目標機器輸入端口)
+  headFacing: Direction; // path[last] 处传送带的走向 (朝向目标机器输入端口)
   portType: PortType;
+  /** 归属的蓝图节点 ID（蓝图树系统），undefined 表示旧数据或未分配 */
+  blueprintNodeId?: string;
+}
+
+// ── 蓝图树数据模型 ──
+
+/** 子蓝图引用：父蓝图中放置的一个子蓝图实例 */
+export interface BlueprintChildRef {
+  childNodeId: string;           // → BlueprintSnapshot.nodeId
+  x: number; y: number;          // 子蓝图在父坐标系中的偏移
+}
+
+/** 蓝图快照（不可变版本） */
+export interface BlueprintSnapshot {
+  nodeId: string;                // 每次保存生成新 UUID，全局唯一
+  blueprintId: string;           // 跨版本稳定，标识"同一个蓝图"
+  name: string;
+  version: number;               // 每次保存 +1
+  machines: PlacedMachine[];     // 仅本节点直接拥有（含虚拟机器）
+  connections: Connection[];     // 仅本节点直接拥有
+  children: BlueprintChildRef[];
+  ownMask: Mask;                 // 本节点机器+连接的占用掩码
+  childrenMask: Mask;            // 所有子节点 totalMask 的 OR
+  totalMask: Mask;               // ownMask | childrenMask（不持久化，加载时重算）
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 全局蓝图注册表：nodeId → BlueprintSnapshot */
+export type BlueprintRegistry = Record<string, BlueprintSnapshot>;
+
+// ── 虚拟机器（蓝图对外接口引脚）──
+
+export type VirtualMachineId = 'sin' | 'sot' | 'lin' | 'lot';
+
+export const VIRTUAL_MACHINE_IDS: readonly VirtualMachineId[] = ['sin', 'sot', 'lin', 'lot'];
+
+/** 虚拟机器掩码 = 0x00（物理上不存在，不产生阻挡） */
+export const VIRTUAL_MACHINE_MASK = 0x00;
+
+export function isVirtualMachine(id: string): id is VirtualMachineId {
+  return (VIRTUAL_MACHINE_IDS as readonly string[]).includes(id);
 }
 
 // ── 连线中的瞬态字段（WIRE variant 子状态）──
@@ -131,6 +175,24 @@ export type ModeState =
       isCopying: boolean;                       // false=移动, true=复制/蓝图
       originSelectedMachineIds: string[];       // 取消移动时还原原选区
       originSelectedConnectionIds: string[];
+    }
+
+  // BLUEPRINT_SELECT：B 键进入，点击子蓝图内机器选中整个子蓝图
+  | {
+      kind: 'BLUEPRINT_SELECT';
+      selectedChildNodeId: string | null;       // null=空闲, string=选中
+    }
+
+  // BLUEPRINT_MOVE：拖拽放置子蓝图（插入或移动已有子蓝图）
+  | {
+      kind: 'BLUEPRINT_MOVE';
+      childNodeId: string;                      // 被移动/插入的子蓝图 nodeId
+      childSnapshot: BlueprintSnapshot;          // 子蓝图快照
+      moveAnchor: Point;                        // 移动锚点
+      previewOffset: Point | null;               // 当前预览偏移
+      isCopying: boolean;                       // false=移动已有子蓝图, true=复制导入
+      isInserting: boolean;                     // true=从列表导入新子蓝图, false=移动已有
+      isValidPosition: boolean;                 // 当前位置是否合法（碰撞检测结果）
     };
 
 // ── 物流掩码 (按高度排列，值=渲染顺序) ──

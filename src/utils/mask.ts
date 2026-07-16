@@ -263,6 +263,31 @@ export class Mask {
     return true;
   }
 
+  /** 从 this 中清除 other 在 (ox, oy) 处的掩码位。
+   *  依赖零重叠不变式：每位只有一个贡献源，直接位与补码。 */
+  ClearRegion(other: Mask, ox: number, oy: number): this {
+    const { data: od, width: ow, height: oh } = other;
+    const tw = this.width;
+    const td = this.data;
+
+    for (let ly = 0; ly < oh; ly++) {
+      const ty = oy + ly;
+      if (ty < 0 || ty >= this.height) continue;
+      const srcRow = ly * ow;
+      const dstRow = ty * tw;
+      for (let lx = 0; lx < ow; lx++) {
+        const tx = ox + lx;
+        if (tx < 0 || tx >= tw) continue;
+        const v = od[srcRow + lx];
+        if (v === 0) continue;
+        td[dstRow + tx] &= ~v;
+      }
+    }
+
+    this._dirty = true;
+    return this;
+  }
+
   // ── 工具 ──
 
   Clone(): Mask {
@@ -270,6 +295,11 @@ export class Mask {
     m._max_mask_cache = this._max_mask_cache;
     m._dirty = this._dirty;
     return m;
+  }
+
+  /** 从原始数据重建 Mask（反序列化用） */
+  static FromData(width: number, height: number, data: number[]): Mask {
+    return new Mask(new Uint8Array(data), width, height);
   }
 
   // ── 内部 ──

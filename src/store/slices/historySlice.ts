@@ -8,11 +8,14 @@ export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> =
     },
 
     takeSnapshot: () => {
-        const { machines, connections, history } = get();
-        const snapshot: HistorySnapshot = { machines, connections };
+        const { machines, connections, history, blueprintRegistry } = get();
+        const snapshot: HistorySnapshot = {
+            machines,
+            connections,
+            blueprintRegistry: blueprintRegistry ? { ...blueprintRegistry } : undefined,
+        };
         const maxHistory = 50;
         const past = [...history.past, snapshot];
-        // 超出上限时丢弃最旧的快照
         if (past.length > maxHistory) {
             past.splice(0, past.length - maxHistory);
         }
@@ -36,12 +39,14 @@ export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> =
 
         const currentSnapshot: HistorySnapshot = {
             machines: get().machines,
-            connections: get().connections
+            connections: get().connections,
+            blueprintRegistry: get().blueprintRegistry ? { ...get().blueprintRegistry } : undefined,
         };
 
         set({
             machines: previous.machines,
             connections: previous.connections,
+            blueprintRegistry: previous.blueprintRegistry,
             history: {
                 past: newPast,
                 future: [currentSnapshot, ...history.future]
@@ -60,12 +65,14 @@ export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> =
 
         const currentSnapshot: HistorySnapshot = {
             machines: get().machines,
-            connections: get().connections
+            connections: get().connections,
+            blueprintRegistry: get().blueprintRegistry ? { ...get().blueprintRegistry } : undefined,
         };
 
         set({
             machines: next.machines,
             connections: next.connections,
+            blueprintRegistry: next.blueprintRegistry,
             history: {
                 past: [...history.past, currentSnapshot],
                 future: newFuture

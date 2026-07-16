@@ -2,6 +2,7 @@ import React, { useRef, useCallback, useMemo, memo, useState } from 'react';
 import { Icon } from '@iconify/react';
 import classNames from 'classnames';
 import type { PlacedMachine } from '@/types';
+import { isVirtualMachine } from '@/types';
 import { getMachineConfig } from '@/config/machines';
 import { useGameStore } from '@/store/gameStore';
 import './Machine.scss';
@@ -15,11 +16,13 @@ interface MachineProps {
     data: PlacedMachine;
     isSelected?: boolean;
     isPowered?: boolean;
+    isReadonly?: boolean;
     /** z-index 基底, 默认 STATIC_BASE */
     zBase?: number;
 }
 
-export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPowered = true, zBase = Z_INDEX.STATIC_BASE }) => {
+export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPowered = true, isReadonly = false, zBase = Z_INDEX.STATIC_BASE }) => {
+    const isVirtual = isVirtualMachine(data.machineId);
     const config = getMachineConfig(data.machineId);
 
     // 细粒度 store selector：只订阅本组件需要的字段
@@ -56,8 +59,9 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
 
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         if (e.button !== 0) return;
+        // 只读或虚拟机器不启动长按拾取
+        if (isReadonly || isVirtual) return;
         const s = useGameStore.getState();
-        // 连线模式下不启动长按拾取
         if (s.modeState.kind === 'WIRE') return;
 
         pressTimer.current = setTimeout(() => {
@@ -65,7 +69,7 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
             s.takeSnapshot();
             s.pickupMachine(data.id);
         }, 500);
-    }, [data.id]);
+    }, [data.id, isReadonly, isVirtual]);
 
     const handleMouseUp = useCallback(() => {
         if (pressTimer.current) {
@@ -136,7 +140,14 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
             onMouseLeave={handleMouseLeave}
             onClick={handleClick}
         >
-            <div className="machine-body">
+            <div className={classNames('machine-body', {
+              readonly: isReadonly,
+              'virtual-pin': isVirtual,
+              'pin-sin': data.machineId === 'sin',
+              'pin-sot': data.machineId === 'sot',
+              'pin-lin': data.machineId === 'lin',
+              'pin-lot': data.machineId === 'lot',
+            })}>
                 <div
                     className="machine-label"
                     style={{
@@ -145,11 +156,15 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
                     }}
                 >
                     <div>{config.name}</div>
-                    <div>[点击] 查看详情/选择物品</div>
-                    <div>[长按] 移动</div>
+                    {!isReadonly && !isVirtual && (
+                      <>
+                        <div>[点击] 查看详情/选择物品</div>
+                        <div>[长按] 移动</div>
+                      </>
+                    )}
                 </div>
 
-                {showIcon && (
+                {showIcon && !isVirtual && (
                     <div
                         className="machine-icon"
                         style={{
@@ -186,7 +201,7 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
                     </div>
                 )}
 
-                {!isPowered && (
+                {!isPowered && !isVirtual && !isReadonly && (
                     <div
                         className="power-alert-icon"
                         style={{
@@ -211,8 +226,8 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
                     </div>
                 )}
 
-                {/* 输入端口（纯视觉，交互由 Grid 统一处理） */}
-                {inputs.map((p, i) => {
+                {/* 输入端口：只读和虚拟机器不渲染 */}
+                {!isReadonly && !isVirtual && inputs.map((p, i) => {
                     if (mixedKeys.has(`${p.x},${p.y},${p.side}`)) return null;
                     return (
                     <div
@@ -227,8 +242,8 @@ export const Machine: React.FC<MachineProps> = memo(({ data, isSelected, isPower
                     );
                 })}
 
-                {/* 输出端口（纯视觉，交互由 Grid 统一处理） */}
-                {outputs.map((p, i) => {
+                {/* 输出端口：只读和虚拟机器不渲染 */}
+                {!isReadonly && !isVirtual && outputs.map((p, i) => {
                     const isMixed = mixedKeys.has(`${p.x},${p.y},${p.side}`);
                     return (
                     <div

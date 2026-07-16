@@ -56,6 +56,9 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
       } else if (key === 'x') {
         if (isPlacing) return;
         s.setMode(ms.kind === 'DEVICE_SELECT' ? 'BUILD' : 'DEVICE_SELECT');
+      } else if (key === 'b') {
+        if (isPlacing || isConnecting) return;
+        s.setMode(ms.kind === 'BLUEPRINT_SELECT' ? 'BUILD' : 'BLUEPRINT_SELECT');
       } else if (key === 'f') {
         s.takeSnapshot();
         s.deleteSelected();

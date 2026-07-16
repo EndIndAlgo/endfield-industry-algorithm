@@ -1,6 +1,7 @@
 import { Icon } from '@iconify/react';
 import { useGameStore } from '@/store/gameStore';
 import { selectIsBuildMode, selectIsWireMode, selectIsDeviceSelectMode, selectIsMoveSelectionMode,
+    selectIsBlueprintSelectMode,
     selectSelectedMachineId, selectHasSelection, selectConnecting } from '@/store/selectors';
 import './OperationHints.scss';
 
@@ -10,6 +11,7 @@ export const OperationHints = () => {
     const isWire = useGameStore(selectIsWireMode);
     const isDeviceSelect = useGameStore(selectIsDeviceSelectMode);
     const isMoveSelection = useGameStore(selectIsMoveSelectionMode);
+    const isBlueprintSelect = useGameStore(selectIsBlueprintSelectMode);
     const selectedMachineId = useGameStore(selectSelectedMachineId);
     const hasSelection = useGameStore(selectHasSelection);
     const connecting = useGameStore(selectConnecting);
@@ -199,6 +201,22 @@ export const OperationHints = () => {
                             <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
                         </div>
                         <span>确定放置</span>
+                    </div>
+                </>
+            )}
+
+            {/* 蓝图选择模式 */}
+            {isBlueprintSelect && (
+                <>
+                    <div className="hint-item">
+                        <div className="key-icon">
+                            <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
+                        </div>
+                        <span>选中子蓝图</span>
+                    </div>
+                    <div className="hint-item">
+                        <div className="key-icon">B</div>
+                        <span>退出蓝图选择</span>
                     </div>
                 </>
             )}
