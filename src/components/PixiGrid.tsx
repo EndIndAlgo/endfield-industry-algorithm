@@ -13,8 +13,8 @@ import './Grid.scss';
  * - canvas 不再需要 pointer-events: none
  */
 export const PixiGrid = () => {
-  const { containerRef, managerRef } = usePixiCanvas();
-  const { isPanning } = usePixiEvents(managerRef);
+  const { containerRef, managerRef, ready } = usePixiCanvas();
+  const { isPanning } = usePixiEvents(managerRef, ready);
 
   const modeKind = useGameStore(s => s.modeState.kind);
 

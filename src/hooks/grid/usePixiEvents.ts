@@ -16,7 +16,10 @@ import { useWASDPan } from './useWASDPan';
  * 坐标转换通过 PixiSceneManager.worldContainer.toLocal()，
  * canvas 不再需要 pointer-events: none。
  */
-export function usePixiEvents(managerRef: React.RefObject<PixiSceneManager | null>) {
+export function usePixiEvents(
+  managerRef: React.RefObject<PixiSceneManager | null>,
+  ready: boolean,
+) {
   const [hoverPos, _setHoverPos] = useState<Point | null>(null);
   const hoverPosRef = useRef<Point | null>(null);
   const [isPanning, setIsPanning] = useState(false);
@@ -93,6 +96,7 @@ export function usePixiEvents(managerRef: React.RefObject<PixiSceneManager | nul
 
   // ── PixiJS 事件绑定（仅 mount/unmount 时执行） ──
   useEffect(() => {
+    if (!ready) return;
     const m = managerRef.current;
     if (!m?.app) return;
 
@@ -201,7 +205,7 @@ export function usePixiEvents(managerRef: React.RefObject<PixiSceneManager | nul
       stage.off('rightclick', onRightClick);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [managerRef]);
+  }, [ready]);
 
   return { hoverPos, isPanning };
 }
