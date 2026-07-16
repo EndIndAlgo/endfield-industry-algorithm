@@ -48,6 +48,11 @@ export class PixiSceneManager {
   async mount(containerEl: HTMLElement): Promise<void> {
     if (this._mounted) return;
 
+    // 提前订阅 store — async init 期间蓝图可能已加载完成，subscribe 必须在此之前就绪
+    this.unsubscribe = useGameStore.subscribe((state, prevState) => {
+      this.onStoreChange(state, prevState);
+    });
+
     this.app = new Application();
     await this.app.init({
       resizeTo: containerEl,
@@ -69,12 +74,10 @@ export class PixiSceneManager {
 
     this.buildSceneGraph();
     this._mounted = true;
+    const initState = useGameStore.getState();
 
-    this.fullSync(useGameStore.getState());
-
-    this.unsubscribe = useGameStore.subscribe((state, prevState) => {
-      this.onStoreChange(state, prevState);
-    });
+    // fullSync 使用最新 state（subscribe 已在 init 前就绪，但 fullSync 保证首次完整性）
+    this.fullSync(initState);
   }
 
   destroy(): void {
@@ -149,6 +152,8 @@ export class PixiSceneManager {
   }
 
   private onStoreChange(state: GameState, prevState: GameState): void {
+    // 场景图尚未构建时忽略（fullSync 会在 mount 末尾补上）
+    if (!this._mounted) return;
     if (state.zoom !== prevState.zoom || state.pan !== prevState.pan) {
       this.syncViewport(state);
     }

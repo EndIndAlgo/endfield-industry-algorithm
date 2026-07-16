@@ -25,7 +25,10 @@ export function usePixiCanvas() {
     manager.mount(el).then(() => {
       if (cancelled) {
         manager.destroy();
-        managerRef.current = null;
+        // 仅当 ref 仍指向本实例时才清空，避免旧回调覆盖新实例
+        if (managerRef.current === manager) {
+          managerRef.current = null;
+        }
       } else {
         setReady(true);
       }
