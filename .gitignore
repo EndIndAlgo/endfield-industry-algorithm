@@ -31,6 +31,10 @@ skills-lock.json
 .env.*
 .env*.local
 
+# Playwright
+.playwright-cli/
+debug-*.png
+
 # OS
 Thumbs.db
 ehthumbs.db
