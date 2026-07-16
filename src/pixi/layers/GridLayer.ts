@@ -1,8 +1,6 @@
 import { Container, TilingSprite, Texture, Graphics } from 'pixi.js';
 import { GRID_SIZE } from '@/config/constants';
-
-/** 网格边框颜色 — 与 CSS var(--black-light) 一致 */
-const GRID_BORDER_COLOR = 0x3d3d3d;
+import { GRAY, BLACK_LIGHT } from '@/config/colors';
 
 /**
  * 网格背景层
@@ -49,7 +47,7 @@ export class GridLayer extends Container {
     // 重建边框 Graphics（含 4px 向外扩展，与原 CSS 保持一致）
     this.border.clear();
     this.border.rect(-4, -4, w + 8, h + 8)
-      .stroke({ width: 4, color: GRID_BORDER_COLOR });
+      .stroke({ width: 4, color: BLACK_LIGHT });
   }
 
   /** 生成 40×40 网格单元纹理 */
@@ -60,7 +58,7 @@ export class GridLayer extends Container {
     canvas.height = GRID_SIZE;
 
     const ctx = canvas.getContext('2d')!;
-    ctx.strokeStyle = '#c4c1c1'; // var(--gray)
+    ctx.strokeStyle = `#${GRAY.toString(16).padStart(6, '0')}`;
     ctx.lineWidth = 1;
 
     // 右边缘

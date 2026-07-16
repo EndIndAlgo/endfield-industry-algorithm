@@ -1,12 +1,12 @@
 import { useRef, useState, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import type { Point } from '@/types';
-import { usePanZoom } from './grid/usePanZoom';
-import { useWireMode } from './grid/useWireMode';
-import { useSelectionMode } from './grid/useSelectionMode';
-import { useKeyboardShortcuts } from './grid/useKeyboardShortcuts';
-import { useWASDPan } from './grid/useWASDPan';
-import { useBlueprintSelectMode } from './grid/useBlueprintSelectMode';
+import { usePanZoom } from './usePanZoom';
+import { useWireMode } from './useWireMode';
+import { useSelectionMode } from './useSelectionMode';
+import { useKeyboardShortcuts } from './useKeyboardShortcuts';
+import { useWASDPan } from './useWASDPan';
+import { useBlueprintSelectMode } from './useBlueprintSelectMode';
 
 interface UseGridEventsReturn {
   containerRef: React.RefObject<HTMLDivElement | null>;

@@ -6,7 +6,11 @@ import { getRotatedDimensions, getRotatedPorts } from '@/utils/machineUtils';
 import { getMachineTexture } from '@/pixi/TextureLoader';
 import { GRID_SIZE } from '@/config/constants';
 import { machineZ, Z_INDEX } from '@/config/zIndex';
-import { getPortStyle } from '@/utils/portPosition';
+import { getPortCenter } from '@/utils/portPosition';
+import {
+  GRAY_DARK, GRAY, GRAY_LIGHT, SELECTION_BLUE,
+  BLACK as BLACK_BG, GREEN, ORANGE, ORANGE_DARK,
+} from '@/config/colors';
 
 /** 附着在机器 Container 上的运行时元数据 */
 interface MachineMeta {
@@ -15,15 +19,6 @@ interface MachineMeta {
   isReadonly: boolean;
   isPowered: boolean;
 }
-
-// ── 颜色常量（与 CSS 变量一致） ──
-const GRAY_DARK = 0x5f5d5d;
-const GRAY = 0xc4c1c1;
-const GRAY_LIGHT = 0xe5e1e1;
-const SELECTION_BLUE = 0x4dabf7;
-const BLACK_BG = 0x1d1d1d;
-const GREEN = 0xabcd41;
-const ORANGE = 0xe79c3a;
 
 /** 机器标签文字样式（复用在所有机器上） */
 const labelNameStyle = new TextStyle({
@@ -168,7 +163,7 @@ export class MachineRenderer {
     });
   }
 
-  /** 构建端口 CSS 定位 → PixiJS 本地坐标 */
+  /** 计算端口在机器容器内的 PixiJS 本地坐标 */
   private static computePortPosition(
     p: PortConfig,
     pixW: number,
@@ -176,16 +171,16 @@ export class MachineRenderer {
     portW: number,
     portH: number,
   ): { px: number; py: number } | null {
-    const posStyle = getPortStyle(p);
+    const { center } = getPortCenter(p);
     switch (p.side) {
       case 'left':
-        return { px: 0, py: parseFloat(posStyle.top as string) - portH / 2 };
+        return { px: 0, py: center - portH / 2 };
       case 'right':
-        return { px: pixW - portW, py: parseFloat(posStyle.top as string) - portH / 2 };
+        return { px: pixW - portW, py: center - portH / 2 };
       case 'top':
-        return { px: parseFloat(posStyle.left as string) - portW / 2, py: 0 };
+        return { px: center - portW / 2, py: 0 };
       case 'bottom':
-        return { px: parseFloat(posStyle.left as string) - portW / 2, py: pixH - portH };
+        return { px: center - portW / 2, py: pixH - portH };
       default:
         return null;
     }
@@ -417,7 +412,7 @@ export class MachineRenderer {
     g.circle(cx, cy, 10)
       .fill({ color: ORANGE, alpha: 0.8 });
     g.circle(cx, cy, 10)
-      .stroke({ width: 2, color: 0xd17700 }); // --orange-dark
+      .stroke({ width: 2, color: ORANGE_DARK });
     g.zIndex = Z_INDEX.POWER_ALERT_ICON;
     container.addChild(g);
 

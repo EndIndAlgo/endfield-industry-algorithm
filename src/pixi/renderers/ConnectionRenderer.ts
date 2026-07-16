@@ -3,13 +3,7 @@ import type { Connection, Point, PortType, Direction } from '@/types';
 import { portTypeToMask, oppositeDir, DIR_UP, DIR_RIGHT, DIR_DOWN, DIR_LEFT } from '@/types';
 import { GRID_SIZE } from '@/config/constants';
 import { Z_INDEX, connZ } from '@/config/zIndex';
-
-// ── 颜色常量 ──
-const GRAY = 0xc4c1c1;
-const YELLOW_LIGHT = 0xf5f08a;
-const PIPE_BLUE = 0x7cc4f0;
-const SELECTION_BLUE = 0x4dadf7;
-const INVALID_RED = 0xff4444;
+import { GRAY, CONVEYOR_FILL, PIPE_FILL, CONN_SELECTION_BLUE, INVALID_RED } from '@/config/colors';
 
 /** 端点延伸量（格），与 pathToPoints 的 EXTEND 一致 */
 const EXTEND = 0.45;
@@ -75,7 +69,7 @@ export class ConnectionRenderer {
     isSelected: boolean,
   ): void {
     const points = ConnectionRenderer.pathToPixelPoints(path, tailFacing, headFacing);
-    const color = portType === 'Liquid' ? PIPE_BLUE : YELLOW_LIGHT;
+    const color = portType === 'Liquid' ? PIPE_FILL : CONVEYOR_FILL;
     const outlineWidth = isSelected ? 26 : 20;
     const fillWidth = isSelected ? 22 : 16;
 
@@ -88,7 +82,7 @@ export class ConnectionRenderer {
       }
       outline.stroke({
         width: outlineWidth,
-        color: isSelected ? SELECTION_BLUE : GRAY,
+        color: isSelected ? CONN_SELECTION_BLUE : GRAY,
         cap: 'round',
         join: 'round',
       });
@@ -124,7 +118,7 @@ export class ConnectionRenderer {
     isPreview: boolean,
     isValid = true,
   ): Graphics[] {
-    const color = portType === 'Liquid' ? PIPE_BLUE : YELLOW_LIGHT;
+    const color = portType === 'Liquid' ? PIPE_FILL : CONVEYOR_FILL;
     const outlineColor = isPreview && !isValid ? INVALID_RED : GRAY;
     const fillColor = isPreview && !isValid ? INVALID_RED : color;
     const outlineWidth = isSelected ? 26 : isPreview ? 16 : 20;

@@ -4,16 +4,10 @@ import { getMachineConfig } from '@/config/machines';
 import { getRotatedDimensions, getRotatedPorts } from '@/utils/machineUtils';
 import { GRID_SIZE, PORT_ARROW_ROTATION } from '@/config/constants';
 import { Z_INDEX, machineZ } from '@/config/zIndex';
-
-// ── 颜色常量 ──
-const GHOST_BORDER = 0xc4c1c1;
-const GHOST_FILL = 0xcccccc;
-const INVALID_RED = 0xff4444;
-const SUPPLY_YELLOW = 0xffcc00;
-const SELECTION_FILL = 0x4287f5;
-const SELECTION_STROKE = 0x4287f5;
-const YELLOW_DASH = 0xffcc00;
-const BLUEPRINT_BLUE = 0x64c8ff;
+import {
+  GRAY, GHOST_FILL, INVALID_RED, ORANGE_LIGHT,
+  BOX_SELECTION_FILL, BLUEPRINT_OUTLINE, BLUEPRINT_MOVE,
+} from '@/config/colors';
 
 /**
  * 叠加层渲染器
@@ -60,7 +54,7 @@ export class OverlayRenderer {
     if (!isValid) {
       border.rect(0, 0, pixW, pixH).stroke({ width: 4, color: INVALID_RED, alpha: 0.5 });
     } else {
-      border.rect(0, 0, pixW, pixH).stroke({ width: 1, color: GHOST_BORDER });
+      border.rect(0, 0, pixW, pixH).stroke({ width: 1, color: GRAY });
     }
     container.addChild(border);
 
@@ -83,7 +77,7 @@ export class OverlayRenderer {
     const h = height * GRID_SIZE + d * 2;
 
     const g = new Graphics({ label: 'supply-range' });
-    g.rect(x, y, w, h).stroke({ width: 2, color: SUPPLY_YELLOW, alpha: 0.5 });
+    g.rect(x, y, w, h).stroke({ width: 2, color: ORANGE_LIGHT, alpha: 0.5 });
     g.zIndex = Z_INDEX.SUPPLY_RANGE;
     return g;
   }
@@ -125,8 +119,8 @@ export class OverlayRenderer {
 
     const g = new Graphics({ label: 'selection-box' });
     g.rect(x1, y1, x2 - x1, y2 - y1)
-      .fill({ color: SELECTION_FILL, alpha: 0.2 })
-      .stroke({ width: 1, color: SELECTION_STROKE, alpha: 0.6 });
+      .fill({ color: BOX_SELECTION_FILL, alpha: 0.2 })
+      .stroke({ width: 1, color: BOX_SELECTION_FILL, alpha: 0.6 });
     g.zIndex = Z_INDEX.SELECTION_BOX;
     return g;
   }
@@ -140,8 +134,8 @@ export class OverlayRenderer {
   ): Graphics {
     const g = new Graphics({ label: 'sub-blueprint-outline' });
     g.rect(x * GRID_SIZE, y * GRID_SIZE, w * GRID_SIZE, h * GRID_SIZE)
-      .fill({ color: YELLOW_DASH, alpha: 0.08 })
-      .stroke({ width: 2, color: YELLOW_DASH, alpha: 0.8 });
+      .fill({ color: BLUEPRINT_OUTLINE, alpha: 0.08 })
+      .stroke({ width: 2, color: BLUEPRINT_OUTLINE, alpha: 0.8 });
     g.zIndex = 99;
     return g;
   }
@@ -155,8 +149,8 @@ export class OverlayRenderer {
   ): Graphics {
     const g = new Graphics({ label: 'blueprint-move-preview' });
     g.rect(x * GRID_SIZE, y * GRID_SIZE, w * GRID_SIZE, h * GRID_SIZE)
-      .fill({ color: BLUEPRINT_BLUE, alpha: 0.1 })
-      .stroke({ width: 2, color: BLUEPRINT_BLUE, alpha: 0.8 });
+      .fill({ color: BLUEPRINT_MOVE, alpha: 0.1 })
+      .stroke({ width: 2, color: BLUEPRINT_MOVE, alpha: 0.8 });
     g.zIndex = 98;
     return g;
   }

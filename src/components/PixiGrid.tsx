@@ -1,7 +1,7 @@
 import classNames from 'classnames';
 import { useGameStore } from '@/store/gameStore';
 import { usePixiCanvas } from '@/hooks/usePixiCanvas';
-import { useGridEvents } from '@/hooks/useGridEvents';
+import { useGridEvents } from '@/hooks/grid/useGridEvents';
 import './Grid.scss';
 
 /**
