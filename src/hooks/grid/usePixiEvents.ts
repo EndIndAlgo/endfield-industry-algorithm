@@ -100,8 +100,8 @@ export function usePixiEvents(managerRef: React.RefObject<PixiSceneManager | nul
     stage.eventMode = 'static';
 
     const onPointerDown = (e: FederatedPointerEvent) => {
-      const px = e.clientX ?? e.client?.x ?? 0;
-      const py = e.clientY ?? e.client?.y ?? 0;
+      const px = e.global.x ?? 0;
+      const py = e.global.y ?? 0;
       if ((e.button ?? 0) === 1) {
         e.preventDefault?.();
         startPan(px, py);
@@ -116,8 +116,8 @@ export function usePixiEvents(managerRef: React.RefObject<PixiSceneManager | nul
     };
 
     const onPointerMove = (e: FederatedPointerEvent) => {
-      const px = e.clientX ?? e.client?.x ?? 0;
-      const py = e.clientY ?? e.client?.y ?? 0;
+      const px = e.global.x ?? 0;
+      const py = e.global.y ?? 0;
       if (isPanningRef.current) {
         movePan(px, py);
         return;
@@ -152,7 +152,7 @@ export function usePixiEvents(managerRef: React.RefObject<PixiSceneManager | nul
         const frac = s.hoverPosFrac;
         const gridPos = frac
           ? { x: Math.round(frac.x), y: Math.round(frac.y) }
-          : callbacksRef.current.getGridPos({ clientX: e.clientX ?? e.client?.x ?? 0, clientY: e.clientY ?? e.client?.y ?? 0 });
+          : callbacksRef.current.getGridPos({ clientX: e.global.x ?? 0, clientY: e.global.y ?? 0 });
         s.takeSnapshot();
         s.commitInsert(gridPos.x, gridPos.y);
         return;
@@ -161,7 +161,7 @@ export function usePixiEvents(managerRef: React.RefObject<PixiSceneManager | nul
         const frac = s.hoverPosFrac;
         const gridPos = frac
           ? { x: Math.round(frac.x - ms.placing.buildOffset.x), y: Math.round(frac.y - ms.placing.buildOffset.y) }
-          : callbacksRef.current.getGridPos({ clientX: e.clientX ?? e.client?.x ?? 0, clientY: e.clientY ?? e.client?.y ?? 0 });
+          : callbacksRef.current.getGridPos({ clientX: e.global.x ?? 0, clientY: e.global.y ?? 0 });
         s.takeSnapshot();
         s.addMachine(ms.placing.selectedMachineId, gridPos.x, gridPos.y, ms.placing.previewRotation);
         if (!(e.ctrlKey ?? e.metaKey)) {
@@ -172,8 +172,8 @@ export function usePixiEvents(managerRef: React.RefObject<PixiSceneManager | nul
 
     const onWheel = (e: FederatedWheelEvent) => {
       handleWheel(
-        e.clientX ?? e.client?.x ?? 0,
-        e.clientY ?? e.client?.y ?? 0,
+        e.global.x ?? 0,
+        e.global.y ?? 0,
         e.deltaY ?? 0,
       );
     };

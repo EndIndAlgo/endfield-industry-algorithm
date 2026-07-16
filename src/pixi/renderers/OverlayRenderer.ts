@@ -34,20 +34,28 @@ export class OverlayRenderer {
     container.position.set(ghostPos.x * GRID_SIZE, ghostPos.y * GRID_SIZE);
     container.zIndex = machineZ(Z_INDEX.GHOST_BASE, config.mask.maxMask);
 
-    // 条纹背景（模拟 CSS repeating-linear-gradient）
-    const bg = new Graphics({ label: 'ghost-bg' });
+    // 条纹背景（模拟 CSS repeating-linear-gradient -45deg）
     const stripeColor = isValid ? 0xc4c1c1 : INVALID_RED;
     const bgAlpha = isValid ? 0.25 : 0.35;
-    bg.rect(0, 0, pixW, pixH).fill({ color: stripeColor, alpha: bgAlpha });
 
-    // 斜条纹
+    // 1. 裁剪遮罩：矩形边界
+    const clipMask = new Graphics({ label: 'ghost-clip' });
+    clipMask.rect(0, 0, pixW, pixH).fill({ color: 0xffffff });
+
+    // 2. 内容层：底色 + 斜条纹
+    const content = new Graphics({ label: 'ghost-content' });
+    content.rect(0, 0, pixW, pixH).fill({ color: stripeColor, alpha: bgAlpha });
+
     const stripeSize = 8;
     for (let i = -pixH; i < pixW + pixH; i += stripeSize * 2) {
-      bg.moveTo(i, 0).lineTo(i - pixH, pixH).lineTo(i - pixH + stripeSize, pixH)
+      content.moveTo(i, 0).lineTo(i - pixH, pixH).lineTo(i - pixH + stripeSize, pixH)
         .lineTo(i + stripeSize, 0).closePath()
         .fill({ color: stripeColor, alpha: bgAlpha * 1.5 });
     }
-    container.addChild(bg);
+
+    // 遮罩裁剪条纹到矩形边界
+    content.mask = clipMask;
+    container.addChild(clipMask, content);
 
     // 边框
     const border = new Graphics({ label: 'ghost-border' });
