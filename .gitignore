@@ -23,6 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .claude/*
+.agents/
+skills-lock.json
 
 # .env files
 .env
