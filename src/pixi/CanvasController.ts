@@ -21,8 +21,8 @@ extensions.add(CullerPlugin);
 /** buildPowerGrid 结果缓存：按 machines 数组引用 + 网格尺寸命中（machines 引用不变则复用） */
 const powerGridCache = new WeakMap<PlacedMachine[], { gw: number; gh: number; grid: Uint8Array }>();
 
-/** 长按拾取触发时长（ms）：按住自有机器 500ms 触发 pickupMachine */
-const LONG_PRESS_MS = 500;
+/** 长按拾取触发时长（ms）：按住自有机器 350ms 触发 pickupMachine（桌面端主力手势，500ms 过拖沓） */
+const LONG_PRESS_MS = 350;
 
 /**
  * 当前激活的画布控制器（attach 时注册、detach 时清除），
@@ -87,7 +87,7 @@ export class CanvasController {
   private lastHoverGridPos: Point | null = null;
   /** 当前显示 hover 标签的机器 id（越界/换机时隐藏旧标签） */
   private hoverLabelMachineId: string | null = null;
-  /** 长按拾取定时器（按住机器 500ms 触发 pickupMachine） */
+  /** 长按拾取定时器（按住机器 350ms 触发 pickupMachine） */
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
   /** 长按拾取目标机器 id（指针移出该机器/松开/越界即取消） */
   private longPressMachineId: string | null = null;
@@ -310,7 +310,7 @@ export class CanvasController {
     this.hoverLabelMachineId = null;
   }
 
-  // ── 长按拾取（按住机器 500ms → pickupMachine；PixiJS 迁移回归修复） ──
+  // ── 长按拾取（按住机器 350ms → pickupMachine；PixiJS 迁移回归修复） ──
 
   /** pointerdown 左键：命中自有机器则启动长按定时器 */
   private startLongPressPickup(grid: Point): void {
