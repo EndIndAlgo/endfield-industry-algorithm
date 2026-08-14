@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
-import type { PlacedMachine, PortConfig, Side } from '@/types';
+import type { PlacedMachine, PortConfig, Side, Direction, MachineConfig } from '@/types';
 import { isVirtualMachine } from '@/types';
 import { getMachineConfig } from '@/config/machines';
 import { getRotatedDimensions, getRotatedPorts } from '@/utils/machineUtils';
@@ -15,9 +15,12 @@ import {
 /** 附着在机器 Container 上的运行时元数据 */
 interface MachineMeta {
   machineId: string;
+  rotation: Direction;
   isVirtual: boolean;
   isReadonly: boolean;
   isPowered: boolean;
+  isSelected: boolean;
+  zoom: number;
 }
 
 /** 机器标签文字样式（复用在所有机器上） */
@@ -35,8 +38,8 @@ const labelHintStyle = new TextStyle({
 /**
  * 为一台已放置的机器创建或更新 PixiJS Container
  *
- * 返回的 Container 以机器中心为 anchor/pivot，rotation 直接用 angle 设置。
- * 位置 = (gridX + width/2) * GRID_SIZE, (gridY + height/2) * GRID_SIZE
+ * 位置 = 机器左上角 (gridX * GRID_SIZE, gridY * GRID_SIZE)；
+ * 旋转不作用于容器，端口/尺寸已由 getRotatedPorts/getRotatedDimensions 预旋转。
  */
 export class MachineRenderer {
   /**
@@ -55,7 +58,6 @@ export class MachineRenderer {
     const config = getMachineConfig(m.machineId);
     if (!config) throw new Error(`未知机器: ${m.machineId}`);
 
-    const isVirtual = isVirtualMachine(m.machineId);
     const { width, height } = getRotatedDimensions(config.width, config.height, m.rotation);
     const pixW = width * GRID_SIZE;
     const pixH = height * GRID_SIZE;
@@ -69,6 +71,121 @@ export class MachineRenderer {
     container.zIndex = machineZ(zBase, config.mask.maxMask);
     container.sortableChildren = true;
 
+    MachineRenderer.addStaticBody(container, config, pixW, pixH);
+
+    // 附着运行时元数据（动态子元素由 update() 按需添加）
+    MachineRenderer.setMeta(container, {
+      machineId: m.machineId,
+      rotation: m.rotation,
+      isVirtual: isVirtualMachine(m.machineId),
+      isReadonly,
+      isPowered,
+      isSelected: false,
+      zoom: 1,
+    });
+
+    return container;
+  }
+
+  /**
+   * 更新机器容器的动态属性
+   *
+   * - 无条件同步 position（P2/H1：undo/redo、蓝图导航、loadGame 后渲染与 store 一致）
+   * - machineId/rotation 变化 → 重建静态三件套（body/bg/border，尺寸依赖旋转）
+   * - isPowered/isSelected/isReadonly/zoom 变化 → 重建动态子元素
+   */
+  static update(
+    container: Container,
+    m: PlacedMachine,
+    opts: {
+      isPowered: boolean;
+      isSelected: boolean;
+      isReadonly: boolean;
+      zoom: number;
+    },
+  ): void {
+    const config = getMachineConfig(m.machineId);
+    if (!config) return;
+
+    const meta = MachineRenderer.getMeta(container);
+    const { width, height } = getRotatedDimensions(config.width, config.height, m.rotation);
+    const pixW = width * GRID_SIZE;
+    const pixH = height * GRID_SIZE;
+    const { isPowered, isSelected, isReadonly, zoom } = opts;
+
+    // ── 无条件同步位置 ──
+    container.position.set(m.x * GRID_SIZE, m.y * GRID_SIZE);
+
+    const staticChanged = !meta
+      || meta.machineId !== m.machineId
+      || meta.rotation !== m.rotation;
+    const dynamicChanged = !meta
+      || meta.isPowered !== isPowered
+      || meta.isSelected !== isSelected
+      || meta.isReadonly !== isReadonly
+      || meta.zoom !== zoom;
+
+    if (staticChanged) {
+      // 静态三件套尺寸依赖旋转 → 整体重建
+      while (container.children.length > 0) {
+        const child = container.children[0];
+        container.removeChild(child);
+        child.destroy();
+      }
+      MachineRenderer.addStaticBody(container, config, pixW, pixH);
+    }
+
+    if (dynamicChanged || staticChanged) {
+      // 清除动态子元素（保留 body, bg, border 前 3 个）
+      MachineRenderer.clearDynamicChildren(container);
+
+      const isVirtual = isVirtualMachine(m.machineId);
+
+      // ── 图标（≥2×2 且非虚拟） ──
+      if (config.width >= 2 && config.height >= 2 && !isVirtual) {
+        MachineRenderer.addIcon(container, config.id, config.name, pixW, pixH);
+      }
+
+      // ── 端口指示器 ──
+      if (!isReadonly && !isVirtual) {
+        const inputs = getRotatedPorts(config.inputs, config.width, config.height, m.rotation);
+        const outputs = getRotatedPorts(config.outputs, config.width, config.height, m.rotation);
+        MachineRenderer.addPorts(container, inputs, outputs, pixW, pixH);
+      }
+
+      // ── 供电不足图标 ──
+      if (!isPowered && !isVirtual && !isReadonly) {
+        MachineRenderer.addPowerWarning(container, pixW, pixH);
+      }
+
+      // ── Hover 标签 ──
+      MachineRenderer.addLabel(container, config.name, pixW, pixH, zoom, isReadonly, isVirtual);
+
+      // ── 选中高亮 ──
+      if (isSelected) {
+        MachineRenderer.addSelectionHighlight(container, pixW, pixH);
+      }
+    }
+
+    // 存储最新机器数据
+    MachineRenderer.setMeta(container, {
+      machineId: m.machineId,
+      rotation: m.rotation,
+      isVirtual: isVirtualMachine(m.machineId),
+      isReadonly,
+      isPowered,
+      isSelected,
+      zoom,
+    });
+  }
+
+  /** 绘制静态三件套（body/bg/border），供 create / 静态重建复用 */
+  private static addStaticBody(
+    container: Container,
+    config: MachineConfig,
+    pixW: number,
+    pixH: number,
+  ): void {
     // ── 1. 机身边框（底层） ──
     const body = new Graphics({ label: 'body' });
     body.rect(0, 0, pixW, pixH);
@@ -91,76 +208,6 @@ export class MachineRenderer {
       .stroke({ width: 3, color: GRAY_DARK });
     border.zIndex = 2;
     container.addChild(border);
-
-    // ── 附着运行时元数据 ──
-    MachineRenderer.setMeta(container, {
-      machineId: m.machineId,
-      isVirtual,
-      isReadonly,
-      isPowered,
-    });
-
-    return container;
-  }
-
-  /**
-   * 更新机器容器的动态属性
-   * 在 sync 时调用：图标、端口、标签、供电警告、选中状态
-   */
-  static update(
-    container: Container,
-    m: PlacedMachine,
-    opts: {
-      isPowered: boolean;
-      isSelected: boolean;
-      isReadonly: boolean;
-      zoom: number;
-    },
-  ): void {
-    const config = getMachineConfig(m.machineId);
-    if (!config) return;
-
-    const isVirtual = isVirtualMachine(m.machineId);
-    const { width, height } = getRotatedDimensions(config.width, config.height, m.rotation);
-    const pixW = width * GRID_SIZE;
-    const pixH = height * GRID_SIZE;
-    const { isPowered, isSelected, isReadonly, zoom } = opts;
-
-    // 清除动态子元素（保留 body, bg, border 前 3 个）
-    MachineRenderer.clearDynamicChildren(container);
-
-    // ── 图标（≥2×2 且非虚拟） ──
-    if (config.width >= 2 && config.height >= 2 && !isVirtual) {
-      MachineRenderer.addIcon(container, config.id, config.name, pixW, pixH);
-    }
-
-    // ── 端口指示器 ──
-    if (!isReadonly && !isVirtual) {
-      const inputs = getRotatedPorts(config.inputs, config.width, config.height, m.rotation);
-      const outputs = getRotatedPorts(config.outputs, config.width, config.height, m.rotation);
-      MachineRenderer.addPorts(container, inputs, outputs, pixW, pixH);
-    }
-
-    // ── 供电不足图标 ──
-    if (!isPowered && !isVirtual && !isReadonly) {
-      MachineRenderer.addPowerWarning(container, pixW, pixH);
-    }
-
-    // ── Hover 标签 ──
-    MachineRenderer.addLabel(container, config.name, pixW, pixH, zoom, isReadonly, isVirtual);
-
-    // ── 选中高亮 ──
-    if (isSelected) {
-      MachineRenderer.addSelectionHighlight(container, pixW, pixH);
-    }
-
-    // 存储最新机器数据
-    MachineRenderer.setMeta(container, {
-      machineId: m.machineId,
-      isVirtual,
-      isReadonly,
-      isPowered,
-    });
   }
 
   /** 计算端口在机器容器内的 PixiJS 本地坐标 */

@@ -1,12 +1,14 @@
 import { Container, Graphics } from 'pixi.js';
-import type { Point, PortConfig } from '@/types';
+import type { Point, PortConfig, PlacedMachine, Connection } from '@/types';
+import { portTypeToMask } from '@/types';
 import { getMachineConfig } from '@/config/machines';
 import { getRotatedDimensions, getRotatedPorts } from '@/utils/machineUtils';
 import { GRID_SIZE, PORT_ARROW_ROTATION } from '@/config/constants';
-import { Z_INDEX, machineZ } from '@/config/zIndex';
+import { Z_INDEX, machineZ, connZ } from '@/config/zIndex';
 import {
   GRAY, GHOST_FILL, INVALID_RED, ORANGE_LIGHT,
   BOX_SELECTION_FILL, BLUEPRINT_OUTLINE, BLUEPRINT_MOVE,
+  CONVEYOR_FILL, PIPE_FILL,
 } from '@/config/colors';
 
 /**
@@ -131,6 +133,57 @@ export class OverlayRenderer {
       .stroke({ width: 1, color: BOX_SELECTION_FILL, alpha: 0.6 });
     g.zIndex = Z_INDEX.SELECTION_BOX;
     return g;
+  }
+
+  /** 创建批量移动/复制预览（半透明虚影：机器矩形 + 连线），基底 zIndex = BATCH_BASE */
+  static createBatchMovePreview(
+    machines: PlacedMachine[],
+    connections: Connection[],
+    offset: Point,
+  ): Container {
+    const container = new Container({ label: 'batch-move-preview' });
+
+    for (const m of machines) {
+      const config = getMachineConfig(m.machineId);
+      if (!config) continue;
+      const { width, height } = getRotatedDimensions(config.width, config.height, m.rotation);
+      const g = new Graphics({ label: 'batch-machine' });
+      g.rect(
+        (m.x + offset.x) * GRID_SIZE,
+        (m.y + offset.y) * GRID_SIZE,
+        width * GRID_SIZE,
+        height * GRID_SIZE,
+      )
+        .fill({ color: 0xcccccc, alpha: 0.4 })
+        .stroke({ width: 2, color: 0x888888, alpha: 0.6 });
+      g.zIndex = machineZ(Z_INDEX.BATCH_BASE, config.mask.maxMask);
+      container.addChild(g);
+    }
+
+    for (const c of connections) {
+      const g = new Graphics({ label: 'batch-connection' });
+      const pts = c.path.map((p) => ({
+        x: (p.x + offset.x) * GRID_SIZE + GRID_SIZE / 2,
+        y: (p.y + offset.y) * GRID_SIZE + GRID_SIZE / 2,
+      }));
+      if (pts.length >= 2) {
+        g.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) {
+          g.lineTo(pts[i].x, pts[i].y);
+        }
+        g.stroke({
+          width: 16,
+          color: c.portType === 'Liquid' ? PIPE_FILL : CONVEYOR_FILL,
+          alpha: 0.5,
+          cap: 'round',
+          join: 'round',
+        });
+      }
+      g.zIndex = connZ(Z_INDEX.BATCH_BASE, portTypeToMask[c.portType]);
+      container.addChild(g);
+    }
+
+    return container;
   }
 
   /** 创建子蓝图选中轮廓 */
