@@ -131,6 +131,11 @@ export class RegistryEngine {
         const child = this._map.get(childNodeId);
         if (!parent || !child) return false;
 
+        // 环防护：拒绝自引用，以及把 parent 的祖先作为子节点插入
+        if (parentId === childNodeId) return false;
+        const parentAncestors = this.findAncestorPath(parentId);
+        if (parentAncestors.includes(childNodeId)) return false;
+
         parent.children = [...parent.children, { childNodeId, x, y }];
         this._recalcChildrenMask(parent);
         this._recalcTotalMask(parent);
@@ -181,11 +186,15 @@ export class RegistryEngine {
         return [...this._map.keys()].filter((id) => !childIds.has(id));
     }
 
-    findAncestorPath(nodeId: string): string[] {
+    findAncestorPath(nodeId: string, _visited: Set<string> = new Set()): string[] {
+        // 环防护：历史数据或异常状态下防止无限递归
+        if (_visited.has(nodeId)) return [];
+        _visited.add(nodeId);
+
         for (const snap of this._map.values()) {
             for (const child of snap.children) {
                 if (child.childNodeId === nodeId) {
-                    return [...this.findAncestorPath(snap.nodeId), snap.nodeId];
+                    return [...this.findAncestorPath(snap.nodeId, _visited), snap.nodeId];
                 }
             }
         }

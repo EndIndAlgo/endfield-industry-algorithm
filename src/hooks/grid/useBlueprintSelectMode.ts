@@ -6,12 +6,21 @@ interface UseBlueprintSelectModeDeps {
   getGridPos: (e: GridPointerEvent) => Point;
 }
 
-function isInSubtree(nodeId: string, rootId: string, registry: BlueprintRegistry): boolean {
+function isInSubtree(
+  nodeId: string,
+  rootId: string,
+  registry: BlueprintRegistry,
+  _visited: Set<string> = new Set(),
+): boolean {
+  // 环防护：异常数据下防止无限递归
+  if (_visited.has(rootId)) return false;
+  _visited.add(rootId);
+
   const snapshot = registry[rootId];
   if (!snapshot) return false;
   for (const child of snapshot.children) {
     if (child.childNodeId === nodeId) return true;
-    if (isInSubtree(nodeId, child.childNodeId, registry)) return true;
+    if (isInSubtree(nodeId, child.childNodeId, registry, _visited)) return true;
   }
   return false;
 }

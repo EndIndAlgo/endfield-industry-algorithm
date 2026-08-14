@@ -34,7 +34,11 @@ function buildTree(): TreeNode[] {
 
     const roots = entries.filter((s) => !childNodeIds.has(s.nodeId));
 
-    function buildNode(snapshot: typeof entries[0]): TreeNode {
+    function buildNode(snapshot: typeof entries[0], visited: Set<string>): TreeNode | null {
+        // 环防护：异常数据（自引用/循环引用）下防止无限递归
+        if (visited.has(snapshot.nodeId)) return null;
+        visited.add(snapshot.nodeId);
+
         return {
             nodeId: snapshot.nodeId,
             name: snapshot.name,
@@ -44,13 +48,15 @@ function buildTree(): TreeNode[] {
             children: snapshot.children
                 .map((c) => {
                     const child = useGameStore.getState().blueprintRegistry[c.childNodeId];
-                    return child ? buildNode(child) : null;
+                    return child ? buildNode(child, visited) : null;
                 })
                 .filter(Boolean) as TreeNode[],
         };
     }
 
-    return roots.map(buildNode);
+    return roots
+        .map((s) => buildNode(s, new Set()))
+        .filter(Boolean) as TreeNode[];
 }
 
 function formatDate(ts: number): string {
@@ -80,6 +86,14 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
     const allNodes = flattenTree(tree);
     const rootNodes = tree;
     const displayNodes = activeTab === 'root' ? rootNodes : allNodes;
+
+    // 导入引用会创建 currentViewingNodeId → node 的边；
+    // 当 node 是 viewing 自身或其祖先时会成环，需禁用
+    const viewingAncestorIds = currentViewingNodeId
+        ? new Set(blueprintLibrary.findAncestorPath(currentViewingNodeId))
+        : new Set<string>();
+    const canImportRef = (nodeId: string): boolean =>
+        nodeId !== currentViewingNodeId && !viewingAncestorIds.has(nodeId);
 
     const toggle = (nodeId: string) => {
         setExpanded((prev) => {
@@ -267,20 +281,22 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
                                         <Pencil size={16} />
                                     </IconButton>
                                 </Tooltip>
-                                <Tooltip content="作为子蓝图导入（引用）">
+                                <Tooltip content={canImportRef(node.nodeId) ? '作为子蓝图导入（引用）' : '不能导入：会形成循环引用'}>
                                     <IconButton
                                         rounded="full"
                                         className="member-icon-btn"
+                                        disabled={!canImportRef(node.nodeId)}
                                         onClick={() => handleImportRef(node.nodeId)}
                                         aria-label="导入引用"
                                     >
                                         <Link size={16} />
                                     </IconButton>
                                 </Tooltip>
-                                <Tooltip content="展平复制导入">
+                                <Tooltip content={canImportRef(node.nodeId) ? '展平复制导入' : '不能导入：会形成循环引用'}>
                                     <IconButton
                                         rounded="full"
                                         className="member-icon-btn"
+                                        disabled={!canImportRef(node.nodeId)}
                                         onClick={() => handleImportRef(node.nodeId)}
                                         aria-label="导入复制"
                                     >

@@ -4,6 +4,7 @@ import type { PlacedMachine, Connection, BlueprintSnapshot, ModeState } from '@/
 import { getBoundingBox } from '@/utils/grid';
 import { blueprintLibrary, RegistryEngine } from '@/engine';
 import { syncStoreFromViewing } from '@/utils/blueprintTree';
+import { toaster } from '@/utils/toaster';
 
 /** 同步 Zustand 中的 blueprintRegistry 到引擎最新状态 */
 function _syncRegistryToStore(set: (p: Partial<GameState>) => void): void {
@@ -158,7 +159,17 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         const { currentViewingNodeId } = get();
         if (!currentViewingNodeId) return;
 
-        blueprintLibrary.addChild(currentViewingNodeId, childNodeId, ox, oy);
+        const added = blueprintLibrary.addChild(currentViewingNodeId, childNodeId, ox, oy);
+        if (!added) {
+            // 环防护：addChild 拒绝自引用/祖先引用，提示用户并取消放置
+            toaster.create({
+                title: '无法插入蓝图：会形成循环引用',
+                type: 'warning',
+                duration: 3000,
+            });
+            set({ modeState: { kind: 'BUILD', placing: null } });
+            return;
+        }
 
         _syncRegistryToStore(set);
         set({ modeState: { kind: 'BUILD', placing: null } });
