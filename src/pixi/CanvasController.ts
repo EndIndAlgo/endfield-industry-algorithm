@@ -142,7 +142,8 @@ export class CanvasController {
 
       await preloadMachineTextures();
       if (gen !== this.attachGen) {
-        this.cleanup();
+        // 过期 attach（StrictMode detach→重新 attach）：detach 的 cleanup 已销毁本代 app，
+        // 直接返回即可——调 this.cleanup() 会误伤新一代 attach 的共享状态（订阅/app/注册）
         return;
       }
 
@@ -220,8 +221,8 @@ export class CanvasController {
     this.world.addChild(
       this.gridLayer,
       this.connectionSolidLayer,
-      this.machineLayer,
       this.connectionLiquidLayer,
+      this.machineLayer,
       this.overlayLayer,
     );
 
@@ -277,7 +278,15 @@ export class CanvasController {
       return m.x <= grid.x && grid.x < m.x + width && m.y <= grid.y && grid.y < m.y + height;
     });
     const id = hit?.id ?? null;
-    if (id === this.hoverLabelMachineId) return;
+    // 命中同一机器也要显式置可见：动态子元素重建（供电/选中变化）会把标签重建为隐藏
+    if (id === this.hoverLabelMachineId) {
+      if (id) {
+        const cur = this.machinePool.get(id);
+        const curMeta = cur ? MachineRenderer.getMeta(cur) : undefined;
+        if (curMeta?.labelContainer) curMeta.labelContainer.visible = true;
+      }
+      return;
+    }
 
     if (this.hoverLabelMachineId) {
       const prev = this.machinePool.get(this.hoverLabelMachineId);
@@ -461,7 +470,7 @@ export class CanvasController {
     this.lastHoverGridPos = n.grid;
     useGameStore.getState().setHoverPosFrac(n.gridFrac);
     this.updateHoverLabel(useGameStore.getState().machines, n.grid);
-    this.handlers.onMove(n.grid, n.buttons);
+    this.handlers.onMove(n);
   };
 
   private onClick = (e: FederatedPointerEvent): void => {
@@ -863,10 +872,13 @@ export class CanvasController {
           );
           this.overlayLayer.addChild(ghost);
           this.overlayGraphics.push(ghost);
-          // 供电范围
+          // 供电范围（用旋转后尺寸，避免 2×3 旋转成 3×2 后范围框错位）
           if (config.supplyDistance > 0) {
+            const { width: gw, height: gh } = getRotatedDimensions(
+              config.width, config.height, ms.placing.previewRotation,
+            );
             const range = OverlayRenderer.createSupplyRange(
-              ghostPos, config.width, config.height, config.supplyDistance,
+              ghostPos, gw, gh, config.supplyDistance,
             );
             this.overlayLayer.addChild(range);
             this.overlayGraphics.push(range);
