@@ -9,7 +9,7 @@ import { machineZ, Z_INDEX } from '@/config/zIndex';
 import { getPortCenter } from '@/utils/portPosition';
 import {
   GRAY_DARK, GRAY, GRAY_LIGHT, SELECTION_BLUE,
-  BLACK as BLACK_BG, GREEN, ORANGE, ORANGE_DARK,
+  BLACK as BLACK_BG, BLACK_LIGHT, GREEN, ORANGE, ORANGE_DARK,
 } from '@/config/colors';
 
 /** 附着在机器 Container 上的运行时元数据 */
@@ -215,9 +215,10 @@ export class MachineRenderer {
     container.addChild(bg);
 
     // ── 3. 边框线（3px，整体在格内：外侧对齐格线，内侧与 bg 的 3px 内缩相接） ──
+    // 用 --black-light（与网格外框同色）：--gray-dark #5f5d5d 在取消选中等状态下看起来发灰
     const border = new Graphics({ label: 'border' });
     border.rect(1.5, 1.5, pixW - 3, pixH - 3)
-      .stroke({ width: 3, color: GRAY_DARK });
+      .stroke({ width: 3, color: BLACK_LIGHT });
     border.zIndex = 2;
     container.addChild(border);
   }
