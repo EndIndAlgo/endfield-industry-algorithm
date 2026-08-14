@@ -50,13 +50,13 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         return nodeId;
     },
 
-    // ── 保存蓝图（Fork 新版本）──
+    // ── 保存蓝图（共享时 Fork 写时复制，非共享原地保存）──
 
     saveCurrentBlueprint: (name) => {
         const snapshot = _rebuildSnapshot(get);
         if (!snapshot) return;
 
-        // 先重建 Mask，再 fork（fork 会保留 updatedAt 等）
+        // 重建掩码（内容以 store 工作副本为准）
         const rebuild = blueprintLibrary.rebuildMasks(
             snapshot,
             snapshot.machines,
@@ -64,16 +64,28 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             get().gridWidth,
             get().gridHeight,
         );
-        // 写入更新后的 snapshot，然后 fork
-        blueprintLibrary.save(rebuild, get().gridWidth, get().gridHeight);
-        const forkNodeId = blueprintLibrary.fork(rebuild.nodeId, get().gridWidth, get().gridHeight);
+        const nodeId = rebuild.nodeId;
+
+        // 未被共享（含根节点）：原地保存，nodeId 不变，
+        // 避免每次保存 fork 出孤儿根导致刷新后加载过期内容
+        if (blueprintLibrary.refCount(nodeId) <= 1) {
+            blueprintLibrary.save({ ...rebuild, name }, get().gridWidth, get().gridHeight);
+            // 子蓝图内容变化 → 重算所有引用此节点的父级掩码
+            blueprintLibrary.recalcDependents(nodeId);
+            _syncRegistryToStore(set);
+            return;
+        }
+
+        // 被多个父节点共享：写时复制。
+        // 先从不含本次编辑的旧版本 fork（保持其他调用方引用不变），再把编辑写入新版本
+        const forkNodeId = blueprintLibrary.fork(nodeId, get().gridWidth, get().gridHeight);
         if (!forkNodeId) return;
 
-        // 重命名 forked 版本
-        const forked = blueprintLibrary.read(forkNodeId);
-        if (forked) {
-            blueprintLibrary.save({ ...forked, name }, get().gridWidth, get().gridHeight);
-        }
+        blueprintLibrary.save(
+            { ...rebuild, nodeId: forkNodeId, name },
+            get().gridWidth,
+            get().gridHeight,
+        );
 
         const { currentAncestorPath } = get();
         const parentNodeId = currentAncestorPath.length > 0
@@ -86,9 +98,9 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             if (parent) {
                 // 必须在 removeChild 之前读取旧引用位置（removeChild 会替换 children 数组）
                 const oldChildRef = parent.children.find(
-                    (c) => c.childNodeId === get().currentViewingNodeId,
+                    (c) => c.childNodeId === nodeId,
                 );
-                blueprintLibrary.removeChild(parentNodeId, get().currentViewingNodeId!);
+                blueprintLibrary.removeChild(parentNodeId, nodeId);
                 blueprintLibrary.addChild(
                     parentNodeId, forkNodeId,
                     oldChildRef?.x ?? 0,

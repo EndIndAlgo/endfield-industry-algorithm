@@ -172,6 +172,17 @@ export class RegistryEngine {
         return true;
     }
 
+    /** 子蓝图内容变化后：重算所有引用 nodeId 的父节点的掩码 */
+    recalcDependents(nodeId: string): void {
+        for (const snap of this._map.values()) {
+            if (snap.children.some((c) => c.childNodeId === nodeId)) {
+                this._recalcChildrenMask(snap);
+                this._recalcTotalMask(snap);
+                this.persist(snap.nodeId);
+            }
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════
     // 查询
     // ═══════════════════════════════════════════════════════════
