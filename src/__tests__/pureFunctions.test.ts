@@ -14,6 +14,7 @@ import {
 import { Mask } from '@/utils/mask';
 import { getRotatedPorts, getRotatedDimensions } from '@/utils/machineUtils';
 import { MACHINES } from '@/config/machines';
+import { GRID_SIZE } from '@/config/constants';
 import type { Connection, Direction, PortConfig, PortType, PlacedMachine } from '@/types';
 import { MASK_SOLID_LOGISTICS, DIR_RIGHT, DIR_DOWN, DIR_LEFT, DIR_UP } from '@/types';
 
@@ -880,5 +881,54 @@ describe('connectionOutlineColor 连线描边颜色优先级', () => {
         const { INVALID_RED, GRAY } = await import('@/config/colors');
         expect(connectionOutlineColor(false, true, false)).toBe(INVALID_RED);
         expect(connectionOutlineColor(false, false, true)).toBe(GRAY);
+    });
+});
+
+// ======================================================================
+// ghostPathPoints 批量移动虚影折线（单格路径连线不可消失的回归）
+// ======================================================================
+describe('ConnectionRenderer.ghostPathPoints 批量移动虚影折线', () => {
+    it('单格路径（面对面相邻机器间的传送带）延伸为可见短线', async () => {
+        const { ConnectionRenderer } = await import('@/pixi/renderers/ConnectionRenderer');
+        const { ghostPathPoints } = ConnectionRenderer;
+        // 面对面传送带：path 仅一个格点（findRouteForMachine 起终点相同）
+        const conn = makeConn({
+            tailFacing: DIR_RIGHT,
+            headFacing: DIR_RIGHT,
+            path: [{ x: 2, y: 1 }],
+        });
+        const pts = ghostPathPoints(conn, { x: 3, y: 1 });
+        // 首尾端点各延伸 0.45 格 → 3 个点，偏移 (3,1) 已应用
+        expect(pts.length).toBe(3);
+        // 中间点 = 格中心 + 偏移
+        expect(pts[1]).toEqual({ x: (2 + 3) * GRID_SIZE + GRID_SIZE / 2, y: (1 + 1) * GRID_SIZE + GRID_SIZE / 2 });
+        // 延伸点向两侧展开（DIR_RIGHT 进入、DIR_RIGHT 离开 → 左侧起点 + 右侧终点）
+        expect(pts[0].x).toBeCloseTo(pts[1].x - 0.45 * GRID_SIZE);
+        expect(pts[2].x).toBeCloseTo(pts[1].x + 0.45 * GRID_SIZE);
+        expect(pts[0].y).toBe(pts[1].y);
+    });
+
+    it('多点路径应用偏移且包含端点延伸', async () => {
+        const { ConnectionRenderer } = await import('@/pixi/renderers/ConnectionRenderer');
+        const { ghostPathPoints } = ConnectionRenderer;
+        const conn = makeConn({
+            tailFacing: DIR_RIGHT,
+            headFacing: DIR_DOWN,
+            path: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }],
+        });
+        const pts = ghostPathPoints(conn, { x: 2, y: 2 });
+        // 2 个延伸点 + 3 个路径点
+        expect(pts.length).toBe(5);
+        // 首路径点格中心 + 偏移
+        expect(pts[1]).toEqual({ x: (0 + 2) * GRID_SIZE + GRID_SIZE / 2, y: (0 + 2) * GRID_SIZE + GRID_SIZE / 2 });
+        expect(pts[2]).toEqual({ x: (1 + 2) * GRID_SIZE + GRID_SIZE / 2, y: (0 + 2) * GRID_SIZE + GRID_SIZE / 2 });
+        expect(pts[3]).toEqual({ x: (1 + 2) * GRID_SIZE + GRID_SIZE / 2, y: (1 + 2) * GRID_SIZE + GRID_SIZE / 2 });
+    });
+
+    it('空路径返回空折线（防御性）', async () => {
+        const { ConnectionRenderer } = await import('@/pixi/renderers/ConnectionRenderer');
+        const { ghostPathPoints } = ConnectionRenderer;
+        const pts = ghostPathPoints(makeConn({ path: [] }), { x: 0, y: 0 });
+        expect(pts).toEqual([]);
     });
 });

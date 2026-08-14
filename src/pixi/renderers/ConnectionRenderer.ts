@@ -68,6 +68,24 @@ export class ConnectionRenderer {
     );
   }
 
+  /**
+   * 批量移动虚影连线的折线像素点：与已确认连线相同的端点延伸逻辑。
+   * 单格路径（面对面相邻机器间的传送带，path 仅 1 个格点）也会被延伸为可见短线，
+   * 避免虚影在批量移动时整段消失。
+   */
+  static ghostPathPoints(conn: Connection, offset: Point): Point[] {
+    if (conn.path.length === 0) return [];
+    const points = ConnectionRenderer.pathToPixelPoints(
+      conn.path,
+      conn.tailFacing,
+      conn.headFacing,
+    );
+    return points.map((p) => ({
+      x: p.x + offset.x * GRID_SIZE,
+      y: p.y + offset.y * GRID_SIZE,
+    }));
+  }
+
   /** 更新已存在的连线 Graphics 对（路径变化时重绘） */
   static updateLines(
     outline: Graphics,

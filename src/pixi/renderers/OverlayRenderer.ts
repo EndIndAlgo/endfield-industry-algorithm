@@ -1,6 +1,7 @@
 import { Container, Graphics } from 'pixi.js';
 import type { Point, PortConfig, PlacedMachine, Connection } from '@/types';
 import { portTypeToMask } from '@/types';
+import { ConnectionRenderer } from './ConnectionRenderer';
 import { getMachineConfig } from '@/config/machines';
 import { getRotatedDimensions, getRotatedPorts } from '@/utils/machineUtils';
 import { GRID_SIZE, PORT_ARROW_ROTATION } from '@/config/constants';
@@ -162,10 +163,8 @@ export class OverlayRenderer {
 
     for (const c of connections) {
       const g = new Graphics({ label: 'batch-connection' });
-      const pts = c.path.map((p) => ({
-        x: (p.x + offset.x) * GRID_SIZE + GRID_SIZE / 2,
-        y: (p.y + offset.y) * GRID_SIZE + GRID_SIZE / 2,
-      }));
+      // 与已确认连线一致的端点延伸折线；单格路径（面对面传送带）也能画出虚影
+      const pts = ConnectionRenderer.ghostPathPoints(c, offset);
       if (pts.length >= 2) {
         g.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) {
