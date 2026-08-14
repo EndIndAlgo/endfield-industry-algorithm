@@ -750,3 +750,87 @@ describe('snapToCell 网格包含约定', () => {
         expect(Math.round(2.6)).toBe(3);
     });
 });
+
+// ======================================================================
+// 蓝图插入位置校验
+// ======================================================================
+describe('validateChildPlacement 蓝图插入校验', () => {
+    const emptyParent = () => ({
+        machines: [] as import('@/types').PlacedMachine[],
+        connections: [] as import('@/types').Connection[],
+        gridWidth: 24,
+        gridHeight: 24,
+    });
+
+    it('非空蓝图按实际占位格判定越界；空蓝图按声明尺寸', async () => {
+        const { createNodeWithContent } = await import('@/domain/doc');
+        const { validateChildPlacement } = await import('@/utils/blueprintPlacement');
+        const child = createNodeWithContent('C', 4, 4, {
+            machines: [{ id: 'm1', machineId: 'lbr', x: 1, y: 1, rotation: 0 as const }],
+            connections: [],
+        });
+        const doc = { version: 1 as const, nodes: { [child.nodeId]: child } };
+
+        expect(validateChildPlacement(doc, child.nodeId, 0, 0, emptyParent())).toBe(true);
+        expect(validateChildPlacement(doc, child.nodeId, 20, 0, emptyParent())).toBe(true);   // 占位格 (21,1) 仍在网格内
+        expect(validateChildPlacement(doc, child.nodeId, 22, 0, emptyParent())).toBe(true);   // 占位格 (23,1) 边界内
+        expect(validateChildPlacement(doc, child.nodeId, 23, 0, emptyParent())).toBe(false);  // 占位格 (24,1) 越界
+        expect(validateChildPlacement(doc, child.nodeId, -1, 0, emptyParent())).toBe(false);
+
+        // 空蓝图：无实际占位，按声明网格尺寸判定
+        const emptyChild = createNodeWithContent('E', 4, 4, { machines: [], connections: [] });
+        const doc2 = { version: 1 as const, nodes: { [emptyChild.nodeId]: emptyChild } };
+        expect(validateChildPlacement(doc2, emptyChild.nodeId, 20, 0, emptyParent())).toBe(true);   // 20+4=24
+        expect(validateChildPlacement(doc2, emptyChild.nodeId, 21, 0, emptyParent())).toBe(false);  // 21+4>24
+    });
+
+    it('与父机器重叠 → 非法', async () => {
+        const { createNodeWithContent } = await import('@/domain/doc');
+        const { validateChildPlacement } = await import('@/utils/blueprintPlacement');
+        const child = createNodeWithContent('C', 4, 4, {
+            machines: [{ id: 'm1', machineId: 'lbr', x: 1, y: 1, rotation: 0 as const }],
+            connections: [],
+        });
+        const doc = { version: 1 as const, nodes: { [child.nodeId]: child } };
+
+        const parentMachines = [{ id: 'p1', machineId: 'lbr', x: 5, y: 5, rotation: 0 as const }];
+        // 子内容 lbr@(1,1) + 偏移 (4,4) → (5,5) 与父机器重叠
+        expect(validateChildPlacement(doc, child.nodeId, 4, 4, {
+            machines: parentMachines, connections: [], gridWidth: 24, gridHeight: 24,
+        })).toBe(false);
+        expect(validateChildPlacement(doc, child.nodeId, 0, 0, {
+            machines: parentMachines, connections: [], gridWidth: 24, gridHeight: 24,
+        })).toBe(true);
+    });
+
+    it('异类连线交叉允许；机器与连线重叠非法', async () => {
+        const { createNodeWithContent } = await import('@/domain/doc');
+        const { validateChildPlacement } = await import('@/utils/blueprintPlacement');
+        const child = createNodeWithContent('C', 4, 4, {
+            machines: [],
+            connections: [{
+                id: 'c1', tailFacing: 1 as const, headFacing: 3 as const,
+                path: [{ x: 1, y: 1 }, { x: 2, y: 1 }],
+                portType: 'Liquid' as const,
+            }],
+        });
+        const doc = { version: 1 as const, nodes: { [child.nodeId]: child } };
+
+        const parentLine = {
+            id: 'pl', tailFacing: 0 as const, headFacing: 2 as const,
+            path: [{ x: 2, y: 0 }, { x: 2, y: 1 }],
+            portType: 'Solid' as const,
+        };
+        // 异类连线在 (2,1) 交叉（2 & 4 = 0）→ 允许
+        expect(validateChildPlacement(doc, child.nodeId, 0, 0, {
+            machines: [], connections: [parentLine], gridWidth: 24, gridHeight: 24,
+        })).toBe(true);
+
+        // 同格有普通机器（ref 掩码 255）→ 与 Liquid 线重叠非法
+        // （注：lbr 掩码 3 与 Liquid 线 4 不冲突，液体线可穿过固体物流器下方，属游戏规则）
+        expect(validateChildPlacement(doc, child.nodeId, 0, 0, {
+            machines: [{ id: 'pm', machineId: 'ref', x: 0, y: 0, rotation: 0 as const }],
+            connections: [], gridWidth: 24, gridHeight: 24,
+        })).toBe(false);
+    });
+});

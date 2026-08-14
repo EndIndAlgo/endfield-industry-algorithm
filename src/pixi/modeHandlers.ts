@@ -2,6 +2,7 @@ import { useGameStore } from '@/store/gameStore';
 import type { Point } from '@/types';
 import type { FactoryDoc, CommittedNode } from '@/domain/doc';
 import { findPortOuterCellAt, findMachineAt, getPortOuterCells } from '@/utils/grid';
+import { validateChildPlacement } from '@/utils/blueprintPlacement';
 
 /**
  * 纯函数模式处理器
@@ -204,11 +205,28 @@ export function createModeHandlers(ctx: ModeHandlerContext): ModeHandlers {
     onMove: (grid, buttons) => {
       wire.onMove(grid);
       select.onMove(grid, buttons);
-      // BLUEPRINT_MOVE：预览偏移跟随指针所在格（grid 已是 floor 包含约定，与提交一致）
+      // BLUEPRINT_MOVE：预览偏移跟随指针所在格（floor 包含约定），并实时校验位置合法性
       const ms = useGameStore.getState().modeState;
       if (ms.kind === 'BLUEPRINT_MOVE') {
+        const s = useGameStore.getState();
+        const valid = validateChildPlacement(
+          s.doc,
+          ms.childNodeId,
+          grid.x,
+          grid.y,
+          {
+            machines: s.machines,
+            connections: s.connections,
+            gridWidth: s.gridWidth,
+            gridHeight: s.gridHeight,
+          },
+        );
         useGameStore.setState({
-          modeState: { ...ms, previewOffset: { x: grid.x, y: grid.y } },
+          modeState: {
+            ...ms,
+            previewOffset: { x: grid.x, y: grid.y },
+            isValidPosition: valid,
+          },
         });
       }
     },

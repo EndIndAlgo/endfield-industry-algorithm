@@ -22,6 +22,7 @@ import {
     isContentEqual,
 } from '@/domain/doc';
 import { loadDoc, saveDoc } from '@/domain/persist';
+import { validateChildPlacement } from '@/utils/blueprintPlacement';
 
 /** 提取工作视图中当前 viewing 节点的自有内容 */
 function _ownContent(get: () => GameState, viewingNodeId: string | null) {
@@ -168,6 +169,21 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
                 duration: 3000,
             });
             set({ modeState: { kind: 'BUILD', placing: null } });
+            return;
+        }
+
+        // 位置校验：越界或与现有内容重叠 → 拒绝并保持 BLUEPRINT_MOVE 允许调整位置
+        if (!validateChildPlacement(doc, childNodeId, ox, oy, {
+            machines: get().machines,
+            connections: get().connections,
+            gridWidth: get().gridWidth,
+            gridHeight: get().gridHeight,
+        })) {
+            toaster.create({
+                title: '无法插入蓝图：位置越界或与现有内容重叠',
+                type: 'warning',
+                duration: 3000,
+            });
             return;
         }
 

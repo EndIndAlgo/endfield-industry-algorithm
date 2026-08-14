@@ -846,11 +846,12 @@ export class CanvasController {
       }
 
       case 'BLUEPRINT_MOVE': {
-        // 蓝图移动预览
+        // 蓝图移动预览（isValidPosition 为 false 时变红）
         if (ms.previewOffset && ms.childSummary) {
           const preview = OverlayRenderer.createBlueprintMovePreview(
             ms.previewOffset.x, ms.previewOffset.y,
             ms.childSummary.gridW, ms.childSummary.gridH,
+            ms.isValidPosition,
           );
           this.overlayLayer.addChild(preview);
           this.overlayGraphics.push(preview);

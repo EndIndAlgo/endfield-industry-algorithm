@@ -201,17 +201,19 @@ export class OverlayRenderer {
     return g;
   }
 
-  /** 创建蓝图移动预览 */
+  /** 创建蓝图移动预览（isValid 为 false 时用红色标注非法位置） */
   static createBlueprintMovePreview(
     x: number,
     y: number,
     w: number,
     h: number,
+    isValid = true,
   ): Graphics {
+    const color = isValid ? BLUEPRINT_MOVE : INVALID_RED;
     const g = new Graphics({ label: 'blueprint-move-preview' });
     g.rect(x * GRID_SIZE, y * GRID_SIZE, w * GRID_SIZE, h * GRID_SIZE)
-      .fill({ color: BLUEPRINT_MOVE, alpha: 0.1 })
-      .stroke({ width: 2, color: BLUEPRINT_MOVE, alpha: 0.8 });
+      .fill({ color, alpha: 0.1 })
+      .stroke({ width: 2, color, alpha: 0.8 });
     g.zIndex = 98;
     return g;
   }
