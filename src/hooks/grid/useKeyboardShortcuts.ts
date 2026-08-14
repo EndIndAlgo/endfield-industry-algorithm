@@ -3,14 +3,15 @@ import { useGameStore } from '@/store/gameStore';
 import type { Point } from '@/types';
 
 interface UseKeyboardShortcutsDeps {
-  hoverPosRef: React.MutableRefObject<Point | null>;
+  /** 最近一次画布内 hover 的网格坐标（由 CanvasController 提供） */
+  getHoverGridPos: () => Point | null;
 }
 
 /**
  * 全局键盘快捷键 hook
  * 监听 window keydown 事件，分发 E/Q/R/X/F/F1/M/Ctrl+C/Escape 到对应 store 方法
  */
-export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps): void {
+export function useKeyboardShortcuts({ getHoverGridPos }: UseKeyboardShortcutsDeps): void {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const s = useGameStore.getState();
@@ -49,7 +50,8 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
       } else if (key === 'r') {
         if (isConnecting) {
           s.toggleLShape();
-          if (hoverPosRef.current) s.updatePreview(hoverPosRef.current);
+          const hover = getHoverGridPos();
+          if (hover) s.updatePreview(hover);
         } else {
           s.rotatePreview();
         }
@@ -66,11 +68,13 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
         e.preventDefault();
         s.setUiView('list');
       } else if (key === 'm') {
-        if (hoverPosRef.current) {
+        const hover = getHoverGridPos();
+        if (hover) {
           s.startBatchMove();
         }
       } else if ((e.ctrlKey || e.metaKey) && key === 'c') {
-        if (hoverPosRef.current) {
+        const hover = getHoverGridPos();
+        if (hover) {
           s.startCopySelection();
         }
       } else if (e.key === 'Escape') {
@@ -79,5 +83,5 @@ export function useKeyboardShortcuts({ hoverPosRef }: UseKeyboardShortcutsDeps):
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hoverPosRef]);
+  }, [getHoverGridPos]);
 }
