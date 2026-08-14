@@ -9,7 +9,8 @@ import { preloadMachineTextures } from './TextureLoader';
 import { createModeHandlers, snapToCell, type NormalizedPointer } from './modeHandlers';
 import { getMachineConfig } from '@/config/machines';
 import { getRotatedDimensions, buildPowerGrid } from '@/utils/machineUtils';
-import { clampPan } from '@/utils/grid';
+import { clampPan, findMachineAt } from '@/utils/grid';
+import { isViewingOwn } from '@/utils/blueprintGuard';
 import type { GameState } from '@/store/slices/types';
 import type { PlacedMachine, Connection, PortType, Point } from '@/types';
 import { GRID_SIZE } from '@/config/constants';
@@ -19,6 +20,9 @@ extensions.add(CullerPlugin);
 
 /** buildPowerGrid 结果缓存：按 machines 数组引用 + 网格尺寸命中（machines 引用不变则复用） */
 const powerGridCache = new WeakMap<PlacedMachine[], { gw: number; gh: number; grid: Uint8Array }>();
+
+/** 长按拾取触发时长（ms）：按住自有机器 500ms 触发 pickupMachine */
+const LONG_PRESS_MS = 500;
 
 /**
  * 当前激活的画布控制器（attach 时注册、detach 时清除），
@@ -83,6 +87,10 @@ export class CanvasController {
   private lastHoverGridPos: Point | null = null;
   /** 当前显示 hover 标签的机器 id（越界/换机时隐藏旧标签） */
   private hoverLabelMachineId: string | null = null;
+  /** 长按拾取定时器（按住机器 500ms 触发 pickupMachine） */
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 长按拾取目标机器 id（指针移出该机器/松开/越界即取消） */
+  private longPressMachineId: string | null = null;
 
   private handlers = createModeHandlers({
     getHoverGridPos: () => this.lastHoverGridPos,
@@ -175,6 +183,7 @@ export class CanvasController {
     this.unsubscribe = null;
     this.unbindEvents();
     this.hideHoverLabel();
+    this.cancelLongPressPickup();
     if (this.app) {
       this.app.destroy(
         { removeView: true, releaseGlobalResources: true },
@@ -292,6 +301,54 @@ export class CanvasController {
     this.hoverLabelMachineId = null;
   }
 
+  // ── 长按拾取（按住机器 500ms → pickupMachine；PixiJS 迁移回归修复） ──
+
+  /** pointerdown 左键：命中自有机器则启动长按定时器 */
+  private startLongPressPickup(grid: Point): void {
+    const s = useGameStore.getState();
+    const ms = s.modeState;
+    // 仅在编辑模式支持：BUILD（含放置中）/ DEVICE_SELECT；WIRE/蓝图/批量移动期间不拾取
+    if (ms.kind !== 'BUILD' && ms.kind !== 'DEVICE_SELECT') return;
+    const m = findMachineAt(grid, s.machines);
+    // 后代只读机器不可拾取（子蓝图不可变）
+    if (!m || !isViewingOwn(m, s.currentViewingNodeId)) return;
+    this.longPressMachineId = m.id;
+    this.longPressTimer = setTimeout(() => this.fireLongPressPickup(), LONG_PRESS_MS);
+  }
+
+  /** 长按定时器触发：拾取机器进入 BUILD 放置态（与旧 DOM 版语义一致） */
+  private fireLongPressPickup(): void {
+    const machineId = this.longPressMachineId;
+    this.longPressTimer = null;
+    this.longPressMachineId = null;
+    if (!machineId) return;
+    const s = useGameStore.getState();
+    const ms = s.modeState;
+    // 按住期间模式被切换（Escape 等）或机器已不存在 → 不拾取
+    if (ms.kind !== 'BUILD' && ms.kind !== 'DEVICE_SELECT') return;
+    if (!s.machines.some((m) => m.id === machineId)) return;
+    s.takeSnapshot();
+    s.pickupMachine(machineId);
+  }
+
+  /** 长按期间指针移动：离开目标机器即取消（等价旧 DOM 的 mouseleave 取消） */
+  private trackLongPressTarget(grid: Point): void {
+    if (this.longPressTimer === null || this.longPressMachineId === null) return;
+    const m = findMachineAt(grid, useGameStore.getState().machines);
+    if (m?.id !== this.longPressMachineId) {
+      this.cancelLongPressPickup();
+    }
+  }
+
+  /** 取消长按定时器（松开/越界/移出机器/右键/平移/detach 时调用） */
+  private cancelLongPressPickup(): void {
+    if (this.longPressTimer !== null) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+    this.longPressMachineId = null;
+  }
+
   // ═══════════════════════════════════════════════════════════
   // 事件归一化（唯一接触坐标差异的地方）
   // ═══════════════════════════════════════════════════════════
@@ -324,6 +381,7 @@ export class CanvasController {
   // ── 平移（中键拖拽） ──
 
   private startPan(n: NormalizedPointer): void {
+    this.cancelLongPressPickup();
     this.isPanning = true;
     this.onPanningChange?.(true);
     this.lastMousePos = { x: n.x, y: n.y };
@@ -371,11 +429,16 @@ export class CanvasController {
       this.startPan(n);
       return;
     }
+    // 左键按住机器 → 启动长按拾取（命中判定在方法内）
+    if (n.button === 0) {
+      this.startLongPressPickup(n.grid);
+    }
     this.handlers.onDown(n);
   };
 
   private onPointerUp = (e: FederatedPointerEvent): void => {
     this.stopPan();
+    this.cancelLongPressPickup();
     this.handlers.onUp(this.toNormalized(e));
   };
 
@@ -389,9 +452,12 @@ export class CanvasController {
     if (!this.inCanvas(e)) {
       this.lastHoverGridPos = null;
       this.hideHoverLabel();
+      this.cancelLongPressPickup();
       useGameStore.getState().setHoverPosFrac(null);
       return;
     }
+    // 长按期间移出目标机器 → 取消拾取
+    this.trackLongPressTarget(n.grid);
     this.lastHoverGridPos = n.grid;
     useGameStore.getState().setHoverPosFrac(n.gridFrac);
     this.updateHoverLabel(useGameStore.getState().machines, n.grid);
@@ -425,6 +491,7 @@ export class CanvasController {
 
   private onContextMenu = (e: Event): void => {
     e.preventDefault();
+    this.cancelLongPressPickup();
     useGameStore.getState().cancelOperation();
   };
 
