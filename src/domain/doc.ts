@@ -183,8 +183,9 @@ export function forkCommit(
     version: node.version + 1,
     gridW,
     gridH,
-    machines: content.machines,
-    connections: content.connections,
+    // 内容统一标注新节点归属
+    machines: content.machines.map((m) => ({ ...m, blueprintNodeId: newNodeId })),
+    connections: content.connections.map((c) => ({ ...c, blueprintNodeId: newNodeId })),
     children: node.children.map((c) => ({ ...c })),
     updatedAt: now,
   };
