@@ -11,7 +11,7 @@
  * - 子蓝图占位格：CommittedNode 对象 → 展平后的相对占用格列表
  * - 父占用掩码：machines 数组引用 + 网格尺寸 → Mask
  */
-import type { FactoryDoc, CommittedNode } from '@/domain/doc';
+import type { FactoryDoc } from '@/domain/doc';
 import { flattenNode } from '@/domain/doc';
 import type { PlacedMachine, Connection } from '@/types';
 import { portTypeToMask } from '@/types';
@@ -25,7 +25,7 @@ interface OccupiedCell {
   value: number;
 }
 
-const childOccupancyCache = new WeakMap<CommittedNode, OccupiedCell[]>();
+const childOccupancyCache = new WeakMap<FactoryDoc, Map<string, OccupiedCell[]>>();
 
 const parentMaskCache = new WeakMap<
   PlacedMachine[],
@@ -37,7 +37,14 @@ function getChildOccupancy(doc: FactoryDoc, childNodeId: string): OccupiedCell[]
   const node = doc.nodes[childNodeId];
   if (!node) return null;
 
-  const hit = childOccupancyCache.get(node);
+  // 缓存按 doc 引用 + childNodeId 键控：后代被编辑后 doc 引用必变 → 自动失效。
+  // （旧实现按 CommittedNode 对象键控，编辑嵌套后代不改变祖先节点对象引用，会命中过期占位格）
+  let byId = childOccupancyCache.get(doc);
+  if (!byId) {
+    byId = new Map();
+    childOccupancyCache.set(doc, byId);
+  }
+  const hit = byId.get(childNodeId);
   if (hit) return hit;
 
   const flat = flattenNode(doc, childNodeId);
@@ -62,7 +69,7 @@ function getChildOccupancy(doc: FactoryDoc, childNodeId: string): OccupiedCell[]
     }
   }
 
-  childOccupancyCache.set(node, cells);
+  byId.set(childNodeId, cells);
   return cells;
 }
 

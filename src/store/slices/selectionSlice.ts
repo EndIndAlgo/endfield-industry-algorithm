@@ -132,6 +132,9 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         const newMachines = machines.filter(m => !machinesToRemove.has(m.id));
         const newConnections = connections.filter(c => !connectionsToRemove.has(c.id));
 
+        // 快照在真正写入前拍摄（无可删实体/全为后代只读的早期 return 不产生空转撤销步）
+        get().takeSnapshot();
+
         set({
             machines: newMachines,
             connections: newConnections,
@@ -323,6 +326,21 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                         break;
                     }
 
+                    // 连线不得落在机器格上/越界（物流器下穿例外由掩码位语义决定：
+                    // 液管可穿固体物流器 3&4=0，其余机器 3/7/255 均阻挡同类型连线）
+                    for (const p of conn.path) {
+                        if (p.x < 0 || p.x >= gridWidth || p.y < 0 || p.y >= gridHeight) {
+                            collision = true;
+                            break;
+                        }
+                        const cellMask = fullMask.get(p.x, p.y);
+                        if ((cellMask & 1) === 1 && (cellMask & connMask) !== 0) {
+                            collision = true;
+                            break;
+                        }
+                    }
+                    if (collision) break;
+
                     const intersectionPoints: Point[] = [];
                     for (const p of conn.path) {
                         const key = `${p.x},${p.y}`;
@@ -362,14 +380,18 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                         const crossed = pointToConns.get(key) || [];
                         for (const orig of crossed) {
                             if (connsToRemove.has(orig.id)) continue;
+                            const parts = splitConnectionAt(orig, p);
+                            // 单格连线（面对面机器）无法分割 → 保留原样，不丢失
+                            if (parts.length === 0) continue;
                             connsToRemove.add(orig.id);
-                            connsToAdd.push(...splitConnectionAt(orig, p));
+                            connsToAdd.push(...parts);
                         }
                         const pending = [...connsToAdd];
                         connsToAdd.length = 0;
                         for (const part of pending) {
                             if (part.path.some(pt => pt.x === p.x && pt.y === p.y)) {
-                                connsToAdd.push(...splitConnectionAt(part, p));
+                                const sub = splitConnectionAt(part, p);
+                                connsToAdd.push(...(sub.length > 0 ? sub : [part]));
                             } else {
                                 connsToAdd.push(part);
                             }
@@ -387,7 +409,10 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
 
                     let parts = [conn];
                     for (const p of intersectionPoints) {
-                        parts = parts.flatMap(c => splitConnectionAt(c, p));
+                        parts = parts.flatMap(c => {
+                            const sub = splitConnectionAt(c, p);
+                            return sub.length > 0 ? sub : [c];
+                        });
                     }
                     splitPlaced.set(conn.id, parts);
                 }
@@ -407,7 +432,17 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                 splitPlaced.get(c.id) ?? [c]
             );
 
-            get().takeSnapshot();
+            // 快照必须捕获移动前的完整布局：startBatchMove 已把移动件从 machines[] 摘除，
+            // 直接拍快照会让 undo 恢复出"移动件消失"的状态（数据丢失）。
+            // 复制流程不摘除原件，直接拍当前状态即可。
+            if (ms.isCopying) {
+                get().takeSnapshot();
+            } else {
+                get().takeSnapshot({
+                    machines: [...machines, ...ms.movingMachinesSnapshot],
+                    connections: [...connections, ...ms.movingConnectionsSnapshot],
+                });
+            }
 
             set({
                 machines: [...machines, ...placedMachines, ...bridgesToCreate],

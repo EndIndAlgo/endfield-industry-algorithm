@@ -43,9 +43,8 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         const gh = gridHeight || 100;
         const validPorts = ports.filter((p) => {
             if (p.pos.x < 0 || p.pos.x >= gw || p.pos.y < 0 || p.pos.y >= gh) return false;
-            const m = machines.find((x) =>
-                x.x <= p.pos.x && p.pos.x < x.x + 1 && x.y <= p.pos.y && p.pos.y < x.y + 1,
-            );
+            // 端口外侧格按机器旋转后占地命中（多格机器整格覆盖，旧 1×1 判定永远不命中）
+            const m = findMachineAt(p.pos, machines);
             if (m && !isViewingOwn(m, currentViewingNodeId)) return false;
             return true;
         });
@@ -121,7 +120,11 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         }
 
         // ── 查找目标机器（提前计算，所有端口共用）──
-        const targetMachine = findMachineAt(mouseGridPos, machines);
+        let targetMachine = findMachineAt(mouseGridPos, machines);
+        // 子蓝图只读：自有连线不得吸附到后代机器的输入端口
+        if (targetMachine && !isViewingOwn(targetMachine, currentViewingNodeId)) {
+            targetMachine = null;
+        }
 
         // ── 按距离排序，逐个尝试端口，选第一个能连通的 ──
         const sortedPorts = [...availablePorts].sort((a, b) =>
@@ -160,6 +163,13 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
                 if (result.isValid) { bestStartPos = startPos; bestTailFacing = tailFacing; bestResult = wrapper; break; }
                 if (!bestResult) { bestStartPos = startPos; bestTailFacing = tailFacing; bestResult = wrapper; }
             }
+        }
+
+        // 所有候选端口都被起点重叠检查过滤（点击已被连线占用的输出口）：
+        // 无可用路径 → 取消连线状态，避免 bestResult 空引用崩溃
+        if (!bestResult) {
+            set({ modeState: { kind: 'WIRE', portType: ms.portType, connecting: null } });
+            return;
         }
 
         set({
@@ -306,15 +316,19 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             const crossed = pointToConns.get(key) || [];
             for (const orig of crossed) {
                 if (connsToRemove.has(orig.id)) continue;
+                const parts = splitConnectionAt(orig, p);
+                // 单格连线（面对面机器）无法分割 → 保留原样，不丢失
+                if (parts.length === 0) continue;
                 connsToRemove.add(orig.id);
-                connsToAdd.push(...splitConnectionAt(orig, p));
+                connsToAdd.push(...parts);
             }
             // 递归拆分新增碎片（若碎片仍经过交叉点）
             const pending = [...connsToAdd];
             connsToAdd = [];
             for (const part of pending) {
                 if (part.path.some(pt => pt.x === p.x && pt.y === p.y)) {
-                    connsToAdd.push(...splitConnectionAt(part, p));
+                    const sub = splitConnectionAt(part, p);
+                    connsToAdd.push(...(sub.length > 0 ? sub : [part]));
                 } else {
                     connsToAdd.push(part);
                 }
@@ -331,7 +345,10 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             blueprintNodeId: viewingNodeId,
         }];
         for (const p of intersectionPoints) {
-            newConns = newConns.flatMap(c => splitConnectionAt(c, p));
+            newConns = newConns.flatMap(c => {
+                const parts = splitConnectionAt(c, p);
+                return parts.length > 0 ? parts : [c];
+            });
         }
 
         // ── 续接：将上一段连线从 store 搬到 connsToAdd 参与合并 ──
@@ -393,6 +410,9 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         // 2. 用户点击了机器来结束连线（物流引导已完成）
         const lastPosHasBridge = bridgesToCreate.some(b => b.x === lastPos.x && b.y === lastPos.y);
         const shouldNotContinue = lastPosHasBridge || previewTargetIsMachine;
+
+        // 快照在真正写入前拍摄（无效提交的早期 return 不产生空转撤销步）
+        get().takeSnapshot();
 
         set(s => ({
             machines: [...s.machines, ...bridgesToCreate],

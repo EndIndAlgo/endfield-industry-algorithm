@@ -382,6 +382,72 @@ describe('selectionSlice', () => {
         expect(s.modeState.movingMachinesSnapshot).toHaveLength(1);
       }
     });
+
+    it('undo 恢复移动前完整布局（快照包含被摘除的移动件，不丢失内容）', () => {
+      useGameStore.setState({
+        machines: [],
+        connections: [],
+        modeState: {
+          kind: 'MOVE_SELECTION',
+          moveAnchor: { x: 0, y: 0 },
+          movingMachinesSnapshot: [makeLBR({ x: 0, y: 0, id: 'm1' })],
+          movingConnectionsSnapshot: [],
+          isCopying: false,
+          originSelectedMachineIds: ['m1'],
+          originSelectedConnectionIds: [],
+        },
+        gridWidth: 24,
+        gridHeight: 24,
+      });
+      useGameStore.getState().commitBatchMove({ x: 5, y: 5 });
+      let s = useGameStore.getState();
+      expect(s.machines).toHaveLength(1);
+      expect(s.machines[0].x).toBe(5);
+
+      useGameStore.getState().undo();
+      s = useGameStore.getState();
+      // 回到移动前位置 (0,0)，而不是恢复成"移动件被摘除"的中间态
+      expect(s.machines).toHaveLength(1);
+      expect(s.machines[0].x).toBe(0);
+      expect(s.machines[0].y).toBe(0);
+    });
+  });
+});
+
+// ======================================================================
+// connectionSlice：起点重叠时 updatePreview 不得崩溃（回归测试）
+// ======================================================================
+describe('connectionSlice', () => {
+  beforeEach(resetStore);
+
+  it('点击已被同向连线占用的输出口：updatePreview 取消连线而非抛异常', () => {
+    const s = useGameStore.getState();
+
+    // 已有一条 Solid 连线从 (2,2) 向右出发
+    useGameStore.setState({
+      connections: [{
+        id: 'c1',
+        tailFacing: 1,
+        path: [{ x: 2, y: 2 }, { x: 5, y: 2 }],
+        headFacing: 1,
+        portType: 'Solid',
+      }],
+    });
+
+    // 再次从同一端口 (2,2) 向右开始连线
+    s.startConnecting([{ pos: { x: 2, y: 2 }, facing: 1 }], 'Solid');
+    let ms = useGameStore.getState().modeState;
+    expect(ms.kind).toBe('WIRE');
+    if (ms.kind !== 'WIRE') return;
+    expect(ms.connecting).not.toBeNull();
+
+    // 之前：checkStartOverlap 过滤全部端口 → bestResult 为 null → bestResult!.path 抛 TypeError
+    expect(() => useGameStore.getState().updatePreview({ x: 4, y: 4 })).not.toThrow();
+
+    ms = useGameStore.getState().modeState;
+    expect(ms.kind).toBe('WIRE');
+    if (ms.kind !== 'WIRE') return;
+    expect(ms.connecting).toBeNull();
   });
 });
 
