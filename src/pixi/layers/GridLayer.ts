@@ -2,6 +2,9 @@ import { Container, TilingSprite, Texture, Graphics } from 'pixi.js';
 import { GRID_SIZE } from '@/config/constants';
 import { GRAY, BLACK_LIGHT } from '@/config/colors';
 
+/** 网格单元纹理模块级单例：避免每次 remount 向全局纹理缓存注入新纹理 */
+let sharedTileTexture: Texture | null = null;
+
 /**
  * 网格背景层
  *
@@ -18,7 +21,7 @@ export class GridLayer extends Container {
     super();
 
     // 生成 40×40 网格单元纹理（右下各 1px 线）
-    const tileTexture = GridLayer.createTileTexture();
+    const tileTexture = sharedTileTexture ?? (sharedTileTexture = GridLayer.createTileTexture());
     this.tile = new TilingSprite({
       texture: tileTexture,
       width: 0,

@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, TextStyle, Rectangle } from 'pixi.js';
 import type { PlacedMachine, PortConfig, Side, Direction, MachineConfig } from '@/types';
 import { isVirtualMachine } from '@/types';
 import { getMachineConfig } from '@/config/machines';
@@ -21,6 +21,10 @@ interface MachineMeta {
   isPowered: boolean;
   isSelected: boolean;
   zoom: number;
+  /** 是否已构建动态子元素（create 只建静态三件套，首次 update 必须补建） */
+  hasDynamic: boolean;
+  /** hover 标签容器（CanvasController 控制显示/隐藏与反缩放） */
+  labelContainer?: Container;
 }
 
 /** 机器标签文字样式（复用在所有机器上） */
@@ -70,6 +74,8 @@ export class MachineRenderer {
     container.position.set(m.x * GRID_SIZE, m.y * GRID_SIZE);
     container.zIndex = machineZ(zBase, config.mask.maxMask);
     container.sortableChildren = true;
+    // 本地坐标裁剪区域：尺寸 = 机身，避免每帧全量计算 bounds
+    container.cullArea = new Rectangle(0, 0, pixW, pixH);
 
     MachineRenderer.addStaticBody(container, config, pixW, pixH);
 
@@ -82,6 +88,7 @@ export class MachineRenderer {
       isPowered,
       isSelected: false,
       zoom: 1,
+      hasDynamic: false,
     });
 
     return container;
@@ -120,10 +127,13 @@ export class MachineRenderer {
       || meta.machineId !== m.machineId
       || meta.rotation !== m.rotation;
     const dynamicChanged = !meta
+      || !meta.hasDynamic
       || meta.isPowered !== isPowered
       || meta.isSelected !== isSelected
       || meta.isReadonly !== isReadonly
       || meta.zoom !== zoom;
+
+    let labelContainer: Container | undefined;
 
     if (staticChanged) {
       // 静态三件套尺寸依赖旋转 → 整体重建
@@ -159,7 +169,7 @@ export class MachineRenderer {
       }
 
       // ── Hover 标签 ──
-      MachineRenderer.addLabel(container, config.name, pixW, pixH, zoom, isReadonly, isVirtual);
+      labelContainer = MachineRenderer.addLabel(container, config.name, pixW, pixH, zoom, isReadonly, isVirtual);
 
       // ── 选中高亮 ──
       if (isSelected) {
@@ -176,6 +186,8 @@ export class MachineRenderer {
       isPowered,
       isSelected,
       zoom,
+      hasDynamic: true,
+      ...(labelContainer ? { labelContainer } : {}),
     });
   }
 
@@ -478,7 +490,7 @@ export class MachineRenderer {
     container.addChild(bolt);
   }
 
-  /** 添加 Hover 标签（机器名 + 操作提示） */
+  /** 添加 Hover 标签（机器名 + 操作提示）；返回标签容器供 CanvasController 控制显隐 */
   private static addLabel(
     container: Container,
     name: string,
@@ -487,7 +499,7 @@ export class MachineRenderer {
     zoom: number,
     isReadonly: boolean,
     isVirtual: boolean,
-  ): void {
+  ): Container {
     const labelContainer = new Container({
       label: 'label-group',
       visible: false,
@@ -532,6 +544,8 @@ export class MachineRenderer {
 
     labelContainer.zIndex = Z_INDEX.MACHINE_LABEL;
     container.addChild(labelContainer);
+
+    return labelContainer;
   }
 
   /** 添加选中高亮 */

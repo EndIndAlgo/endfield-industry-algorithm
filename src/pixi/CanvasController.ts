@@ -75,6 +75,8 @@ export class CanvasController {
   private isPanning = false;
   private lastMousePos: Point = { x: 0, y: 0 };
   private lastHoverGridPos: Point | null = null;
+  /** 当前显示 hover 标签的机器 id（越界/换机时隐藏旧标签） */
+  private hoverLabelMachineId: string | null = null;
 
   private handlers = createModeHandlers({
     getHoverGridPos: () => this.lastHoverGridPos,
@@ -162,6 +164,7 @@ export class CanvasController {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.unbindEvents();
+    this.hideHoverLabel();
     if (this.app) {
       this.app.destroy(
         { removeView: true, releaseGlobalResources: true },
@@ -185,7 +188,7 @@ export class CanvasController {
 
   private buildSceneGraph(): void {
     this.root = new Container({ label: 'root' });
-    this.world = new Container({ label: 'world' });
+    this.world = new Container({ label: 'world', isRenderGroup: true });
 
     this.gridLayer = new GridLayer();
     this.gridLayer.label = 'gridLayer';
@@ -232,6 +235,41 @@ export class CanvasController {
   /** 最近一次画布内 hover 的网格坐标（供键盘快捷键等使用；越界后为 null） */
   getLastHoverGridPos(): Point | null {
     return this.lastHoverGridPos;
+  }
+
+  // ── 机器 hover 标签 ──
+
+  /** 更新机器 hover 标签显隐：命中机器显示，其余隐藏 */
+  private updateHoverLabel(machines: PlacedMachine[], grid: Point): void {
+    const hit = machines.find((m) => {
+      const cfg = getMachineConfig(m.machineId);
+      if (!cfg) return false;
+      const { width, height } = getRotatedDimensions(cfg.width, cfg.height, m.rotation);
+      return m.x <= grid.x && grid.x < m.x + width && m.y <= grid.y && grid.y < m.y + height;
+    });
+    const id = hit?.id ?? null;
+    if (id === this.hoverLabelMachineId) return;
+
+    if (this.hoverLabelMachineId) {
+      const prev = this.machinePool.get(this.hoverLabelMachineId);
+      const prevMeta = prev ? MachineRenderer.getMeta(prev) : undefined;
+      if (prevMeta?.labelContainer) prevMeta.labelContainer.visible = false;
+    }
+    if (id) {
+      const cur = this.machinePool.get(id);
+      const curMeta = cur ? MachineRenderer.getMeta(cur) : undefined;
+      if (curMeta?.labelContainer) curMeta.labelContainer.visible = true;
+    }
+    this.hoverLabelMachineId = id;
+  }
+
+  /** 隐藏当前 hover 标签（指针越界 / 清理时调用） */
+  private hideHoverLabel(): void {
+    if (!this.hoverLabelMachineId) return;
+    const prev = this.machinePool.get(this.hoverLabelMachineId);
+    const prevMeta = prev ? MachineRenderer.getMeta(prev) : undefined;
+    if (prevMeta?.labelContainer) prevMeta.labelContainer.visible = false;
+    this.hoverLabelMachineId = null;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -330,11 +368,13 @@ export class CanvasController {
     // 指针越界：清空 hover，跳过预览更新（平移拖拽不受影响）
     if (!this.inCanvas(e)) {
       this.lastHoverGridPos = null;
+      this.hideHoverLabel();
       useGameStore.getState().setHoverPosFrac(null);
       return;
     }
     this.lastHoverGridPos = n.grid;
     useGameStore.getState().setHoverPosFrac(n.gridFrac);
+    this.updateHoverLabel(useGameStore.getState().machines, n.grid);
     this.handlers.onMove(n.grid, n.buttons);
   };
 
@@ -524,6 +564,13 @@ export class CanvasController {
   private syncViewport(state: GameState): void {
     this.world.position.set(state.pan.x, state.pan.y);
     this.world.scale.set(state.zoom);
+    // 标签反缩放保持可读性（标签挂在机器容器内，需抵消 world 缩放）
+    for (const container of this.machinePool.values()) {
+      const meta = MachineRenderer.getMeta(container);
+      if (meta?.labelContainer) {
+        meta.labelContainer.scale.set(1 / state.zoom);
+      }
+    }
   }
 
   // ── 机器同步 ──
