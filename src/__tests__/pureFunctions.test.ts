@@ -834,3 +834,14 @@ describe('validateChildPlacement 蓝图插入校验', () => {
         })).toBe(false);
     });
 });
+
+// ======================================================================
+// 分享截图（Pixi canvas 路径）
+// ======================================================================
+describe('captureBlueprintScreenshot', () => {
+    it('无活动画布控制器时返回 null', async () => {
+        const { captureBlueprintScreenshot } = await import('@/utils/shareUtils');
+        // 测试环境未挂载 PixiGrid → activeCanvasController.current === null
+        expect(await captureBlueprintScreenshot()).toBeNull();
+    });
+});

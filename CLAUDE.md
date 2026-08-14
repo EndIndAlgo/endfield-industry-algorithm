@@ -81,7 +81,7 @@ src/
 │   ├── machineIcons.ts              # getMachineIconUrl: 机器图标静态 URL 映射（import.meta.glob 保证全部 webp 进产物，替代动态 new URL 拼接）
 │   ├── blueprintGuard.ts             # isViewingOwn/isDescendant: 按 blueprintNodeId 判断实体是否属于当前 viewing 节点（蓝图嵌套时限制修改范围，后代只读）
 │   ├── portPosition.ts               # getPortCenter(机器端口像素定位，被 MachineRenderer 复用)
-│   ├── shareUtils.ts                 # toBase64Url/fromBase64Url, encode/decode (V3二进制: 3字节ID+1字节x+1字节y+1字节rotation), generateShareUrl, parseShareUrl, captureBlueprintScreenshot(html2canvas)
+│   ├── shareUtils.ts                 # toBase64Url/fromBase64Url, encode/decode (V3二进制: 3字节ID+1字节x+1字节y+1字节rotation), generateShareUrl, parseShareUrl, captureBlueprintScreenshot(Pixi canvas 白底合成)
 │   └── toaster.ts                    # createToaster({placement:'bottom-end'}) 单例
 ├── pixi/
 │   ├── CanvasController.ts           # 画布控制器（无框架 TS 类）：Application 生命周期(attach/detach 幂等状态机+attachGen 令牌)、事件归一化(唯一接触坐标差异处)、Zustand subscribe → diff → 增量更新；机器/连线对象池 + powerGrid WeakMap 缓存
@@ -363,7 +363,7 @@ selectDescendantConnections(s)   // 工作视图中 blueprintNodeId ≠ viewing 
 - 自定义紧凑二进制编码：每台机器 3 字节 ID(ascii) + 1字节x + 1字节y + 1字节rotation
 - 连线用 2-bit 打包方向(0=Up,1=Right,2=Down,3=Left)，1字节存4步
 - base64url 编码为 URL query param `?bp=`，生成的链接极短
-- `captureBlueprintScreenshot()` 使用 html2canvas 克隆 `.zoom-content` DOM 截图（先设 transform:none 再截；注意该 DOM 类名来自旧 DOM 渲染，Pixi 迁移后已无对应结构）
+- `captureBlueprintScreenshot()` 从活动 CanvasController 的 PixiJS canvas 白底合成 PNG（`activeCanvasController` 模块级引用；截图范围为当前视口含缩放/平移）；html2canvas 已移除
 
 ### 连线创建流程（完整链路）
 

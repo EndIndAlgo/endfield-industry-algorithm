@@ -20,6 +20,12 @@ extensions.add(CullerPlugin);
 /** buildPowerGrid 结果缓存：按 machines 数组引用 + 网格尺寸命中（machines 引用不变则复用） */
 const powerGridCache = new WeakMap<PlacedMachine[], { gw: number; gh: number; grid: Uint8Array }>();
 
+/**
+ * 当前激活的画布控制器（attach 时注册、detach 时清除），
+ * 供分享截图等画布外功能取用 PixiJS canvas。
+ */
+export const activeCanvasController: { current: CanvasController | null } = { current: null };
+
 function getPowerGrid(machines: PlacedMachine[], gw: number, gh: number): Uint8Array {
   const hit = powerGridCache.get(machines);
   if (hit && hit.gw === gw && hit.gh === gh) return hit.grid;
@@ -117,6 +123,7 @@ export class CanvasController {
         return;
       }
       this.app = app;
+      activeCanvasController.current = this;
 
       if (!el.contains(app.canvas)) {
         el.appendChild(app.canvas);
@@ -161,6 +168,9 @@ export class CanvasController {
 
   /** 完整清理：退订 → 解绑 → 销毁应用 */
   private cleanup(): void {
+    if (activeCanvasController.current === this) {
+      activeCanvasController.current = null;
+    }
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.unbindEvents();
@@ -235,6 +245,16 @@ export class CanvasController {
   /** 最近一次画布内 hover 的网格坐标（供键盘快捷键等使用；越界后为 null） */
   getLastHoverGridPos(): Point | null {
     return this.lastHoverGridPos;
+  }
+
+  /** 取画布元素（分享截图等外部功能用；未挂载返回 null） */
+  getCanvas(): HTMLCanvasElement | null {
+    return this.app?.canvas ?? null;
+  }
+
+  /** 立即渲染一帧（截图前调用，确保 WebGL 缓冲有最新内容） */
+  renderNow(): void {
+    this.app?.render();
   }
 
   // ── 机器 hover 标签 ──

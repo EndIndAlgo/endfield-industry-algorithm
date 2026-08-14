@@ -1,8 +1,8 @@
-import html2canvas from 'html2canvas';
 import type { Point, PlacedMachine, Connection, Direction } from '@/types';
 import { MACHINES } from '@/config/machines';
 import { getRotatedDimensions } from './machineUtils';
 import { getBoundingBox } from './grid';
+import { activeCanvasController } from '@/pixi/CanvasController';
 
 // ===== Base64 =====
 const toBase64Url = (bytes: Uint8Array): string => {
@@ -187,49 +187,35 @@ export const parseShareUrl = async (): Promise<DecodedBlueprint | null> => {
     }
 };
 
+/**
+ * 截图当前画布（PixiJS canvas 白底合成 → PNG dataURL）
+ *
+ * Pixi 迁移后旧 DOM 截图（.zoom-content + html2canvas）已失效，改为直接
+ * 从活动 CanvasController 的画布合成：截图范围为当前视口（含缩放/平移状态）。
+ */
 export const captureBlueprintScreenshot = async (): Promise<string | null> => {
-    const gridContainer = document.querySelector('.grid-container');
-    if (!gridContainer) return null;
-
-    const zoomContent = gridContainer.querySelector('.zoom-content') as HTMLElement;
-    if (!zoomContent) return null;
-
-    const gridBackground = zoomContent.querySelector('.grid-background') as HTMLElement;
-    if (!gridBackground) return null;
-
-    const width = parseInt(gridBackground.style.width);
-    const height = parseInt(gridBackground.style.height);
-
-    const cloneWrapper = document.createElement('div');
-    cloneWrapper.style.position = 'absolute';
-    cloneWrapper.style.top = '0';
-    cloneWrapper.style.left = '0';
-    cloneWrapper.style.width = `${width}px`;
-    cloneWrapper.style.height = `${height}px`;
-    cloneWrapper.style.zIndex = '-9999';
-    cloneWrapper.style.overflow = 'hidden';
-
-    const clonedContent = zoomContent.cloneNode(true) as HTMLElement;
-    clonedContent.style.transform = 'none';
-    clonedContent.style.width = '100%';
-    clonedContent.style.height = '100%';
-    cloneWrapper.style.backgroundColor = getComputedStyle(gridContainer).backgroundColor;
-    cloneWrapper.appendChild(clonedContent);
-    document.body.appendChild(cloneWrapper);
-
-    await new Promise(resolve => setTimeout(resolve, 100));
-
     try {
-        const canvas = await html2canvas(cloneWrapper, {
-            width, height, backgroundColor: null, scale: 1,
-            logging: false, useCORS: true, scrollX: 0, scrollY: 0, x: 0, y: 0
-        });
-        const dataUrl = canvas.toDataURL('image/png');
-        if (document.body.contains(cloneWrapper)) document.body.removeChild(cloneWrapper);
-        return dataUrl;
+        const controller = activeCanvasController.current;
+        const source = controller?.getCanvas();
+        if (!controller || !source) return null;
+
+        // 立即渲染一帧，确保 WebGL 缓冲包含最新内容后再合成
+        controller.renderNow();
+
+        const canvas = document.createElement('canvas');
+        canvas.width = source.width;
+        canvas.height = source.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+
+        // 画布背景透明（backgroundAlpha: 0），先铺白底再叠加画布内容
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(source, 0, 0);
+
+        return canvas.toDataURL('image/png');
     } catch (e) {
         console.error('Screenshot failed', e);
-        if (document.body.contains(cloneWrapper)) document.body.removeChild(cloneWrapper);
         return null;
     }
 };
