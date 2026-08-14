@@ -9,6 +9,16 @@ import { GRAY, CONVEYOR_FILL, PIPE_FILL, CONN_SELECTION_BLUE, INVALID_RED } from
 const EXTEND = 0.45;
 
 /**
+ * 连线描边颜色决策（优先级：选中 > 无效预览 > 默认灰）。
+ * 纯函数导出供测试锁定：新建即被选中的连线（如批量移动提交）必须蓝描边。
+ */
+export function connectionOutlineColor(isSelected: boolean, isPreview: boolean, isValid: boolean): number {
+  if (isSelected) return CONN_SELECTION_BLUE;
+  if (isPreview && !isValid) return INVALID_RED;
+  return GRAY;
+}
+
+/**
  * 连线渲染器
  *
  * 每条已确认连线 = 2 个 Graphics 对象（outline + fill），
@@ -82,7 +92,7 @@ export class ConnectionRenderer {
       }
       outline.stroke({
         width: outlineWidth,
-        color: isSelected ? CONN_SELECTION_BLUE : GRAY,
+        color: connectionOutlineColor(isSelected, false, true),
         cap: 'round',
         join: 'round',
       });
@@ -119,7 +129,7 @@ export class ConnectionRenderer {
     isValid = true,
   ): Graphics[] {
     const color = portType === 'Liquid' ? PIPE_FILL : CONVEYOR_FILL;
-    const outlineColor = isPreview && !isValid ? INVALID_RED : GRAY;
+    const outlineColor = connectionOutlineColor(isSelected, isPreview, isValid);
     const fillColor = isPreview && !isValid ? INVALID_RED : color;
     const outlineWidth = isSelected ? 26 : isPreview ? 16 : 20;
     const fillWidth = isSelected ? 22 : isPreview ? 10 : 16;

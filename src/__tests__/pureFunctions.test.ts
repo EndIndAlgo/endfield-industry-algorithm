@@ -845,3 +845,23 @@ describe('captureBlueprintScreenshot', () => {
         expect(await captureBlueprintScreenshot()).toBeNull();
     });
 });
+
+// ======================================================================
+// 连线描边颜色优先级（批量移动提交后的选中蓝线回归）
+// ======================================================================
+describe('connectionOutlineColor 连线描边颜色优先级', () => {
+    it('选中优先于一切：新建即被选中的连线必须蓝描边', async () => {
+        const { connectionOutlineColor } = await import('@/pixi/renderers/ConnectionRenderer');
+        const { CONN_SELECTION_BLUE } = await import('@/config/colors');
+        // 批量移动提交路径：连线对象被移出再重新创建（createConfirmed），isSelected=true
+        expect(connectionOutlineColor(true, false, true)).toBe(CONN_SELECTION_BLUE);
+        expect(connectionOutlineColor(true, true, false)).toBe(CONN_SELECTION_BLUE);
+    });
+
+    it('无效预览红色，默认灰色', async () => {
+        const { connectionOutlineColor } = await import('@/pixi/renderers/ConnectionRenderer');
+        const { INVALID_RED, GRAY } = await import('@/config/colors');
+        expect(connectionOutlineColor(false, true, false)).toBe(INVALID_RED);
+        expect(connectionOutlineColor(false, false, true)).toBe(GRAY);
+    });
+});
