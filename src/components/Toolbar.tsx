@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { MACHINES } from '@/config/machines';
+import { getMachineIconUrl } from '@/utils/machineIcons';
 import classNames from 'classnames';
 import { MousePointer2, ArrowRight, Waves, BoxSelect } from 'lucide-react';
 import { Tabs } from '@chakra-ui/react';
@@ -135,7 +136,7 @@ export const Toolbar = () => {
                             >
                                 <img
                                     className="icon"
-                                    src={new URL(`../assets/machines/${m.id}.webp`, import.meta.url).href}
+                                    src={getMachineIconUrl(m.id) ?? ''}
                                     alt={m.name}
                                     onError={(e) => { e.currentTarget.style.display = 'none' }}
                                 />
