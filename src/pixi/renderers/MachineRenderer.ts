@@ -214,9 +214,9 @@ export class MachineRenderer {
     bg.zIndex = 1;
     container.addChild(bg);
 
-    // ── 3. 边框线（3px） ──
+    // ── 3. 边框线（3px，整体在格内：外侧对齐格线，内侧与 bg 的 3px 内缩相接） ──
     const border = new Graphics({ label: 'border' });
-    border.rect(0, 0, pixW, pixH)
+    border.rect(1.5, 1.5, pixW - 3, pixH - 3)
       .stroke({ width: 3, color: GRAY_DARK });
     border.zIndex = 2;
     container.addChild(border);
@@ -559,7 +559,8 @@ export class MachineRenderer {
     pixH: number,
   ): void {
     const sel = new Graphics({ label: 'selection-highlight' });
-    sel.rect(0, 0, pixW, pixH)
+    // 内缩 1px：2px 描边整体在格内（外侧对齐格线），压住 3px 黑边内侧 2px
+    sel.rect(1, 1, pixW - 2, pixH - 2)
       .stroke({ width: 2, color: SELECTION_BLUE });
     sel.zIndex = Z_INDEX.MACHINE_LABEL; // 放在高层
     container.addChild(sel);

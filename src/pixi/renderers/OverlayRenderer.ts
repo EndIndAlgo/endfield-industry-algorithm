@@ -60,12 +60,12 @@ export class OverlayRenderer {
     content.mask = clipMask;
     container.addChild(clipMask, content);
 
-    // 边框
+    // 边框（整体在格内，外侧对齐格线：描边居中 → 矩形内缩半描边宽）
     const border = new Graphics({ label: 'ghost-border' });
     if (!isValid) {
-      border.rect(0, 0, pixW, pixH).stroke({ width: 4, color: INVALID_RED, alpha: 0.5 });
+      border.rect(2, 2, pixW - 4, pixH - 4).stroke({ width: 4, color: INVALID_RED, alpha: 0.5 });
     } else {
-      border.rect(0, 0, pixW, pixH).stroke({ width: 1, color: GRAY });
+      border.rect(0.5, 0.5, pixW - 1, pixH - 1).stroke({ width: 1, color: GRAY });
     }
     container.addChild(border);
 
