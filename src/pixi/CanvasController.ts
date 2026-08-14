@@ -684,6 +684,9 @@ export class CanvasController {
           targetLayer.addChild(g);
         }
         this.connectionPool.set(conn.id, graphics);
+        // 同步选中态缓存：否则新建即选中的连线（批量移动提交）在
+        // syncConnectionHighlights 中被误判为"从未选中"，退出框选时蓝描边不清理
+        connSelectedCache.set(graphics[0], isSelected);
       } else {
         const [outline, fill] = graphics;
         ConnectionRenderer.updateLines(
