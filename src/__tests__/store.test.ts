@@ -728,4 +728,57 @@ describe('蓝图树端到端流程', () => {
     // 新版本包含编辑后的 2 台机器
     expect(nodes[newChildId].machines).toHaveLength(2);
   });
+
+  it('startFlattenCopy 展平目标蓝图（含后代）并进入 MOVE_SELECTION 复制态', () => {
+    const { createBlueprint, addMachine, saveCurrentBlueprint, startFlattenCopy } = useGameStore.getState();
+
+    const insertChild = (childNodeId: string, x: number, y: number) => {
+      const childNode = useGameStore.getState().doc.nodes[childNodeId]!;
+      useGameStore.setState({
+        modeState: {
+          kind: 'BLUEPRINT_MOVE',
+          childNodeId,
+          childSummary: { nodeId: childNodeId, name: childNode.name, gridW: childNode.gridW, gridH: childNode.gridH },
+          moveAnchor: { x: 0, y: 0 },
+          previewOffset: null,
+          isCopying: true,
+          isInserting: true,
+          isValidPosition: true,
+        },
+      });
+      useGameStore.getState().commitInsert(x, y);
+    };
+
+    // --- 子蓝图 C：lbr 在 (2,2) ---
+    createBlueprint();
+    useGameStore.getState().takeSnapshot();
+    addMachine('lbr', 2, 2, 0);
+    saveCurrentBlueprint('子蓝图');
+    const childNodeId = useGameStore.getState().currentViewingNodeId!;
+
+    // --- 父蓝图 P：引用 C 于 (10,5) ---
+    createBlueprint();
+    const parentNodeId = useGameStore.getState().currentViewingNodeId!;
+    insertChild(childNodeId, 10, 5);
+
+    // --- 新建根蓝图 R：展平复制 P ---
+    createBlueprint();
+    const rootNodeId = useGameStore.getState().currentViewingNodeId!;
+    useGameStore.getState().startFlattenCopy(parentNodeId);
+
+    const ms = useGameStore.getState().modeState;
+    expect(ms.kind).toBe('MOVE_SELECTION');
+    if (ms.kind !== 'MOVE_SELECTION') return;
+
+    // 后代展平：C 内 lbr 偏移到 (12,7)，副本归属 R、换新 UUID
+    expect(ms.isCopying).toBe(true);
+    expect(ms.movingMachinesSnapshot).toHaveLength(1);
+    const copied = ms.movingMachinesSnapshot[0];
+    expect(copied.machineId).toBe('lbr');
+    expect(copied.x).toBe(12);
+    expect(copied.y).toBe(7);
+    expect(copied.blueprintNodeId).toBe(rootNodeId);
+    const sourceId = useGameStore.getState().doc.nodes[childNodeId].machines[0].id;
+    expect(copied.id).not.toBe(sourceId);
+  });
 });

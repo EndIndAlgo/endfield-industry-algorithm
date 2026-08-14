@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { BlueprintSlice, GameState } from './types';
 import type { PlacedMachine, Connection, ModeState, BlueprintSummary } from '@/types';
+import { getBoundingBox } from '@/utils/grid';
 import { toaster } from '@/utils/toaster';
 import {
     DEFAULT_BLUEPRINT_NAME,
@@ -16,6 +17,7 @@ import {
     removeChild,
     moveChild,
     deleteNode,
+    flattenNode,
     flattenDescendants,
     isContentEqual,
 } from '@/domain/doc';
@@ -174,6 +176,51 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         saveDoc(nextDoc);
         set({ doc: nextDoc, modeState: { kind: 'BUILD', placing: null } });
         get().syncStoreFromViewing();
+    },
+
+    // ── 展平复制 ──
+
+    startFlattenCopy: (nodeId) => {
+        const { doc, currentViewingNodeId } = get();
+        if (!currentViewingNodeId) return;
+
+        // 展平目标蓝图（含全部后代），作为普通机器/连线副本放置，不建立引用关系
+        const flat = flattenNode(doc, nodeId);
+        if (flat.machines.length === 0 && flat.connections.length === 0) {
+            toaster.create({
+                title: '该蓝图没有可复制的内容',
+                type: 'warning',
+                duration: 3000,
+            });
+            return;
+        }
+
+        const anchor = getBoundingBox(flat.machines, flat.connections);
+
+        const newMachines: PlacedMachine[] = flat.machines.map((m) => ({
+            ...m,
+            id: crypto.randomUUID(),
+            blueprintNodeId: currentViewingNodeId,
+        }));
+        const newConnections: Connection[] = flat.connections.map((c) => ({
+            ...c,
+            id: crypto.randomUUID(),
+            path: c.path.map((p) => ({ ...p })),
+            blueprintNodeId: currentViewingNodeId,
+        }));
+
+        set({
+            modeState: {
+                kind: 'MOVE_SELECTION',
+                moveAnchor: { x: anchor.minX, y: anchor.minY },
+                movingMachinesSnapshot: newMachines,
+                movingConnectionsSnapshot: newConnections,
+                isCopying: true,
+                originSelectedMachineIds: [],
+                originSelectedConnectionIds: [],
+            },
+            uiView: 'editor',
+        });
     },
 
     commitMove: (nodeId, ox, oy) => {

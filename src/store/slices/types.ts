@@ -72,6 +72,8 @@ export interface BlueprintSlice {
     saveCurrentBlueprint: (name: string) => void;
     loadBlueprint: (nodeId: string) => void;
     startInsertChild: (nodeId: string) => void;
+    /** 展平复制：把目标蓝图（含后代）展平为普通机器/连线，跟随鼠标放置 */
+    startFlattenCopy: (nodeId: string) => void;
     commitInsert: (ox: number, oy: number) => void;
     commitMove: (nodeId: string, ox: number, oy: number) => void;
     removeChild: (nodeId: string) => void;
