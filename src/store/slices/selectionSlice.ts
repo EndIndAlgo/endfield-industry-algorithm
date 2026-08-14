@@ -81,7 +81,15 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         const ms = get().modeState;
         if (ms.kind !== 'DEVICE_SELECT') return;
         set({
-            modeState: { ...ms, selectedMachineIds: [], selectedConnectionIds: [] },
+            modeState: {
+                ...ms,
+                // 同步清除进行中的框选：单击空白时 selectionStart/End 仍为按下时的单格框，
+                // 只清选中 id 会让蓝色选框按 selectionStart/End 继续渲染（单击蓝框遗留）
+                selectionStart: null,
+                selectionEnd: null,
+                selectedMachineIds: [],
+                selectedConnectionIds: [],
+            },
         });
     },
 

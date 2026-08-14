@@ -246,6 +246,27 @@ describe('selectionSlice', () => {
         expect(s.modeState.selectedMachineIds).toHaveLength(0);
       }
     });
+
+    it('clearSelection 清除进行中的框选（单击空白后无蓝框遗留）', () => {
+      // 模拟单击：onDown 设置单格框选 → onUp 单击空白走 clearSelection
+      useGameStore.setState({
+        modeState: {
+          kind: 'DEVICE_SELECT',
+          selectionStart: { x: 3, y: 3 },
+          selectionEnd: { x: 3, y: 3 },
+          selectedMachineIds: ['m1'],
+          selectedConnectionIds: [],
+        },
+      });
+      useGameStore.getState().clearSelection();
+      const ms = useGameStore.getState().modeState;
+      expect(ms.kind).toBe('DEVICE_SELECT');
+      if (ms.kind === 'DEVICE_SELECT') {
+        expect(ms.selectionStart).toBeNull();
+        expect(ms.selectionEnd).toBeNull();
+        expect(ms.selectedMachineIds).toEqual([]);
+      }
+    });
   });
 
   describe('deleteSelected', () => {
