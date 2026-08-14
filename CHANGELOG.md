@@ -1,5 +1,14 @@
 # Changelog
 
+## Sprint 13 (2026-07-16) — 架构收敛重构（蓝图树 + PixiJS 迁移审查修复）
+
+审查发现并修复蓝图树重构与 PixiJS 迁移引入的缺陷，收敛为单一真相源架构。详见 `docs/ARCHITECTURE.md` 与 `bugs.md`。
+
+- **P0 数据安全**（34ed8bb → 39c8983）：嵌套保存位置归零（先读 oldChildRef 再 removeChild）；蓝图循环引用防护（addChild 环检测 + 递归遍历 visited + UI 禁用成环导入）；保存策略修正（仅被共享时分叉、非共享原地保存，共享分叉不再污染旧版本）
+- **P1 单一真相源**（63a93df、1dd095d）：FactoryDoc 进入 store 成为唯一持久化对象（`src/domain/`），检出式 commit/fork 语义；删除 RegistryEngine 引擎双真相与旧 storage/blueprintTree/flatten；历史快照 = { machines, connections, doc } 且 undo/redo 落盘；离开蓝图前 dirty 确认；旧 localStorage 数据直接废弃
+- **P4 展平复制**（9b5afd9、54048b6）：`startFlattenCopy` 展平目标蓝图（含后代）为普通内容进入放置态；蓝图列表 Copy 按钮接入真实现
+- **P2 画布集成层**（进行中）：CanvasController + 事件坐标归一化 + 完整 diff 契约（Ghost 跟随、MOVE_SELECTION 预览、机器池位置同步、事件语义修复）
+
 ## Sprint 12 (2026-06-19 → 06-22) — GameMode → ModeState 判别联合重构
 
 5 个 commit (c1443a3 → f59961a)：扁平字符串替换为带子状态的判别联合，CONVEYOR+PIPE → WIRE，BLUEPRINT_PLACE → MOVE_SELECTION，新增 modeSlice + selectors.ts；`_archive/items/` 132 张死图归档 + opencc-js 延迟加载 + LoadingScreen 瘦身
