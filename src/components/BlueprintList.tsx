@@ -84,14 +84,13 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
     const rootNodes = tree;
     const displayNodes = activeTab === 'root' ? rootNodes : allNodes;
 
-    // 导入引用会创建 currentViewingNodeId → node 的边；
-    // 当 node 是 viewing 自身或其祖先时会成环，需禁用
+    // 导入引用会创建 currentViewingNodeId → node 的边；node 为 viewing 的祖先时会成环，需禁用。
+    // 引用自己（node === viewing）由 startInsertChild 自动 fork 副本后引用，允许。
     const { doc } = useGameStore.getState();
     const viewingAncestorIds = currentViewingNodeId
         ? new Set(findAncestorPath(doc, currentViewingNodeId))
         : new Set<string>();
-    const canImportRef = (nodeId: string): boolean =>
-        nodeId !== currentViewingNodeId && !viewingAncestorIds.has(nodeId);
+    const canImportRef = (nodeId: string): boolean => !viewingAncestorIds.has(nodeId);
 
     const toggle = (nodeId: string) => {
         setExpanded((prev) => {

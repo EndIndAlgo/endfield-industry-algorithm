@@ -7,6 +7,7 @@ import { Mask } from '@/utils/mask';
 import { getMachinePortCheckPositions, getBoundingBox, getCornerPoints, splitConnectionAt, buildExistingCornerGrid } from '@/utils/grid';
 import { getRotatedDimensions, getMachineConfigById, resolveMachineMasks } from '@/utils/machineUtils';
 import { isViewingOwn } from '@/utils/blueprintGuard';
+import { toaster } from '@/utils/toaster';
 
 export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlice> = (set, get) => ({
 
@@ -24,7 +25,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         const { selectionStart, selectionEnd, selectedMachineIds: prevMachineIds, selectedConnectionIds: prevConnectionIds } = ms;
         if (!selectionStart || !selectionEnd) return;
 
-        const { machines, connections } = get();
+        const { machines, connections, currentViewingNodeId } = get();
 
         const x1 = Math.min(selectionStart.x, selectionEnd.x);
         const y1 = Math.min(selectionStart.y, selectionEnd.y);
@@ -32,6 +33,8 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         const y2 = Math.max(selectionStart.y, selectionEnd.y);
 
         const machineIdsInBox = machines.filter(m => {
+            // 后代只读：子蓝图内的机器不可被框选（整体操作走 BLUEPRINT_SELECT）
+            if (!isViewingOwn(m, currentViewingNodeId)) return false;
             const config = MACHINES.find(c => c.id === m.machineId);
             if (!config) return false;
             const { width, height } = getRotatedDimensions(config.width, config.height, m.rotation);
@@ -43,6 +46,7 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         }).map(m => m.id);
 
         const connectionIdsInBox = connections.filter(c => {
+            if (!isViewingOwn(c, currentViewingNodeId)) return false;
             return c.path.some(p => p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2);
         }).map(c => c.id);
 
@@ -114,6 +118,8 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         }
 
         for (const c of connections) {
+            // 级联删除只作用于自有连线（后代连线不可被误删）
+            if (!isViewingOwn(c, currentViewingNodeId)) continue;
             const first = c.path[0];
             const last = c.path[c.path.length - 1];
             if (deletedPortPositions.has(`${first.x},${first.y}`) ||
@@ -144,10 +150,13 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         const { selectedMachineIds, selectedConnectionIds } = ms;
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;
 
-        const { machines, connections } = get();
+        const { machines, connections, currentViewingNodeId } = get();
 
-        const movingMachines = machines.filter(m => selectedMachineIds.includes(m.id));
-        const movingConnections = connections.filter(c => selectedConnectionIds.includes(c.id));
+        // 后代只读：子蓝图内的机器/连线不参与批量移动
+        const movingMachines = machines.filter(m =>
+            selectedMachineIds.includes(m.id) && isViewingOwn(m, currentViewingNodeId));
+        const movingConnections = connections.filter(c =>
+            selectedConnectionIds.includes(c.id) && isViewingOwn(c, currentViewingNodeId));
 
         if (movingMachines.length === 0 && movingConnections.length === 0) return;
 
@@ -177,10 +186,13 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
         const { selectedMachineIds, selectedConnectionIds } = ms;
         if (selectedMachineIds.length === 0 && selectedConnectionIds.length === 0) return;
 
-        const { machines, connections } = get();
+        const { machines, connections, currentViewingNodeId } = get();
 
-        const sourceMachines = machines.filter(m => selectedMachineIds.includes(m.id));
-        const sourceConnections = connections.filter(c => selectedConnectionIds.includes(c.id));
+        // 后代只读：子蓝图内的机器/连线不参与复制
+        const sourceMachines = machines.filter(m =>
+            selectedMachineIds.includes(m.id) && isViewingOwn(m, currentViewingNodeId));
+        const sourceConnections = connections.filter(c =>
+            selectedConnectionIds.includes(c.id) && isViewingOwn(c, currentViewingNodeId));
 
         if (sourceMachines.length === 0 && sourceConnections.length === 0) return;
 
@@ -366,7 +378,14 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                 if (collision) break;
             }
 
-            if (collision) return;
+            if (collision) {
+                toaster.create({
+                    title: '放置位置与现有连线冲突（拐角/交叉处不能放）',
+                    type: 'warning',
+                    duration: 3000,
+                });
+                return;
+            }
 
             const finalPlacedConns = placedConns.flatMap(c =>
                 splitPlaced.get(c.id) ?? [c]
@@ -392,6 +411,13 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
 
             return;
         }
+
+        // 机器碰撞/越界失败：给出反馈并保持 MOVE_SELECTION，允许调整位置重试
+        toaster.create({
+            title: '放置位置与现有内容重叠或越界',
+            type: 'warning',
+            duration: 3000,
+        });
 
     },
 });

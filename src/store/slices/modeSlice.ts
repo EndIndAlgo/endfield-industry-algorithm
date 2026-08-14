@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { ModeSlice, GameState } from './types';
 import type { ModeState } from '@/types';
+import { discardPendingInsertFork } from './blueprintSlice';
 
 const defaultModeState: ModeState = { kind: 'BUILD', placing: null };
 
@@ -82,7 +83,8 @@ export const createModeSlice: StateCreator<GameState, [], [], ModeSlice> = (set,
                 break;
             case 'BLUEPRINT_MOVE':
                 if (ms.isInserting) {
-                    // 从列表导入 → 直接丢弃
+                    // 从列表导入 → 直接丢弃；引用自己产生的 fork 副本一并清理
+                    discardPendingInsertFork(get, set, ms.childNodeId);
                     set({ modeState: { kind: 'BUILD', placing: null } });
                 } else {
                     // 移动已有子蓝图 → 取消，回到 BLUEPRINT_SELECT

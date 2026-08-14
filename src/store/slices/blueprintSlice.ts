@@ -34,6 +34,26 @@ function _ownContent(get: () => GameState, viewingNodeId: string | null) {
     };
 }
 
+/**
+ * 引用自己时产生的待插入 fork 副本登记表。
+ * 取消插入（Escape/右键）时由 modeSlice 调 discardPendingInsertFork 清理，
+ * 避免 fork 副本残留为孤儿根节点。
+ */
+const pendingInsertForks = new Set<string>();
+
+/** 清理取消插入后残留的 fork 副本（仅对引用自己产生的节点生效） */
+export function discardPendingInsertFork(
+    get: () => GameState,
+    set: (p: Partial<GameState>) => void,
+    nodeId: string,
+): void {
+    if (!pendingInsertForks.delete(nodeId)) return;
+    const { doc } = get();
+    const nextDoc = deleteNode(doc, nodeId);
+    saveDoc(nextDoc);
+    set({ doc: nextDoc });
+}
+
 export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlice> = (set, get) => ({
     uiView: 'editor',
     doc: loadDoc() ?? createEmptyDoc(),
@@ -106,6 +126,10 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         const node = getNode(get().doc, nodeId);
         if (!node) return;
 
+        // 清理活跃操作：避免未提交的移动/复制快照随导航残留（过期 modeState
+        // 会在下次点击时把幽灵内容提交到意外位置）
+        get().cancelOperation();
+
         const viewingMachines: PlacedMachine[] = node.machines.map((m) => ({
             ...m,
             blueprintNodeId: nodeId,
@@ -121,6 +145,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             currentAncestorPath: findAncestorPath(get().doc, nodeId),
             machines: viewingMachines,
             connections: viewingConnections,
+            modeState: { kind: 'BUILD', placing: null },
             history: { past: [], future: [] },
         });
 
@@ -130,11 +155,34 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
     // ── 子蓝图导入 ──
 
     startInsertChild: (nodeId) => {
-        const node = getNode(get().doc, nodeId);
+        const { doc, currentViewingNodeId } = get();
+
+        // 引用自己：fork 出一份副本再引用（写时复制语义，避免成环）。
+        // 副本登记进 pendingInsertForks，取消插入时清理。
+        let targetId = nodeId;
+        if (nodeId === currentViewingNodeId) {
+            const source = getNode(doc, nodeId);
+            if (source) {
+                const { doc: forkedDoc, newNodeId } = forkCommit(
+                    doc,
+                    nodeId,
+                    { machines: source.machines, connections: source.connections },
+                    source.name,
+                    source.gridW,
+                    source.gridH,
+                );
+                saveDoc(forkedDoc);
+                set({ doc: forkedDoc });
+                pendingInsertForks.add(newNodeId);
+                targetId = newNodeId;
+            }
+        }
+
+        const node = getNode(get().doc, targetId);
         if (!node) return;
 
         const childSummary: BlueprintSummary = {
-            nodeId,
+            nodeId: targetId,
             name: node.name,
             gridW: node.gridW,
             gridH: node.gridH,
@@ -143,7 +191,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         set({
             modeState: {
                 kind: 'BLUEPRINT_MOVE',
-                childNodeId: nodeId,
+                childNodeId: targetId,
                 childSummary,
                 moveAnchor: { x: 0, y: 0 },
                 isCopying: true,
@@ -189,6 +237,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
 
         get().takeSnapshot();
         const nextDoc = addChild(doc, currentViewingNodeId, childNodeId, ox, oy);
+        pendingInsertForks.delete(childNodeId);
         saveDoc(nextDoc);
         set({ doc: nextDoc, modeState: { kind: 'BUILD', placing: null } });
         get().syncStoreFromViewing();

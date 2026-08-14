@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useGameStore } from '@/store/gameStore';
-import { createEmptyDoc, findRoots, refCount } from '@/domain/doc';
+import { createEmptyDoc, findRoots, refCount, findAncestorPath } from '@/domain/doc';
 import type { PlacedMachine, Connection, ModeState } from '@/types';
 
 /** 创建一台测试用的 1x1 机器（物流桥，不占大空间） */
@@ -780,5 +780,116 @@ describe('蓝图树端到端流程', () => {
     expect(copied.blueprintNodeId).toBe(rootNodeId);
     const sourceId = useGameStore.getState().doc.nodes[childNodeId].machines[0].id;
     expect(copied.id).not.toBe(sourceId);
+  });
+
+  it('框选与批量移动过滤后代只读实体', () => {
+    const { createBlueprint, addMachine, saveCurrentBlueprint } = useGameStore.getState();
+
+    const insertChild = (childNodeId: string, x: number, y: number) => {
+      const childNode = useGameStore.getState().doc.nodes[childNodeId]!;
+      useGameStore.setState({
+        modeState: {
+          kind: 'BLUEPRINT_MOVE',
+          childNodeId,
+          childSummary: { nodeId: childNodeId, name: childNode.name, gridW: childNode.gridW, gridH: childNode.gridH },
+          moveAnchor: { x: 0, y: 0 },
+          previewOffset: null,
+          isCopying: true,
+          isInserting: true,
+          isValidPosition: true,
+        },
+      });
+      useGameStore.getState().commitInsert(x, y);
+    };
+
+    // 子蓝图 C：lbr 在 (2,2)
+    createBlueprint();
+    useGameStore.getState().takeSnapshot();
+    addMachine('lbr', 2, 2, 0);
+    saveCurrentBlueprint('子蓝图');
+    const childNodeId = useGameStore.getState().currentViewingNodeId!;
+
+    // 父蓝图 P：引用 C 于 (10,5) → 后代机器在 (12,7)；再加自有机器 spl@(5,5)
+    createBlueprint();
+    insertChild(childNodeId, 10, 5);
+    useGameStore.getState().takeSnapshot();
+    addMachine('spl', 5, 5, 0);
+    const ownMachine = useGameStore.getState().machines.find(m => m.blueprintNodeId === useGameStore.getState().currentViewingNodeId)!;
+    const descendantMachine = useGameStore.getState().machines.find(m => m.blueprintNodeId === childNodeId)!;
+
+    // 全图框选 → 只选中自有机器
+    useGameStore.setState({
+      modeState: { kind: 'DEVICE_SELECT', selectionStart: null, selectionEnd: null, selectedMachineIds: [], selectedConnectionIds: [] },
+    });
+    useGameStore.getState().setBoxSelection({ x: 0, y: 0 }, { x: 23, y: 23 });
+    useGameStore.getState().commitBoxSelection();
+    let ms = useGameStore.getState().modeState;
+    expect(ms.kind).toBe('DEVICE_SELECT');
+    if (ms.kind !== 'DEVICE_SELECT') return;
+    expect(ms.selectedMachineIds).toContain(ownMachine.id);
+    expect(ms.selectedMachineIds).not.toContain(descendantMachine.id);
+
+    // 批量移动 → 快照只含自有机器
+    useGameStore.getState().startBatchMove();
+    ms = useGameStore.getState().modeState;
+    expect(ms.kind).toBe('MOVE_SELECTION');
+    if (ms.kind !== 'MOVE_SELECTION') return;
+    expect(ms.movingMachinesSnapshot.map(m => m.id)).toEqual([ownMachine.id]);
+
+    // 后代机器仍保留在工作视图（未被移出）
+    expect(useGameStore.getState().machines.some(m => m.id === descendantMachine.id)).toBe(true);
+  });
+
+  it('引用自己：自动 fork 副本再插入，不成环', () => {
+    const { createBlueprint, addMachine, saveCurrentBlueprint } = useGameStore.getState();
+
+    createBlueprint();
+    useGameStore.getState().takeSnapshot();
+    addMachine('lbr', 3, 3, 0);
+    saveCurrentBlueprint('自己');
+    const nodeId = useGameStore.getState().currentViewingNodeId!;
+
+    useGameStore.getState().startInsertChild(nodeId); // 自己引用自己
+
+    const ms = useGameStore.getState().modeState;
+    expect(ms.kind).toBe('BLUEPRINT_MOVE');
+    if (ms.kind !== 'BLUEPRINT_MOVE') return;
+    expect(ms.childNodeId).not.toBe(nodeId); // 已 fork 成副本
+    const forkId = ms.childNodeId;
+    expect(useGameStore.getState().doc.nodes[forkId]).toBeDefined();
+
+    // 放入空闲位置 (10,10)：副本内容 lbr@(3,3) → 占位 (13,13)，无重叠
+    useGameStore.getState().commitInsert(10, 10);
+    const s = useGameStore.getState();
+    expect(s.doc.nodes[nodeId].children).toHaveLength(1);
+    expect(s.doc.nodes[nodeId].children[0].childNodeId).toBe(forkId);
+
+    // 不成环：nodeId 没有祖先（fork 是其子节点而非父节点）
+    expect(findAncestorPath(s.doc, nodeId)).toEqual([]);
+    expect(s.doc.nodes[forkId].children).toHaveLength(0);
+  });
+
+  it('loadBlueprint 重置 modeState（清理未提交的移动快照）', () => {
+    const nodeId = useGameStore.getState().createBlueprint();
+    useGameStore.getState().takeSnapshot();
+    useGameStore.getState().addMachine('lbr', 2, 2, 0);
+    useGameStore.getState().saveCurrentBlueprint('v1'); // 提交到 doc，保证 loadBlueprint 有内容可装载
+
+    // 进入未提交的 MOVE_SELECTION
+    useGameStore.setState({
+      modeState: {
+        kind: 'MOVE_SELECTION',
+        moveAnchor: { x: 0, y: 0 },
+        movingMachinesSnapshot: [],
+        movingConnectionsSnapshot: [],
+        isCopying: true,
+        originSelectedMachineIds: [],
+        originSelectedConnectionIds: [],
+      },
+    });
+
+    useGameStore.getState().loadBlueprint(nodeId);
+    expect(useGameStore.getState().modeState.kind).toBe('BUILD');
+    expect(useGameStore.getState().machines).toHaveLength(1);
   });
 });
