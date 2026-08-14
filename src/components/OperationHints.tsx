@@ -184,6 +184,12 @@ export const OperationHints = () => {
                         </div>
                         <span>拖曳选取</span>
                     </div>
+                    <div className="hint-item">
+                        <div className="key-icon">
+                            <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
+                        </div>
+                        <span>拖动已选机器 → 移动</span>
+                    </div>
                 </>
             )}
 
@@ -213,6 +219,12 @@ export const OperationHints = () => {
                             <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
                         </div>
                         <span>选中子蓝图</span>
+                    </div>
+                    <div className="hint-item">
+                        <div className="key-icon">
+                            <Icon icon="ph:mouse-left-click-fill" width="24" height="24" />
+                        </div>
+                        <span>拖动选中子蓝图 → 移动</span>
                     </div>
                     <div className="hint-item">
                         <div className="key-icon">B</div>

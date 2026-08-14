@@ -14,6 +14,14 @@ interface UseKeyboardShortcutsDeps {
 export function useKeyboardShortcuts({ getHoverGridPos }: UseKeyboardShortcutsDeps): void {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 输入框/可编辑元素聚焦时屏蔽全局快捷键（对话框命名等场景，防止误切换模式/误删）
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      // 按住时浏览器会以系统重复率持续触发 keydown：X/B 是 toggle 语义会高频翻转、R 会连续旋转
+      if (e.repeat) return;
+
       const s = useGameStore.getState();
       const ms = s.modeState;
       const isPlacing = ms.kind === 'BUILD' && ms.placing !== null;
@@ -62,21 +70,14 @@ export function useKeyboardShortcuts({ getHoverGridPos }: UseKeyboardShortcutsDe
         if (isPlacing || isConnecting) return;
         s.setMode(ms.kind === 'BLUEPRINT_SELECT' ? 'BUILD' : 'BLUEPRINT_SELECT');
       } else if (key === 'f') {
-        s.takeSnapshot();
-        s.deleteSelected();
+        s.deleteSelected(); // 快照由 deleteSelected 在真正写入前拍摄
       } else if (e.key === 'F1') {
         e.preventDefault();
         s.setUiView('list');
       } else if (key === 'm') {
-        const hover = getHoverGridPos();
-        if (hover) {
-          s.startBatchMove();
-        }
+        s.startBatchMove();
       } else if ((e.ctrlKey || e.metaKey) && key === 'c') {
-        const hover = getHoverGridPos();
-        if (hover) {
-          s.startCopySelection();
-        }
+        s.startCopySelection();
       } else if (e.key === 'Escape') {
         s.cancelOperation();
       }
