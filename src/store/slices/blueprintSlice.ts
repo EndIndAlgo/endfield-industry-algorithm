@@ -83,10 +83,11 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         if (parentNodeId) {
             const parent = blueprintLibrary.read(parentNodeId);
             if (parent) {
-                blueprintLibrary.removeChild(parentNodeId, get().currentViewingNodeId!);
+                // 必须在 removeChild 之前读取旧引用位置（removeChild 会替换 children 数组）
                 const oldChildRef = parent.children.find(
                     (c) => c.childNodeId === get().currentViewingNodeId,
                 );
+                blueprintLibrary.removeChild(parentNodeId, get().currentViewingNodeId!);
                 blueprintLibrary.addChild(
                     parentNodeId, forkNodeId,
                     oldChildRef?.x ?? 0,
