@@ -1,6 +1,23 @@
 # Bugs
 
-## 🔴 已修复
+## 📋 架构收敛重构（2026-07-16 审查 → 修复）
+
+> 蓝图树重构（99b9153）与 PixiJS 迁移（ce6d019 起）的专项审查发现，
+> 按 P0 止血 → P1 领域收敛 → P2 画布集成 → P3 性能 → P4 功能补全 顺序修复。
+> 设计决策见 `docs/ARCHITECTURE.md`。
+
+### P0 ✅ 已修复
+- **B1 嵌套保存位置归零**：`saveCurrentBlueprint` 先 removeChild 再读旧引用 → 恒 undefined。先读 oldChildRef 再 removeChild（34ed8bb）
+- **B3 蓝图成环无防护**：`addChild` 拒绝自引用/祖先引用；`findAncestorPath`/`buildTree`/`isInSubtree` 加 visited；UI 禁用成环导入；commitInsert 失败 toast（e801006）
+- **B2 fork 孤儿根**：非共享（含根）保存改为原地提交 nodeId 不变；仅共享时分叉且分叉自旧版本（其他调用方引用不变，顺带修复共享编辑泄漏旧版本的深层问题）；recalcDependents 重算父级掩码（39c8983）
+
+### P1 ✅ 已修复（单一真相源）
+- **H4 undo/redo 不写回引擎**：引擎整体删除。历史快照 = { machines, connections, doc }，undo/redo 直接恢复并落盘
+- **H2/H6 保存后刷新加载过期/空根**：无 fork 孤儿产生；App 启动加载 findRoots()[0] 稳定
+- **H5 导航静默丢编辑**：检出式语义，离开当前蓝图前 `isCheckoutDirty()` + confirm
+- **M8 clearLegacyData 静默删数据**：旧格式直接废弃，无清理逻辑
+
+## 🔴 已修复（旧记录）
 
 ### 13. ~~地图边缘端口越界1格传送带~~ ✅ 已修复 (2026-06-27)
 - **文件**: `connectionSlice.ts:38-58`, `connectionSlice.ts:180-192`

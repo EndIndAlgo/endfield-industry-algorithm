@@ -68,6 +68,7 @@ function flattenTree(nodes: TreeNode[]): TreeNode[] {
 
 export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
     const startInsertChild = useGameStore((s) => s.startInsertChild);
+    const startFlattenCopy = useGameStore((s) => s.startFlattenCopy);
     const loadBlueprint = useGameStore((s) => s.loadBlueprint);
     const deleteBlueprint = useGameStore((s) => s.deleteBlueprint);
     const setUiView = useGameStore((s) => s.setUiView);
@@ -120,6 +121,15 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
             useGameStore.getState().createBlueprint();
         }
         startInsertChild(nodeId);
+        setUiView('editor');
+    };
+
+    const handleFlattenCopy = (nodeId: string) => {
+        // 展平复制不建立引用，同样需要当前有 viewing 蓝图承接
+        if (!currentViewingNodeId) {
+            useGameStore.getState().createBlueprint();
+        }
+        startFlattenCopy(nodeId);
         setUiView('editor');
     };
 
@@ -296,12 +306,11 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
                                         <Link size={16} />
                                     </IconButton>
                                 </Tooltip>
-                                <Tooltip content={canImportRef(node.nodeId) ? '展平复制导入' : '不能导入：会形成循环引用'}>
+                                <Tooltip content="展平复制导入（不建立引用）">
                                     <IconButton
                                         rounded="full"
                                         className="member-icon-btn"
-                                        disabled={!canImportRef(node.nodeId)}
-                                        onClick={() => handleImportRef(node.nodeId)}
+                                        onClick={() => handleFlattenCopy(node.nodeId)}
                                         aria-label="导入复制"
                                     >
                                         <Copy size={16} />
