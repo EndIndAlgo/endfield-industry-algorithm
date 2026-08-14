@@ -2,8 +2,9 @@ import type { Side } from '@/types';
 import { GRID_SIZE } from '@/config/constants';
 
 /** 端口中心在格子内的像素偏移量
- *  推导: 20(GRID_SIZE/2) - 3(容器padding) - 2(容器border) - 3(机身border) = 12 */
-const CELL_CENTER = (GRID_SIZE / 2) - 3 - 2 - 3; // = 12
+ *  PixiJS 容器无 padding/border，端口中心 = 格中心（GRID_SIZE/2），
+ *  与 ConnectionRenderer 的连线端点（cell 中心 +20）对齐 */
+const CELL_CENTER = GRID_SIZE / 2;
 
 /** 端口在机器内部的居中对齐位置 */
 export interface PortPixelCenter {
