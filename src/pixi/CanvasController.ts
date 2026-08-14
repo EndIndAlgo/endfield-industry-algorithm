@@ -6,7 +6,7 @@ import { MachineRenderer } from './renderers/MachineRenderer';
 import { ConnectionRenderer } from './renderers/ConnectionRenderer';
 import { OverlayRenderer } from './renderers/OverlayRenderer';
 import { preloadMachineTextures } from './TextureLoader';
-import { createModeHandlers, type NormalizedPointer } from './modeHandlers';
+import { createModeHandlers, snapToCell, type NormalizedPointer } from './modeHandlers';
 import { getMachineConfig } from '@/config/machines';
 import { getRotatedDimensions, buildPowerGrid } from '@/utils/machineUtils';
 import { clampPan } from '@/utils/grid';
@@ -806,11 +806,12 @@ export class CanvasController {
       }
 
       case 'MOVE_SELECTION': {
-        // 批量移动/复制预览：偏移 = 当前 hover - moveAnchor（与 commitBatchMove 一致）
+        // 批量移动/复制预览：偏移 = 指针所在格 - moveAnchor（floor 包含约定，与 commitBatchMove 一致）
         if (state.hoverPosFrac) {
+          const cell = snapToCell(state.hoverPosFrac);
           const offset = {
-            x: Math.round(state.hoverPosFrac.x) - ms.moveAnchor.x,
-            y: Math.round(state.hoverPosFrac.y) - ms.moveAnchor.y,
+            x: cell.x - ms.moveAnchor.x,
+            y: cell.y - ms.moveAnchor.y,
           };
           const preview = OverlayRenderer.createBatchMovePreview(
             ms.movingMachinesSnapshot,

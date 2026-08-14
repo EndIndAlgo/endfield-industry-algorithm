@@ -38,6 +38,16 @@ export interface ModeHandlers {
   onTap: (e: NormalizedPointer) => void;
 }
 
+/**
+ * 网格包含约定：格 (n,n) 对应连续坐标范围 [n, n+1) × [n, n+1)。
+ * 所有"连续分数坐标 → 目标格"的转换统一用 floor（与 screenToGrid 一致），
+ * 禁止用 Math.round——round 会让 (0,0) 格错误对应 (-0.5, 0.5) 范围，
+ * 造成批量移动/蓝图放置的预览与提交错位半格。
+ */
+export function snapToCell(frac: Point): Point {
+  return { x: Math.floor(frac.x), y: Math.floor(frac.y) };
+}
+
 // ── BLUEPRINT_SELECT 命中辅助（来自 useBlueprintSelectMode） ──
 
 function isInSubtree(
@@ -194,6 +204,13 @@ export function createModeHandlers(ctx: ModeHandlerContext): ModeHandlers {
     onMove: (grid, buttons) => {
       wire.onMove(grid);
       select.onMove(grid, buttons);
+      // BLUEPRINT_MOVE：预览偏移跟随指针所在格（grid 已是 floor 包含约定，与提交一致）
+      const ms = useGameStore.getState().modeState;
+      if (ms.kind === 'BLUEPRINT_MOVE') {
+        useGameStore.setState({
+          modeState: { ...ms, previewOffset: { x: grid.x, y: grid.y } },
+        });
+      }
     },
     onTap: (e) => {
       const s = useGameStore.getState();
@@ -212,12 +229,8 @@ export function createModeHandlers(ctx: ModeHandlerContext): ModeHandlers {
         return;
       }
       if (ms.kind === 'BLUEPRINT_MOVE') {
-        // commitInsert 内部已 takeSnapshot
-        const frac = s.hoverPosFrac;
-        const gridPos = frac
-          ? { x: Math.round(frac.x), y: Math.round(frac.y) }
-          : e.grid;
-        s.commitInsert(gridPos.x, gridPos.y);
+        // 子蓝图锚点 = 指针所在格（floor 包含约定；commitInsert 内部校验合法性）
+        s.commitInsert(e.grid.x, e.grid.y);
         return;
       }
       if (ms.kind === 'BUILD' && ms.placing) {

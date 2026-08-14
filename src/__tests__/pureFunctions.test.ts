@@ -725,3 +725,28 @@ describe('虚拟机器 & blueprintTree', () => {
         expect(canInsertChild(doc, a.nodeId, 'missing')).toBe(false);
     });
 });
+
+// ======================================================================
+// 网格包含约定：snapToCell（floor 统一）
+// ======================================================================
+describe('snapToCell 网格包含约定', () => {
+    it('格 (0,0) 对应连续范围 (0~1, 0~1)', async () => {
+        const { snapToCell } = await import('@/pixi/modeHandlers');
+        expect(snapToCell({ x: 0.0, y: 0.0 })).toEqual({ x: 0, y: 0 });
+        expect(snapToCell({ x: 0.9, y: 0.9 })).toEqual({ x: 0, y: 0 });
+        expect(snapToCell({ x: 1.0, y: 1.0 })).toEqual({ x: 1, y: 1 });
+    });
+
+    it('负坐标向下取整（格 -1 对应 [-1, 0)）', async () => {
+        const { snapToCell } = await import('@/pixi/modeHandlers');
+        expect(snapToCell({ x: -0.1, y: -0.1 })).toEqual({ x: -1, y: -1 });
+        expect(snapToCell({ x: -1.0, y: -1.0 })).toEqual({ x: -1, y: -1 });
+    });
+
+    it('与提交路径一致：2.6 落在格 2（round 会给 3，导致预览错位半格）', async () => {
+        const { snapToCell } = await import('@/pixi/modeHandlers');
+        expect(snapToCell({ x: 2.6, y: 2.6 })).toEqual({ x: 2, y: 2 });
+        // 记录回归场景：MOVE_SELECTION 预览曾用 round 而提交用 floor，此处二者必须同为 2
+        expect(Math.round(2.6)).toBe(3);
+    });
+});
