@@ -7,6 +7,7 @@ import { Mask } from '@/utils/mask';
 import { getMachinePortCheckPositions, getBoundingBox, getCornerPoints, splitConnectionAt, buildExistingCornerGrid } from '@/utils/grid';
 import { getRotatedDimensions, getMachineConfigById, resolveMachineMasks } from '@/utils/machineUtils';
 import { isViewingOwn } from '@/utils/blueprintGuard';
+import { buildDescendantLineMask } from '@/utils/blueprintPlacement';
 import { toaster } from '@/utils/toaster';
 
 export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlice> = (set, get) => ({
@@ -279,14 +280,19 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
 
             const portTypes = [...new Set(placedConns.map(c => c.portType))];
 
+            // 子蓝图不可变：批量移动的连线不得穿过后代连线区域
+            const descLineMask = buildDescendantLineMask(connections, currentViewingNodeId, gridWidth, gridHeight);
+
             for (const pt of portTypes) {
                 const bridgeId = pt === 'Liquid' ? 'pbr' : 'lbr';
                 const bridgeMask = getMachineConfigById(bridgeId)!.mask.maxMask;
                 const connMask = portTypeToMask[pt];
 
+                // 交叉/拆分只针对自有连线；后代连线不参与
                 const pointToConns = new Map<string, Connection[]>();
                 for (const c of connections) {
                     if (c.portType !== pt) continue;
+                    if (!isViewingOwn(c, currentViewingNodeId)) continue;
                     for (const p of c.path) {
                         const key = `${p.x},${p.y}`;
                         const list = pointToConns.get(key) || [];
@@ -295,7 +301,8 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                     }
                 }
 
-                const cornerGrid = buildExistingCornerGrid(connections, gridWidth, gridHeight, pt);
+                const ownConns = connections.filter(c => isViewingOwn(c, currentViewingNodeId));
+                const cornerGrid = buildExistingCornerGrid(ownConns, gridWidth, gridHeight, pt);
 
                 const fullMask = Mask.FromOccupancy({ machines: resolveMachineMasks(allMachines), connections, gridW: gridWidth, gridH: gridHeight });
                 for (const b of bridgesToCreate) {
@@ -306,6 +313,15 @@ export const createSelectionSlice: StateCreator<GameState, [], [], SelectionSlic
                 }
                 for (const conn of placedConns) {
                     if (conn.portType !== pt) continue;
+
+                    // 后代连线区域不可穿透（路径格 + 拐角格）
+                    const placedCells = [...conn.path, ...getCornerPoints(conn.path, conn.tailFacing, conn.headFacing)];
+                    if (placedCells.some(p =>
+                        p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight
+                        && descLineMask.get(p.x, p.y) !== 0)) {
+                        collision = true;
+                        break;
+                    }
 
                     const intersectionPoints: Point[] = [];
                     for (const p of conn.path) {

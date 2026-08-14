@@ -803,7 +803,7 @@ describe('validateChildPlacement 蓝图插入校验', () => {
         })).toBe(true);
     });
 
-    it('异类连线交叉允许；机器与连线重叠非法', async () => {
+    it('子蓝图区域不可变：任何占位重叠非法（含异类型线交叉）', async () => {
         const { createNodeWithContent } = await import('@/domain/doc');
         const { validateChildPlacement } = await import('@/utils/blueprintPlacement');
         const child = createNodeWithContent('C', 4, 4, {
@@ -821,17 +821,34 @@ describe('validateChildPlacement 蓝图插入校验', () => {
             path: [{ x: 2, y: 0 }, { x: 2, y: 1 }],
             portType: 'Solid' as const,
         };
-        // 异类连线在 (2,1) 交叉（2 & 4 = 0）→ 允许
+        // 异类连线在 (2,1) 交叉（2 & 4 = 0）→ 插入流程不生成桥，同样拒绝
         expect(validateChildPlacement(doc, child.nodeId, 0, 0, {
             machines: [], connections: [parentLine], gridWidth: 24, gridHeight: 24,
-        })).toBe(true);
+        })).toBe(false);
 
-        // 同格有普通机器（ref 掩码 255）→ 与 Liquid 线重叠非法
-        // （注：lbr 掩码 3 与 Liquid 线 4 不冲突，液体线可穿过固体物流器下方，属游戏规则）
+        // 普通机器（ref 掩码 255）重叠 → 非法
         expect(validateChildPlacement(doc, child.nodeId, 0, 0, {
             machines: [{ id: 'pm', machineId: 'ref', x: 0, y: 0, rotation: 0 as const }],
             connections: [], gridWidth: 24, gridHeight: 24,
         })).toBe(false);
+    });
+
+    it('buildDescendantLineMask 只标记后代连线', async () => {
+        const { buildDescendantLineMask } = await import('@/utils/blueprintPlacement');
+        const conns = [
+            {
+                id: 'own', tailFacing: 0 as const, headFacing: 2 as const,
+                path: [{ x: 1, y: 1 }], portType: 'Solid' as const, blueprintNodeId: 'view',
+            },
+            {
+                id: 'desc', tailFacing: 0 as const, headFacing: 2 as const,
+                path: [{ x: 3, y: 3 }], portType: 'Liquid' as const, blueprintNodeId: 'child',
+            },
+        ];
+        const mask = buildDescendantLineMask(conns, 'view', 24, 24);
+        expect(mask.get(1, 1)).toBe(0);   // 自有连线不标记
+        expect(mask.get(3, 3)).toBe(4);   // 后代 Liquid 线标记
+        expect(mask.get(0, 0)).toBe(0);
     });
 });
 

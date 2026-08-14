@@ -5,6 +5,8 @@ import { portTypeToMask } from '@/types';
 import { Mask } from '@/utils/mask';
 import { getMachineConfigById, resolveMachineMasks } from '@/utils/machineUtils';
 import { isViewingOwn } from '@/utils/blueprintGuard';
+import { buildDescendantLineMask } from '@/utils/blueprintPlacement';
+import { toaster } from '@/utils/toaster';
 import {
     findMachineAt,
     splitConnectionAt,
@@ -13,6 +15,7 @@ import {
     findRouteForMachine,
     findRouteToGround,
     checkStartOverlap,
+    getCornerPoints,
 } from '@/utils/grid';
 
 // ── 占用网格缓存 ──
@@ -73,7 +76,7 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         const ms = get().modeState;
         if (ms.kind !== 'WIRE' || !ms.connecting) return;
 
-        const { connections, machines, gridWidth, gridHeight } = get();
+        const { connections, machines, gridWidth, gridHeight, currentViewingNodeId } = get();
         const { availablePorts, portType, lShapeMode, isContinuing } = { portType: ms.portType, ...ms.connecting };
         if (availablePorts.length === 0) return;
 
@@ -97,9 +100,23 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             sameConnGrid = _gridCache.sameConnGrid;
             existingCornerGrid = _gridCache.existingCornerGrid;
         } else {
-            mergedGrid = Mask.FromOccupancy({ machines: resolveMachineMasks(machines), connections, gridW: gw, gridH: gh, excludePortType: portType });
-            sameConnGrid = buildConnectionGrid(connections, gw, gh, portType);
-            existingCornerGrid = buildExistingCornerGrid(connections, gw, gh, portType);
+            // 自有连线参与常规占用/交叉逻辑（同类型可通过、交叉放桥）；
+            // 后代连线整体视为不可穿透障碍（子蓝图不可变：不交叉、不架桥、不拆分）
+            const ownConns = connections.filter(c => isViewingOwn(c, currentViewingNodeId));
+            mergedGrid = Mask.FromOccupancy({ machines: resolveMachineMasks(machines), connections: ownConns, gridW: gw, gridH: gh, excludePortType: portType });
+            for (const c of connections) {
+                if (isViewingOwn(c, currentViewingNodeId)) continue;
+                const v = portTypeToMask[c.portType];
+                if (!v) continue;
+                for (const p of c.path) {
+                    if (p.x >= 0 && p.x < gw && p.y >= 0 && p.y < gh) {
+                        // 0xFF：任何类型的连线都不可通过（含异类型视觉交叉）
+                        mergedGrid.WriteValue(p.x, p.y, 0xFF);
+                    }
+                }
+            }
+            sameConnGrid = buildConnectionGrid(ownConns, gw, gh, portType);
+            existingCornerGrid = buildExistingCornerGrid(ownConns, gw, gh, portType);
             _gridCache = { machines, connections, gw, gh, portType, mergedGrid, sameConnGrid, existingCornerGrid };
         }
 
@@ -213,10 +230,11 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
         const tailFacing = activeTailFacing;
         const headFacing = previewHeadFacing;
 
-        // ── 交叉检测与桥生成 ──
+        // ── 交叉检测与桥生成（只对自有连线做交叉/拆分；后代连线不可变） ──
         const pointToConns = new Map<string, Connection[]>();
         for (const conn of connections) {
             if (conn.portType !== wiringPortType) continue;
+            if (!isViewingOwn(conn, currentViewingNodeId)) continue;
             for (const p of conn.path) {
                 const key = `${p.x},${p.y}`;
                 const list = pointToConns.get(key) || [];
@@ -225,10 +243,26 @@ export const createConnectionSlice: StateCreator<GameState, [], [], ConnectionSl
             }
         }
 
-        // 已有同类型连线拐弯点 (桥不能放在已有线的拐弯处)
+        // 已有同类型连线拐弯点 (桥不能放在已有线的拐弯处)；仅自有连线
         const { gridWidth: gw2, gridHeight: gh2 } = get();
         const w = gw2 || 100; const h = gh2 || 100;
-        const existingCornerGrid2 = buildExistingCornerGrid(connections, w, h, wiringPortType);
+        const ownConnsAll = connections.filter(c => isViewingOwn(c, currentViewingNodeId));
+        const existingCornerGrid2 = buildExistingCornerGrid(ownConnsAll, w, h, wiringPortType);
+
+        // ── 子蓝图不可变：新连线不得穿过后代连线区域（同类型/异类型均拒绝） ──
+        const descLineMask = buildDescendantLineMask(connections, currentViewingNodeId, w, h);
+        const newConnCells = [...path, ...getCornerPoints(path, tailFacing, headFacing)];
+        if (newConnCells.some(p =>
+            p.x >= 0 && p.x < w && p.y >= 0 && p.y < h
+            && descLineMask.get(p.x, p.y) !== 0)) {
+            toaster.create({
+                title: '连线与子蓝图区域冲突，无法提交',
+                type: 'warning',
+                duration: 3000,
+            });
+            set({ modeState: { kind: 'WIRE', portType: wiringPortType, connecting: null } });
+            return;
+        }
 
         const intersectionPoints: Point[] = [];
         for (const p of path) {

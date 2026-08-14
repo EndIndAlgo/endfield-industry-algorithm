@@ -4,8 +4,8 @@
  * 校验子蓝图放置在 (ox, oy) 是否合法：
  * 1. 越界：锚点 ≥ 0；非空蓝图按实际占位格判定（声明网格多为默认尺寸不作硬约束），
  *    空蓝图按声明网格尺寸判定
- * 2. 与父内容的掩码重叠（按游戏分层语义：同层/机器位重叠即冲突，
- *    异类连线交叉允许——与 Mask 系统的桥规则一致）
+ * 2. 与父内容的占位重叠：**任何重叠即冲突**（子蓝图区域不可变——机器/连线同层
+ *    异层都不可叠，异类型线交叉也拒绝，因为插入流程不生成桥）
  *
  * 缓存策略（不可变更新下引用即身份）：
  * - 子蓝图占位格：CommittedNode 对象 → 展平后的相对占用格列表
@@ -17,6 +17,7 @@ import type { PlacedMachine, Connection } from '@/types';
 import { portTypeToMask } from '@/types';
 import { Mask } from './mask';
 import { resolveMachineMasks, getMachineConfigById } from './machineUtils';
+import { isDescendant } from './blueprintGuard';
 
 interface OccupiedCell {
   x: number;
@@ -129,8 +130,32 @@ export function validateChildPlacement(
     const x = cell.x + ox;
     const y = cell.y + oy;
     if (x < 0 || y < 0 || x >= parent.gridWidth || y >= parent.gridHeight) return false;
-    // 位重叠即冲突：机器位/同层线不可叠；异类连线 (2 & 4 = 0) 允许交叉
-    if ((parentMask.get(x, y) & cell.value) !== 0) return false;
+    // 严格不可重叠：父占用掩码任何非零位（机器/任一类型连线）都视为冲突
+    if (parentMask.get(x, y) !== 0) return false;
   }
   return true;
+}
+
+/**
+ * 后代连线阻挡掩码：子蓝图除整体移动/旋转外不可变，
+ * 其后代连线整体视为不可穿透障碍（同类型/异类型均不允许交叉、不架桥、不拆分）。
+ */
+export function buildDescendantLineMask(
+  connections: Connection[],
+  viewingNodeId: string | null,
+  gridW: number,
+  gridH: number,
+): Mask {
+  const mask = Mask.Uniform(gridW, gridH, 0);
+  for (const c of connections) {
+    if (!isDescendant(c, viewingNodeId)) continue;
+    const v = portTypeToMask[c.portType] ?? 0;
+    if (v === 0) continue;
+    for (const p of c.path) {
+      if (p.x >= 0 && p.x < gridW && p.y >= 0 && p.y < gridH) {
+        mask.WriteValue(p.x, p.y, v);
+      }
+    }
+  }
+  return mask;
 }

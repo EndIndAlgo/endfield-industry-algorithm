@@ -892,4 +892,63 @@ describe('蓝图树端到端流程', () => {
     expect(useGameStore.getState().modeState.kind).toBe('BUILD');
     expect(useGameStore.getState().machines).toHaveLength(1);
   });
+
+  it('批量移动连线不得穿过后代连线（子蓝图不可变区域）', () => {
+    const { createBlueprint, saveCurrentBlueprint } = useGameStore.getState();
+
+    // 子蓝图 C：Solid 线 (2,0)-(2,3)
+    createBlueprint();
+    const childNodeId = useGameStore.getState().currentViewingNodeId!;
+    useGameStore.setState({
+      connections: [{
+        id: 'dc', tailFacing: 2 as const, headFacing: 0 as const,
+        path: [{ x: 2, y: 0 }, { x: 2, y: 1 }, { x: 2, y: 2 }, { x: 2, y: 3 }],
+        portType: 'Solid' as const,
+        blueprintNodeId: childNodeId,
+      }],
+    });
+    saveCurrentBlueprint('子蓝图');
+
+    // 父蓝图 P：引用 C 于 (0,0) → 后代线占位 (2,0)-(2,3)
+    createBlueprint();
+    const childNode = useGameStore.getState().doc.nodes[childNodeId]!;
+    useGameStore.setState({
+      modeState: {
+        kind: 'BLUEPRINT_MOVE',
+        childNodeId,
+        childSummary: { nodeId: childNodeId, name: childNode.name, gridW: childNode.gridW, gridH: childNode.gridH },
+        moveAnchor: { x: 0, y: 0 },
+        previewOffset: null,
+        isCopying: true,
+        isInserting: true,
+        isValidPosition: true,
+      },
+    });
+    useGameStore.getState().commitInsert(0, 0);
+    const connCountBefore = useGameStore.getState().connections.length;
+    expect(connCountBefore).toBe(1); // 仅后代线
+
+    // 模拟批量移动：自有 Solid 线横向穿过 (2,1)（后代线格）→ 应被拒绝
+    useGameStore.setState({
+      modeState: {
+        kind: 'MOVE_SELECTION',
+        moveAnchor: { x: 0, y: 0 },
+        movingMachinesSnapshot: [],
+        movingConnectionsSnapshot: [{
+          id: 'mv', tailFacing: 1 as const, headFacing: 1 as const,
+          path: [{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 3, y: 1 }],
+          portType: 'Solid' as const,
+          blueprintNodeId: useGameStore.getState().currentViewingNodeId ?? undefined,
+        }],
+        isCopying: false,
+        originSelectedMachineIds: [],
+        originSelectedConnectionIds: [],
+      },
+    });
+    useGameStore.getState().commitBatchMove({ x: 0, y: 0 });
+
+    // 拒绝：连线数不变（后代线未被拆分），且保持 MOVE_SELECTION 可调整位置
+    expect(useGameStore.getState().connections.length).toBe(1);
+    expect(useGameStore.getState().modeState.kind).toBe('MOVE_SELECTION');
+  });
 });
