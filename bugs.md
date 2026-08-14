@@ -17,6 +17,29 @@
 - **H5 导航静默丢编辑**：检出式语义，离开当前蓝图前 `isCheckoutDirty()` + confirm
 - **M8 clearLegacyData 静默删数据**：旧格式直接废弃，无清理逻辑
 
+### P2 ✅ 已修复（画布集成层，CanvasController）
+- **P1 坐标归一化**：所有事件只在 `CanvasController.toNormalized()` 一处取 `e.global`，click 子路径（连线起点/框选/批量移动提交/蓝图选择）偏移消除
+- **P2/H1 机器池 stale-key**：`MachineRenderer.update` 无条件同步 position，machineId/rotation 变化重建静态三件套（39bb840）
+- **P3/H2 Ghost 不跟随鼠标**：hoverPosFrac 进入 diff 清单 → Ghost 跟随
+- **P4/H3 MOVE_SELECTION 无预览**：syncOverlays 增加批量移动虚影分支（BATCH_BASE 基底）
+- **M1 中键误触发 click**：click 仅 button 0
+- **M2 右键弹浏览器菜单**：canvas 原生 contextmenu preventDefault
+- **M3 触屏/触控笔失效**：tap / pointertap 映射提交
+- **M4 指针越界**：globalpointermove 越界清 hover
+- **M5 平移/缩放不 clamp**：统一 clampPan
+- **M9 destroy 竞态**：attachGen 代数令牌 + 先退订再销毁 + init 失败清理
+
+### P3 ✅ 已修复（性能与视觉）
+- **H4 modeState 全量重建**：WIRE 预览只重画预览线；选中集变化只更高亮；powerGrid WeakMap 缓存（39bb840）
+- **M7 机器标签永不显示**：CanvasController hover 命中显示/隐藏 + zoom 反缩放（fa0bfd9）
+- **M1(渲染) 端口中心 8px 偏移**：CELL_CENTER 改回格中心 20（9e16042）
+- **L4 GridLayer 纹理缓存污染**：模块级单例（fa0bfd9）
+- **L3 动态 URL 打包风险**：已验证 dist 包含全部 23 个图标，关闭
+- 附带修复：MachineRenderer 首次 update 未补建动态子元素（hasDynamic 标记）
+
+### P4 ✅ 已修复（功能补全）
+- **B5 commitMove/cloneBlueprint 死代码 + Copy 按钮假实现**：`startFlattenCopy` 展平复制（含后代）真实现，Copy 按钮接入（9b5afd9、54048b6）
+
 ## 🔴 已修复（旧记录）
 
 ### 13. ~~地图边缘端口越界1格传送带~~ ✅ 已修复 (2026-06-27)

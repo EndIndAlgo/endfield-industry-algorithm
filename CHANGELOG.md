@@ -7,7 +7,8 @@
 - **P0 数据安全**（34ed8bb → 39c8983）：嵌套保存位置归零（先读 oldChildRef 再 removeChild）；蓝图循环引用防护（addChild 环检测 + 递归遍历 visited + UI 禁用成环导入）；保存策略修正（仅被共享时分叉、非共享原地保存，共享分叉不再污染旧版本）
 - **P1 单一真相源**（63a93df、1dd095d）：FactoryDoc 进入 store 成为唯一持久化对象（`src/domain/`），检出式 commit/fork 语义；删除 RegistryEngine 引擎双真相与旧 storage/blueprintTree/flatten；历史快照 = { machines, connections, doc } 且 undo/redo 落盘；离开蓝图前 dirty 确认；旧 localStorage 数据直接废弃
 - **P4 展平复制**（9b5afd9、54048b6）：`startFlattenCopy` 展平目标蓝图（含后代）为普通内容进入放置态；蓝图列表 Copy 按钮接入真实现
-- **P2 画布集成层**（进行中）：CanvasController + 事件坐标归一化 + 完整 diff 契约（Ghost 跟随、MOVE_SELECTION 预览、机器池位置同步、事件语义修复）
+- **P2 画布集成层**（f0b84bc、39bb840、03f055b）：CanvasController 单类收敛（事件归一化只在 e.global 一处、attach/detach 幂等状态机 + attachGen 代数令牌）；modeHandlers 纯函数处理器表；删除 8 个旧 hook/管理器；修复坐标偏移/机器池位置同步/Ghost 跟随/MOVE_SELECTION 虚影预览/中键误触发/右键菜单/触屏/越界 hover/clampPan/生命周期竞态
+- **P3 性能与视觉**（9e16042、fa0bfd9）：端口中心 8px 偏移修复；机器 hover 标签显示 + zoom 反缩放；cullArea/isRenderGroup/网格纹理单例；首次 update 动态子元素补建修复
 
 ## Sprint 12 (2026-06-19 → 06-22) — GameMode → ModeState 判别联合重构
 
