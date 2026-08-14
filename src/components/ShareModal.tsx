@@ -30,6 +30,13 @@ export const ShareModal = ({ onClose }: ShareModalProps) => {
         try {
             const { machines, connections } = useGameStore.getState();
             const url = generateShareUrl({ machines, connections });
+            if (!url) {
+                toaster.create({
+                    title: '蓝图尺寸超出分享链接上限（256 格），无法生成链接',
+                    type: 'warning',
+                    duration: 4000,
+                });
+            }
             setShareLink(url);
 
             requestAnimationFrame(async () => {

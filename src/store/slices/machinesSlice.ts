@@ -5,6 +5,7 @@ import { MACHINES } from '@/config/machines';
 import { checkPlacementCollision, getMachinePortCheckPositions } from '@/utils/grid';
 import { getRotatedDimensions } from '@/utils/machineUtils';
 import { isViewingOwn } from '@/utils/blueprintGuard';
+import { toaster } from '@/utils/toaster';
 
 export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice> = (set, get) => ({
     machines: [],
@@ -80,15 +81,32 @@ export const createMachinesSlice: StateCreator<GameState, [], [], MachinesSlice>
         if (candidateRect.x < 0 || candidateRect.y < 0 ||
             candidateRect.x + candidateRect.width > gridWidth ||
             candidateRect.y + candidateRect.height > gridHeight) {
+            toaster.create({
+                title: '放置位置越界',
+                type: 'warning',
+                duration: 2000,
+            });
             return;
         }
 
-        if (checkPlacementCollision(machineId, x, y, rotation, machines, connections, gridWidth, gridHeight)) return;
+        if (checkPlacementCollision(machineId, x, y, rotation, machines, connections, gridWidth, gridHeight)) {
+            toaster.create({
+                title: '放置位置与现有内容重叠',
+                type: 'warning',
+                duration: 2000,
+            });
+            return;
+        }
 
         const ms = get().modeState;
         let finalId: string = crypto.randomUUID();
-        if (ms.kind === 'BUILD' && ms.placing?.movingMachineBackup) {
-            finalId = ms.placing.movingMachineBackup.id;
+        // 长按拾取后的落位：拾取时已拍快照（机器摘除前），此处不再拍，避免双重快照
+        const backup = ms.kind === 'BUILD' ? ms.placing?.movingMachineBackup : undefined;
+        if (backup) {
+            finalId = backup.id;
+        } else {
+            // 快照在真正写入前拍摄（越界/碰撞的早期 return 不产生空转撤销步）
+            get().takeSnapshot();
         }
 
         const newMachine: PlacedMachine = {

@@ -34,6 +34,20 @@ const encode = (data: { machines: PlacedMachine[]; connections: Connection[] }):
     // Compute bounding box for position normalization
     const bb = getBoundingBox(machines, connections);
 
+    // 格式上限校验：坐标/步数为 1 字节，超限会 mod-256 截断导致往返变形 → 拒绝生成
+    if (machines.length > 0xFFFF || connections.length > 0xFFFF) {
+        throw new Error('实体数量超出分享格式上限');
+    }
+    const maxCoord = Math.max(
+        ...machines.map((m) => Math.max(m.x - bb.minX, m.y - bb.minY)),
+        ...connections.flatMap((c) => c.path.map((p) => Math.max(p.x - bb.minX, p.y - bb.minY))),
+        0,
+    );
+    const maxSteps = Math.max(...connections.map((c) => c.path.length - 1), 0);
+    if (maxCoord > 255 || maxSteps > 255) {
+        throw new Error('蓝图尺寸超出分享格式上限（256 格）');
+    }
+
     const out: number[] = [];
     const writeU16 = (v: number) => { out.push((v >> 8) & 0xFF, v & 0xFF); };
 
@@ -79,27 +93,49 @@ const encode = (data: { machines: PlacedMachine[]; connections: Connection[] }):
     return new Uint8Array(out);
 };
 
+/** 实体数量上限（防御恶意/损坏输入：防止 crypto.randomUUID 被 0xFFFF 次循环调用卡死） */
+const MAX_ENTITIES = 4096;
+/** 单条连线最大步数（防御恶意输入） */
+const MAX_STEPS = 2048;
+
 const decode = (bytes: Uint8Array): DecodedBlueprint => {
     let off = 0;
 
+    const fail = (msg: string): never => {
+        throw new Error(`分享数据解析失败: ${msg}`);
+    };
+
     const readU16 = (): number => {
+        if (off + 2 > bytes.length) fail('数据截断');
         const v = (bytes[off] << 8) | bytes[off + 1];
         off += 2;
         return v;
     };
 
+    const readByte = (): number => {
+        if (off >= bytes.length) fail('数据截断');
+        return bytes[off++];
+    };
+
     // Machines: each = 3 bytes ID + 1 byte x + 1 byte y + 1 byte rotation
     const machineCount = readU16();
+    if (machineCount > MAX_ENTITIES) fail(`机器数量超上限 ${machineCount}`);
     const machines: PlacedMachine[] = [];
     for (let i = 0; i < machineCount; i++) {
+        if (off + 3 > bytes.length) fail('数据截断');
         const machineId = String.fromCharCode(bytes[off], bytes[off + 1], bytes[off + 2]);
         off += 3;
+        const x = readByte();
+        const y = readByte();
+        const rotation = readByte();
+        // rotation 必须为 0~3：非法值会让 cfg.mask4[rotation] 为 undefined，随后合并掩码时崩溃
+        if (rotation > 3) fail(`非法旋转值 ${rotation}`);
         machines.push({
             id: crypto.randomUUID(),
             machineId,
-            x: bytes[off++],
-            y: bytes[off++],
-            rotation: bytes[off++] as Direction
+            x,
+            y,
+            rotation: rotation as Direction,
         });
     }
 
@@ -116,20 +152,23 @@ const decode = (bytes: Uint8Array): DecodedBlueprint => {
 
     // Connections
     const connCount = readU16();
+    if (connCount > MAX_ENTITIES) fail(`连线数量超上限 ${connCount}`);
     const connections: Connection[] = [];
     for (let i = 0; i < connCount; i++) {
-        const header = bytes[off++];
+        const header = readByte();
         const tailFacing = ((header >> 2) & 3) as Direction;
         const headFacing = (header & 3) as Direction;
         const portType = (header >> 5) & 1 ? 'Liquid' as const : 'Solid' as const;
-        const tx = bytes[off++];
-        const ty = bytes[off++];
-        const steps = bytes[off++];
+        const tx = readByte();
+        const ty = readByte();
+        const steps = readByte();
+        if (steps > MAX_STEPS) fail(`连线步数超上限 ${steps}`);
 
         const path: Point[] = [{ x: tx, y: ty }];
         let cx = tx, cy = ty;
 
         const dirBytes = Math.ceil(steps * 2 / 8);
+        if (off + dirBytes > bytes.length) fail('数据截断');
         for (let s = 0; s < steps; s++) {
             const byteIdx = Math.floor(s * 2 / 8);
             const bitShift = 6 - ((s * 2) % 8);

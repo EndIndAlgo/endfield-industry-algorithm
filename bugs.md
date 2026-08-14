@@ -1,5 +1,60 @@
 # Bugs
 
+## 📋 全项目审查（2026-07-17 渲染/碰撞/数据/交互四路并行审查 → 修复）
+
+> 四路只读审查（渲染与场景同步 / 碰撞与寻路 / 数据模型与同步 / 交互与手感）
+> 共确认 P1×9、P2×15，另核销若干疑似项。按"连线崩溃 → 历史快照 → 持久化 → 渲染 → 交互"顺序修复。
+
+### 连线 / 碰撞 ✅ 已修复
+- **updatePreview 空引用崩溃**：点击已被同向连线占用的输出口 → `checkStartOverlap` 过滤全部端口 → `bestResult!` 读 null 抛 TypeError（每次 mousemove 重复触发）。加 null 兜底取消连线 + 回归测试
+- **commitBatchMove 连线不检测机器碰撞**：批量移动/展平复制的连线可落进机器格。对 placedConns 路径格加机器位阻挡检测（掩码位语义保留"液管穿固体物流器"例外）
+- **单格连线拆分丢失**：面对面机器产生的 `path=[cell]` 连线被交叉时 `splitConnectionAt` 返回 `[]` 被整体移除。commitConnection/commitBatchMove 拆分改为"空结果保留原样"
+- **子蓝图只读守卫失效**：`startConnecting` 用 1×1 判定端口归属（恒不命中）→ 后代输出口可起线；`updatePreview` 可吸附后代输入口；wire.onTap 无归属守卫。三处改为 findMachineAt + isViewingOwn
+- **蓝图占位缓存过期**：`childOccupancyCache` 按 CommittedNode 键控，编辑嵌套后代后祖先引用不变 → 命中过期占用格。改为按 doc 引用 + childNodeId 键控
+
+### 历史快照 ✅ 已修复
+- **批量移动 undo 删内容**：快照拍在 `startBatchMove` 摘除移动件之后，undo 恢复出"移动件消失"态。takeSnapshot 支持 override，commitBatchMove 以"移动前完整布局"入栈
+- **双重快照**：commitBatchMove 外层 modeHandlers 与内部各拍一次 → undo 需按两次。统一收口：快照全部移入 slice 内、真正写入前拍摄（addMachine/commitConnection/deleteSelected/commitBatchMove），事件层不再拍
+- **失败操作空转撤销步**：碰撞/越界的 addMachine、commitBatchMove、commitConnection 不再产生与当前状态相同的快照
+- **拾取+放置双重快照**：拾取时拍一次（机器摘除前），addMachine 识别 movingMachineBackup 跳过拍摄 → 一次撤销回到原位
+- **网格尺寸不进快照**：缩小网格删除越界机器后 undo 只还原内容。HistorySnapshot 纳入 gridWidth/gridHeight，undo/redo 连带还原
+
+### 持久化 / 真相源 ✅ 已修复
+- **loadDoc 浅校验白屏**：字段缺失/被篡改的 doc 通过校验后在 findRoots 等处抛异常。改为深度结构校验（节点/机器/连线/childRef/悬空引用），不合格整体回退空文档
+- **saveDoc 静默失败**：配额满/隐私模式时提示"保存成功"但刷新即丢。saveDoc 返回 boolean，所有 doc 变更路径失败时 toast
+- **刷新/关闭无离开确认**：未保存的检出修改随刷新丢失。beforeunload + isCheckoutDirty
+- **分享解码无校验**：非法 rotation（>3）注入后 mask4[rotation] 为 undefined 崩溃；截断输入产生 NaN 坐标。解码加边界检查/rotation 范围/实体上限，抛错由 parseShareUrl 捕获
+- **分享编码 1 字节截断**：蓝图跨距 >256 格时坐标 mod-256 截断。编码前检测超限 → 拒绝生成 + toast
+- **删除当前蓝图后保存静默失效**：无 viewing 节点时 addMachine 可放置但保存链路 no-op。保存时无 viewing → loadGame 落为新蓝图
+- **isCheckoutDirty 不比较网格尺寸 / 顺序敏感**：纯改网格不触发离开确认；批量移动取消改变顺序误报脏。脏检测补网格尺寸比较 + isContentEqual 按 id 排序
+- **loadBlueprint 不恢复网格尺寸**：切蓝图后画布网格停留在旧尺寸。loadBlueprint 恢复 node.gridW/gridH
+- **重复引用同一子蓝图**：fork 保存丢重复实例。startInsertChild 拒绝已直接引用的重复导入（多实例用展平复制）
+
+### 渲染 ✅ 已修复
+- **attach 竞态误伤新一代**：preload 后 gen 失配走 `cleanup()` 销毁新一代共享状态（StrictMode）。改为与其它分支一致只丢弃本地 app
+- **液体连线压住 pbr 管道桥**：connectionLiquidLayer 位于 machineLayer 之上，液体线盖住桥体/机器端口。两层连线都移到机器层之下（与掩码 z 序语义一致）
+- **Ghost 供电范围未旋转**：2×3 机器旋转成 3×2 后范围框错位。改用旋转后尺寸
+- **hover 标签重建后消失**：供电/选中变化重建动态子元素后标签隐藏且同 id 短路不重显。同 id 命中时显式置可见
+
+### 交互 / 手感 ✅ 已修复
+- **DEVICE_SELECT 拖拽已选机器不移动**：迁移丢失，仅 M 键可用。按下已选机器 + 6px 阈值 → startBatchMove；未越阈值保留点击/Shift 反选
+- **BLUEPRINT_SELECT 无法拖拽移动子蓝图**：commitMove 成死代码。按住选中子蓝图拖动 → BLUEPRINT_MOVE(isInserting=false)，moveAnchor 存抓取偏移，校验排除自身展平内容，松手 commitMove
+- **多格机器 1×1 命中**：BLUEPRINT_SELECT 点击多格机器非左上格不选中。改 findMachineAt 全占地命中
+- **快捷键无聚焦守卫**：对话框输入时 E/Q/F/Ctrl+Z 误触模式/删除。输入框聚焦时屏蔽全局快捷键（两处 hook）
+- **keydown e.repeat 抖动**：按住 X/B/R 高频翻转/连续旋转。e.repeat 跳过
+- **M/Ctrl+C 依赖 hover**：指针在画布外静默失效。去掉 hover 前提
+- **setMode 丢拾取备份**：工具栏 E/Q/X 覆盖 modeState 丢弃 movingMachineBackup。setMode 前置还原
+- **addMachine 静默失败**：碰撞/越界无反馈。加 warning toast
+- **点击空白不能清空选区**：只能 Esc 重进。单击空白格（无移动/无命中/非 Shift）清空选区
+- **clampPan 非对称**：高缩放下无法平移到网格右/下边缘。改为正负对称 ±2 倍网格
+- **中键平移无光标**：`.panning` 类无样式。补 grabbing 光标
+
+### 核实为设计意图（未修改）
+- 后代机器不做 alpha 淡化（用无端口/无缺电图标表达只读，与 CLAUDE.md 一致）
+- 机器颜色 alpha 0.3/0.35 被渲染固定 0.7 取代（保证可读性）
+- 机器 cullArea 不随 machineId/rotation 变化（当前语义下不可变，不触发）
+- 历史快照不去重、撤销不含视口、Gas 未实现——见 ARCHITECTURE.md 已知限制
+
 ## 📋 架构收敛重构（2026-07-16 审查 → 修复）
 
 > 蓝图树重构（99b9153）与 PixiJS 迁移（ce6d019 起）的专项审查发现，

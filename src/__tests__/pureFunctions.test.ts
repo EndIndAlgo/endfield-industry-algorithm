@@ -932,3 +932,86 @@ describe('ConnectionRenderer.ghostPathPoints 批量移动虚影折线', () => {
         expect(pts).toEqual([]);
     });
 });
+
+// ======================================================================
+// 分享解码严格校验（恶意/损坏输入不得崩溃、不得注入非法 rotation）
+// ======================================================================
+describe('shareUtils decode 严格校验', () => {
+    it('非法 rotation 被拒绝（返回 null 而非注入崩溃数据）', async () => {
+        const { parseShareUrl } = await import('@/utils/shareUtils');
+        // 1 台机器：ID "lbr" + x=0 + y=0 + rotation=4（非法）
+        const bytes = new Uint8Array([
+            0x00, 0x01,       // machineCount = 1
+            0x6c, 0x62, 0x72, // "lbr"
+            0x00, 0x00, 0x04, // x, y, rotation=4
+            0x00, 0x00,       // connCount = 0
+        ]);
+        const toB64 = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_');
+        window.history.replaceState({}, '', `${window.location.pathname}?bp=${toB64(bytes)}`);
+        const result = await parseShareUrl();
+        expect(result).toBeNull();
+        window.history.replaceState({}, '', window.location.pathname);
+    });
+
+    it('截断数据被拒绝（不产生 NaN 坐标）', async () => {
+        const { parseShareUrl } = await import('@/utils/shareUtils');
+        const bytes = new Uint8Array([0x00, 0x02]); // 声称 2 台机器，但无后续字节
+        const toB64 = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_');
+        window.history.replaceState({}, '', `${window.location.pathname}?bp=${toB64(bytes)}`);
+        const result = await parseShareUrl();
+        expect(result).toBeNull();
+        window.history.replaceState({}, '', window.location.pathname);
+    });
+});
+
+// ======================================================================
+// loadDoc 深度校验（字段缺失/损坏的 doc 回退为空文档而非启动白屏）
+// ======================================================================
+describe('persist loadDoc 深度校验', () => {
+    it('节点缺少 children/machines 数组 → 返回 null', async () => {
+        const { loadDoc } = await import('@/domain/persist');
+        localStorage.setItem('zmd_doc_v1', JSON.stringify({
+            version: 1,
+            nodes: {
+                bad: { nodeId: 'bad', name: 'x', gridW: 24, gridH: 24, machines: 'oops', connections: [], children: [] },
+            },
+        }));
+        expect(loadDoc()).toBeNull();
+        localStorage.removeItem('zmd_doc_v1');
+    });
+
+    it('悬空 childRef（引用不存在的节点）→ 返回 null', async () => {
+        const { loadDoc } = await import('@/domain/persist');
+        localStorage.setItem('zmd_doc_v1', JSON.stringify({
+            version: 1,
+            nodes: {
+                parent: {
+                    nodeId: 'parent', name: 'x', gridW: 24, gridH: 24,
+                    machines: [], connections: [],
+                    children: [{ childNodeId: 'ghost', x: 0, y: 0 }],
+                },
+            },
+        }));
+        expect(loadDoc()).toBeNull();
+        localStorage.removeItem('zmd_doc_v1');
+    });
+
+    it('合法文档正常加载', async () => {
+        const { loadDoc } = await import('@/domain/persist');
+        localStorage.setItem('zmd_doc_v1', JSON.stringify({
+            version: 1,
+            nodes: {
+                root: {
+                    nodeId: 'root', name: 'x', gridW: 24, gridH: 24,
+                    machines: [{ id: 'm1', machineId: 'lbr', x: 1, y: 2, rotation: 0 }],
+                    connections: [{ id: 'c1', tailFacing: 1, headFacing: 1, path: [{ x: 0, y: 0 }], portType: 'Solid' }],
+                    children: [],
+                },
+            },
+        }));
+        const doc = loadDoc();
+        expect(doc).not.toBeNull();
+        expect(doc!.nodes.root.machines).toHaveLength(1);
+        localStorage.removeItem('zmd_doc_v1');
+    });
+});

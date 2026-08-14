@@ -130,7 +130,11 @@ export function canInsertChild(doc: FactoryDoc, parentId: string, childId: strin
 
 /** 当前节点内容与 doc 已提交内容是否一致（脏检测，供离开确认使用） */
 export function isContentEqual(a: NodeContent, b: NodeContent): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  // 按 id 稳定排序后比较：批量移动取消会改变数组顺序，顺序不应影响脏判定
+  const stable = <T extends { id: string }>(arr: T[]): T[] =>
+    [...arr].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  return JSON.stringify(stable(a.machines)) === JSON.stringify(stable(b.machines))
+    && JSON.stringify(stable(a.connections)) === JSON.stringify(stable(b.connections));
 }
 
 // ── 提交 ──

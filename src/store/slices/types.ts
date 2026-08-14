@@ -6,6 +6,9 @@ export interface HistorySnapshot {
     connections: Connection[];
     /** 已提交文档（不可变更新，快照保留旧引用，结构共享零拷贝） */
     doc: FactoryDoc;
+    /** 网格尺寸随快照恢复（缩小网格会删越界内容，undo 需连带还原尺寸） */
+    gridWidth: number;
+    gridHeight: number;
 }
 
 export interface CanvasSlice {
@@ -58,7 +61,8 @@ export interface HistorySlice {
     history: { past: HistorySnapshot[]; future: HistorySnapshot[] };
     undo: () => void;
     redo: () => void;
-    takeSnapshot: () => void;
+    /** override 用于批量移动：快照需捕获移动前的完整布局（移动件已被临时摘除） */
+    takeSnapshot: (override?: { machines?: PlacedMachine[]; connections?: Connection[] }) => void;
 }
 
 export interface BlueprintSlice {

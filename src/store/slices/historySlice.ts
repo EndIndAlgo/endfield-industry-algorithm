@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { HistorySlice, GameState, HistorySnapshot } from './types';
 import { saveDoc } from '@/domain/persist';
+import { toaster } from '@/utils/toaster';
 
 export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> = (set, get) => ({
     history: {
@@ -8,12 +9,14 @@ export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> =
         future: []
     },
 
-    takeSnapshot: () => {
-        const { machines, connections, history, doc } = get();
+    takeSnapshot: (override) => {
+        const { machines, connections, history, doc, gridWidth, gridHeight } = get();
         const snapshot: HistorySnapshot = {
-            machines,
-            connections,
+            machines: override?.machines ?? machines,
+            connections: override?.connections ?? connections,
             doc,
+            gridWidth,
+            gridHeight,
         };
         const maxHistory = 50;
         const past = [...history.past, snapshot];
@@ -42,20 +45,26 @@ export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> =
             machines: get().machines,
             connections: get().connections,
             doc: get().doc,
+            gridWidth: get().gridWidth,
+            gridHeight: get().gridHeight,
         };
 
         set({
             machines: previous.machines,
             connections: previous.connections,
             doc: previous.doc,
+            gridWidth: previous.gridWidth,
+            gridHeight: previous.gridHeight,
             history: {
                 past: newPast,
                 future: [currentSnapshot, ...history.future]
             }
         });
 
-        // doc 是唯一持久真相源：undo 恢复到旧 doc 后同步落盘
-        saveDoc(previous.doc);
+        // doc 是唯一持久真相源：undo 恢复到旧 doc 后同步落盘；失败给用户可见提示
+        if (!saveDoc(previous.doc)) {
+            toaster.create({ title: '撤销后保存失败：本地存储不可用或已满', type: 'warning', duration: 4000 });
+        }
     },
 
     redo: () => {
@@ -71,18 +80,24 @@ export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> =
             machines: get().machines,
             connections: get().connections,
             doc: get().doc,
+            gridWidth: get().gridWidth,
+            gridHeight: get().gridHeight,
         };
 
         set({
             machines: next.machines,
             connections: next.connections,
             doc: next.doc,
+            gridWidth: next.gridWidth,
+            gridHeight: next.gridHeight,
             history: {
                 past: [...history.past, currentSnapshot],
                 future: newFuture
             }
         });
 
-        saveDoc(next.doc);
+        if (!saveDoc(next.doc)) {
+            toaster.create({ title: '重做后保存失败：本地存储不可用或已满', type: 'warning', duration: 4000 });
+        }
     },
 });

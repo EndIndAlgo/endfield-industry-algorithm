@@ -142,9 +142,27 @@ export default function App() {
     }
   }, [saveCurrentBlueprint]);
 
+  // ── 刷新/关闭确认：未保存的检出修改仅存于内存，离开即丢失 ──
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (useGameStore.getState().isCheckoutDirty()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   // ── 全局快捷键 ──
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 输入框/可编辑元素聚焦时屏蔽全局快捷键（保存命名等场景，防止 Ctrl+Z 误撤销画布操作）
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
         e.preventDefault();
         undo();
@@ -186,8 +204,13 @@ export default function App() {
       });
       setPendingSaveData(null);
     } else {
-      // 无选区 → 另存为
-      saveCurrentBlueprint(name);
+      // 无 viewing 节点（如删除当前蓝图后继续编辑）→ 把工作视图内容落为新蓝图节点
+      const { currentViewingNodeId, machines, connections, gridWidth, gridHeight, loadGame: lg } = useGameStore.getState();
+      if (!currentViewingNodeId) {
+        lg(machines, connections, gridWidth, gridHeight, null, name);
+      } else {
+        saveCurrentBlueprint(name);
+      }
       toaster.create({
         title: '蓝图已创建',
         type: 'success',

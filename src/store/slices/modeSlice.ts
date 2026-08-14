@@ -9,6 +9,14 @@ export const createModeSlice: StateCreator<GameState, [], [], ModeSlice> = (set,
     modeState: defaultModeState,
 
     setMode: (kind) => {
+        // 长按拾取中的机器先归还：setMode 覆盖 modeState 会丢弃 movingMachineBackup
+        // （与 selectMachine 的还原守卫保持一致，避免工具栏切换模式导致机器消失）
+        const ms = get().modeState;
+        if (ms.kind === 'BUILD' && ms.placing?.movingMachineBackup) {
+            set(state => ({
+                machines: [...state.machines, ms.placing!.movingMachineBackup!],
+            }));
+        }
         switch (kind) {
             case 'BUILD':
                 set({ modeState: { kind: 'BUILD', placing: null } });

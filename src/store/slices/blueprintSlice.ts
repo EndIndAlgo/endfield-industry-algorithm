@@ -50,8 +50,19 @@ export function discardPendingInsertFork(
     if (!pendingInsertForks.delete(nodeId)) return;
     const { doc } = get();
     const nextDoc = deleteNode(doc, nodeId);
-    saveDoc(nextDoc);
+    persistOrToast(nextDoc);
     set({ doc: nextDoc });
+}
+
+/** 落盘失败（配额满/隐私模式）时给用户可见提示，避免"提示保存成功但刷新即丢" */
+function persistOrToast(nextDoc: import('@/domain/doc').FactoryDoc): void {
+    if (!saveDoc(nextDoc)) {
+        toaster.create({
+            title: '保存失败：本地存储不可用或已满',
+            type: 'warning',
+            duration: 4000,
+        });
+    }
 }
 
 export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlice> = (set, get) => ({
@@ -69,7 +80,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             connections: [],
         });
         const nextDoc = { ...doc, nodes: { ...doc.nodes, [node.nodeId]: node } };
-        saveDoc(nextDoc);
+        persistOrToast(nextDoc);
         set({
             doc: nextDoc,
             currentViewingNodeId: node.nodeId,
@@ -93,7 +104,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         // 未被共享（含根节点）：原地提交，nodeId 不变
         if (refCount(doc, currentViewingNodeId) <= 1) {
             const nextDoc = commitNode(doc, currentViewingNodeId, content, name, gridWidth, gridHeight);
-            saveDoc(nextDoc);
+            persistOrToast(nextDoc);
             set({ doc: nextDoc });
             return;
         }
@@ -115,7 +126,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             }
         }
 
-        saveDoc(nextDoc);
+        persistOrToast(nextDoc);
         set({ doc: nextDoc });
         get().loadBlueprint(newNodeId);
     },
@@ -145,6 +156,9 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             currentAncestorPath: findAncestorPath(get().doc, nodeId),
             machines: viewingMachines,
             connections: viewingConnections,
+            // 网格尺寸随蓝图恢复（否则一直停留在上一个蓝图的尺寸，越界机器无法放置/保存）
+            gridWidth: node.gridW,
+            gridHeight: node.gridH,
             modeState: { kind: 'BUILD', placing: null },
             history: { past: [], future: [] },
         });
@@ -156,6 +170,20 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
 
     startInsertChild: (nodeId) => {
         const { doc, currentViewingNodeId } = get();
+
+        // 已直接引用过同一子蓝图 → 拒绝重复导入（fork 保存只重指一条引用，
+        // 重复实例会在 fork 时丢失；需要多实例时用"展平复制"）
+        if (currentViewingNodeId) {
+            const viewing = getNode(doc, currentViewingNodeId);
+            if (viewing?.children.some((c) => c.childNodeId === nodeId)) {
+                toaster.create({
+                    title: '当前蓝图已引用该子蓝图，如需第二份请使用展平复制',
+                    type: 'warning',
+                    duration: 3000,
+                });
+                return;
+            }
+        }
 
         // 引用自己：fork 出一份副本再引用（写时复制语义，避免成环）。
         // 副本登记进 pendingInsertForks，取消插入时清理。
@@ -171,7 +199,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
                     source.gridW,
                     source.gridH,
                 );
-                saveDoc(forkedDoc);
+                persistOrToast(forkedDoc);
                 set({ doc: forkedDoc });
                 pendingInsertForks.add(newNodeId);
                 targetId = newNodeId;
@@ -238,7 +266,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         get().takeSnapshot();
         const nextDoc = addChild(doc, currentViewingNodeId, childNodeId, ox, oy);
         pendingInsertForks.delete(childNodeId);
-        saveDoc(nextDoc);
+        persistOrToast(nextDoc);
         set({ doc: nextDoc, modeState: { kind: 'BUILD', placing: null } });
         get().syncStoreFromViewing();
     },
@@ -294,7 +322,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
 
         get().takeSnapshot();
         const nextDoc = moveChild(doc, currentViewingNodeId, nodeId, ox, oy);
-        saveDoc(nextDoc);
+        persistOrToast(nextDoc);
         set({ doc: nextDoc, modeState: { kind: 'BUILD', placing: null } });
         get().syncStoreFromViewing();
     },
@@ -309,7 +337,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         if (refCount(nextDoc, nodeId) === 0) {
             nextDoc = deleteNode(nextDoc, nodeId);
         }
-        saveDoc(nextDoc);
+        persistOrToast(nextDoc);
         set({ doc: nextDoc });
         get().syncStoreFromViewing();
     },
@@ -320,7 +348,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
 
         get().takeSnapshot();
         const nextDoc = deleteNode(doc, nodeId);
-        saveDoc(nextDoc);
+        persistOrToast(nextDoc);
         set({
             doc: nextDoc,
             ...(currentViewingNodeId === nodeId
@@ -371,10 +399,13 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         const node = getNode(doc, currentViewingNodeId);
         const content = _ownContent(get, currentViewingNodeId);
         if (!node || !content) return false;
-        return !isContentEqual(
+        const contentChanged = !isContentEqual(
             { machines: content.machines, connections: content.connections },
             { machines: node.machines, connections: node.connections },
         );
+        // 网格尺寸也是提交内容的一部分（gridW/gridH 随保存写入 doc）
+        const gridChanged = get().gridWidth !== node.gridW || get().gridHeight !== node.gridH;
+        return contentChanged || gridChanged;
     },
 
     // ── 兼容旧接口（分享导入 / 选区另存）──
@@ -399,7 +430,7 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         };
         const { doc } = get();
         const nextDoc = { ...doc, nodes: { ...doc.nodes, [node.nodeId]: nextNode } };
-        saveDoc(nextDoc);
+        persistOrToast(nextDoc);
 
         set({
             doc: nextDoc,
