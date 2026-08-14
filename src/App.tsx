@@ -2,10 +2,9 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Toaster, Toast } from '@chakra-ui/react';
 import { useGameStore } from '@/store/gameStore';
 import { useChineseConverter } from '@/hooks/useChineseConverter';
-import { clearLegacyData } from '@/utils/storage';
-import { blueprintLibrary } from '@/engine';
 import { parseShareUrl } from '@/utils/shareUtils';
 import { getBoundingBox } from '@/utils/grid';
+import { findRoots, getNode } from '@/domain/doc';
 import { DEFAULT_CONTENT_PADDING } from '@/config/constants';
 import { toaster } from '@/utils/toaster';
 import { PixiGrid } from '@/components/PixiGrid';
@@ -71,10 +70,8 @@ export default function App() {
       return;
     }
 
-    // 清理旧格式数据（引擎已自动加载 registry）
-    clearLegacyData();
-    // 恢复上次编辑的蓝图
-    const roots = blueprintLibrary.findRoots();
+    // 恢复上次编辑的蓝图（doc 已随 store 初始化从 localStorage 加载）
+    const roots = findRoots(useGameStore.getState().doc);
     if (roots.length > 0) {
       useGameStore.getState().loadBlueprint(roots[0]);
       setUiView('editor');
@@ -90,9 +87,9 @@ export default function App() {
   // ── 保存逻辑 ──
   const handleTriggerSave = useCallback(() => {
     const store = useGameStore.getState();
-    const { machines, connections, modeState, currentViewingNodeId, blueprintRegistry } = store;
+    const { machines, connections, modeState, currentViewingNodeId, doc } = store;
 
-    // 有选区 → 提取选区数据另存（仍使用旧的 saveBlueprint 流程）
+    // 有选区 → 提取选区数据另存为新蓝图
     const selMachineIds = modeState.kind === 'DEVICE_SELECT' ? modeState.selectedMachineIds : [];
     const selConnectionIds = modeState.kind === 'DEVICE_SELECT' ? modeState.selectedConnectionIds : [];
 
@@ -128,7 +125,7 @@ export default function App() {
 
     // 无选区 → 保存当前蓝图
     if (currentViewingNodeId) {
-      const viewingName = blueprintRegistry[currentViewingNodeId]?.name;
+      const viewingName = getNode(doc, currentViewingNodeId)?.name;
       // 未命名或默认名 → 弹出命名对话框
       if (!viewingName || viewingName === '未命名蓝图') {
         setIsSaveDialogOpen(true);

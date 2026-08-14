@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useGameStore } from '@/store/gameStore';
-import { blueprintLibrary } from '@/engine';
+import { createEmptyDoc, findRoots, refCount } from '@/domain/doc';
 import type { PlacedMachine, Connection, ModeState } from '@/types';
 
 /** 创建一台测试用的 1x1 机器（物流桥，不占大空间） */
@@ -398,7 +398,7 @@ describe('blueprintSlice (蓝图树)', () => {
       gridWidth: 24, gridHeight: 24,
       history: { past: [], future: [] },
       hoverPosFrac: null,
-      blueprintRegistry: {},
+      doc: createEmptyDoc(),
       currentViewingNodeId: null,
       currentAncestorPath: [],
     });
@@ -409,9 +409,9 @@ describe('blueprintSlice (蓝图树)', () => {
     expect(nodeId).toBeTruthy();
     const s = useGameStore.getState();
     expect(s.currentViewingNodeId).toBe(nodeId);
-    expect(s.blueprintRegistry[nodeId]).toBeDefined();
-    expect(s.blueprintRegistry[nodeId].name).toBe('未命名蓝图');
-    expect(s.blueprintRegistry[nodeId].version).toBe(1);
+    expect(s.doc.nodes[nodeId]).toBeDefined();
+    expect(s.doc.nodes[nodeId].name).toBe('未命名蓝图');
+    expect(s.doc.nodes[nodeId].version).toBe(1);
   });
 
   it('createBlueprint 后 machines/connections 为空', () => {
@@ -453,7 +453,7 @@ describe('blueprintSlice (蓝图树)', () => {
     );
     const s = useGameStore.getState();
     expect(s.currentViewingNodeId).toBeTruthy();
-    expect(s.blueprintRegistry[s.currentViewingNodeId!]).toBeDefined();
+    expect(s.doc.nodes[s.currentViewingNodeId!]).toBeDefined();
     expect(s.machines[0].blueprintNodeId).toBe(s.currentViewingNodeId);
   });
 
@@ -461,8 +461,8 @@ describe('blueprintSlice (蓝图树)', () => {
     useGameStore.getState().createBlueprint();
     useGameStore.getState().resetGame();
     const s = useGameStore.getState();
-    // registry 保留（已保存的蓝图不丢失）
-    expect(Object.keys(s.blueprintRegistry).length).toBeGreaterThanOrEqual(1);
+    // doc 保留（已保存的蓝图不丢失）
+    expect(Object.keys(s.doc.nodes).length).toBeGreaterThanOrEqual(1);
     expect(s.currentViewingNodeId).toBeNull();
     expect(s.currentAncestorPath).toEqual([]);
     expect(s.machines).toEqual([]);
@@ -478,7 +478,7 @@ describe('ModeState & Selector (Phase 5)', () => {
       modeState: { kind: 'BUILD', placing: null },
       currentViewingNodeId: null,
       currentAncestorPath: [],
-      blueprintRegistry: {},
+      doc: createEmptyDoc(),
       machines: [],
       connections: [],
     });
@@ -504,7 +504,7 @@ describe('ModeState & Selector (Phase 5)', () => {
       modeState: {
         kind: 'BLUEPRINT_MOVE',
         childNodeId: 'test',
-        childSnapshot: { nodeId: 'test', blueprintId: 'bp', name: '', version: 1, machines: [], connections: [], children: [], ownMask: null!, childrenMask: null!, totalMask: null!, createdAt: 0, updatedAt: 0 },
+        childSummary: { nodeId: 'test', name: '', gridW: 24, gridH: 24 },
         moveAnchor: { x: 0, y: 0 },
         previewOffset: null,
         isCopying: true,
@@ -550,7 +550,7 @@ describe('蓝图树端到端流程', () => {
       gridWidth: 24, gridHeight: 24,
       history: { past: [], future: [] },
       hoverPosFrac: null,
-      blueprintRegistry: {},
+      doc: createEmptyDoc(),
       currentViewingNodeId: null,
       currentAncestorPath: [],
     });
@@ -572,20 +572,20 @@ describe('蓝图树端到端流程', () => {
     expect(s.machines[0].blueprintNodeId).toBe(nodeId);
 
     // 3. 保存：未被共享 → 原地保存，nodeId 保持不变（不产生孤儿根）
-    const rootsBefore = blueprintLibrary.findRoots();
+    const rootsBefore = findRoots(useGameStore.getState().doc);
     saveCurrentBlueprint('测试蓝图');
     s = useGameStore.getState();
     expect(s.currentViewingNodeId).toBe(nodeId);
 
-    // 4. 验证 snapshot 包含机器且已重命名
-    const saved = s.blueprintRegistry[nodeId];
+    // 4. 验证节点包含机器且已重命名
+    const saved = s.doc.nodes[nodeId];
     expect(saved).toBeDefined();
     expect(saved.machines).toHaveLength(1);
     expect(saved.machines[0].machineId).toBe('lbr');
     expect(saved.name).toBe('测试蓝图');
 
     // 5. 保存不产生新的根节点
-    expect(blueprintLibrary.findRoots()).toEqual(rootsBefore);
+    expect(findRoots(s.doc)).toEqual(rootsBefore);
   });
 
   it('完整流程：保存后再次放置机器，再次保存不丢失', () => {
@@ -608,8 +608,8 @@ describe('蓝图树端到端流程', () => {
     saveCurrentBlueprint('v2');
     expect(useGameStore.getState().currentViewingNodeId).toBe(nodeId);
 
-    // 验证 snapshot 包含两台机器且已重命名
-    const snap = useGameStore.getState().blueprintRegistry[nodeId];
+    // 验证节点包含两台机器且已重命名
+    const snap = useGameStore.getState().doc.nodes[nodeId];
     expect(snap).toBeDefined();
     expect(snap.machines).toHaveLength(2);
     expect(snap.name).toBe('v2');
@@ -631,11 +631,12 @@ describe('蓝图树端到端流程', () => {
     const parentNodeId = useGameStore.getState().currentViewingNodeId!;
 
     // 模拟 startInsertChild + commitInsert
+    const childNode = useGameStore.getState().doc.nodes[childNodeId]!;
     useGameStore.setState({
       modeState: {
         kind: 'BLUEPRINT_MOVE',
         childNodeId,
-        childSnapshot: useGameStore.getState().blueprintRegistry[childNodeId]!,
+        childSummary: { nodeId: childNodeId, name: childNode.name, gridW: childNode.gridW, gridH: childNode.gridH },
         moveAnchor: { x: 0, y: 0 },
         previewOffset: null,
         isCopying: true,
@@ -653,8 +654,8 @@ describe('蓝图树端到端流程', () => {
     expect(childMachine!.x).toBe(12); // 2 + 10
     expect(childMachine!.y).toBe(7);  // 2 + 5
 
-    // 验证：父蓝图 registry 中有 childRef
-    const parent = s.blueprintRegistry[parentNodeId];
+    // 验证：父蓝图 doc 中有 childRef
+    const parent = s.doc.nodes[parentNodeId];
     expect(parent.children).toHaveLength(1);
     expect(parent.children[0].childNodeId).toBe(childNodeId);
     expect(parent.children[0].x).toBe(10);
@@ -665,11 +666,12 @@ describe('蓝图树端到端流程', () => {
     const { createBlueprint, addMachine, saveCurrentBlueprint, loadBlueprint } = useGameStore.getState();
 
     const insertChild = (childNodeId: string, x: number, y: number) => {
+      const childNode = useGameStore.getState().doc.nodes[childNodeId]!;
       useGameStore.setState({
         modeState: {
           kind: 'BLUEPRINT_MOVE',
           childNodeId,
-          childSnapshot: useGameStore.getState().blueprintRegistry[childNodeId]!,
+          childSummary: { nodeId: childNodeId, name: childNode.name, gridW: childNode.gridW, gridH: childNode.gridH },
           moveAnchor: { x: 0, y: 0 },
           previewOffset: null,
           isCopying: true,
@@ -696,7 +698,7 @@ describe('蓝图树端到端流程', () => {
     createBlueprint();
     const parentB = useGameStore.getState().currentViewingNodeId!;
     insertChild(childNodeId, 0, 0);
-    expect(blueprintLibrary.refCount(childNodeId)).toBe(2);
+    expect(refCount(useGameStore.getState().doc, childNodeId)).toBe(2);
 
     // --- 从 A 的父链进入 C 编辑并保存 ---
     loadBlueprint(parentA);
@@ -709,21 +711,21 @@ describe('蓝图树端到端流程', () => {
     const newChildId = useGameStore.getState().currentViewingNodeId!;
     expect(newChildId).not.toBe(childNodeId);
 
-    const registry = useGameStore.getState().blueprintRegistry;
+    const nodes = useGameStore.getState().doc.nodes;
 
     // 当前父链（A）的引用重指到新版本，且保留插入位置 (5,5)
-    const aRef = registry[parentA].children.find((c) => c.childNodeId === newChildId);
+    const aRef = nodes[parentA].children.find((c) => c.childNodeId === newChildId);
     expect(aRef).toBeDefined();
     expect(aRef!.x).toBe(5);
     expect(aRef!.y).toBe(5);
 
     // 其他调用方（B）保持旧版本引用不变
-    expect(registry[parentB].children.some((c) => c.childNodeId === childNodeId)).toBe(true);
+    expect(nodes[parentB].children.some((c) => c.childNodeId === childNodeId)).toBe(true);
 
     // 旧版本内容不被本次编辑污染（只有 1 台 lbr）
-    expect(registry[childNodeId].machines).toHaveLength(1);
+    expect(nodes[childNodeId].machines).toHaveLength(1);
 
     // 新版本包含编辑后的 2 台机器
-    expect(registry[newChildId].machines).toHaveLength(2);
+    expect(nodes[newChildId].machines).toHaveLength(2);
   });
 });

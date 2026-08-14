@@ -669,53 +669,59 @@ describe('虚拟机器 & blueprintTree', () => {
         expect(isVirtualMachine('pco')).toBe(false);
     });
 
-    it('RegistryEngine.rebuildMasks 重建掩码', async () => {
-        const { RegistryEngine } = await import('@/engine/RegistryEngine');
-        const engine = new RegistryEngine();
-        const empty = RegistryEngine.createEmpty('test', 24, 24);
-        const machines: PlacedMachine[] = [
-            { id: '1', machineId: 'lbr', x: 5, y: 5, rotation: 0 },
-        ];
-        const rebuilt = engine.rebuildMasks(empty, machines, [], 24, 24);
-        expect(rebuilt.ownMask.get(5, 5)).toBeGreaterThan(0);
-        expect(rebuilt.ownMask.get(0, 0)).toBe(0);
+    it('commitNode 原地提交内容并 version+1', async () => {
+        const { createNodeWithContent, commitNode, getNode } = await import('@/domain/doc');
+        const node = createNodeWithContent('A', 24, 24, { machines: [], connections: [] });
+        const doc = { version: 1 as const, nodes: { [node.nodeId]: node } };
+        const next = commitNode(doc, node.nodeId, {
+            machines: [{ id: '1', machineId: 'lbr', x: 5, y: 5, rotation: 0 as const }],
+            connections: [],
+        }, 'A2', 24, 24);
+        const updated = getNode(next, node.nodeId)!;
+        expect(updated.machines).toHaveLength(1);
+        expect(updated.name).toBe('A2');
+        expect(updated.version).toBe(2);
     });
 
-    it('flattenBlueprint 递归展平', async () => {
-        const { flattenBlueprint } = await import('@/utils/blueprintTree');
-        const { RegistryEngine } = await import('@/engine/RegistryEngine');
-        const engine = new RegistryEngine();
-
-        const emptyMask = Mask.Uniform(24, 24, 0);
-        const childEmpty = RegistryEngine.createEmpty('子', 24, 24);
-        const childRebuilt = engine.rebuildMasks(
-            childEmpty,
-            [{ id: 'm1', machineId: 'lbr', x: 2, y: 2, rotation: 0 }], [],
-            24, 24,
-        );
-        const child: import('@/types').BlueprintSnapshot = {
-            ...childRebuilt,
-            machines: childRebuilt.machines.map(m => ({ ...m, blueprintNodeId: 'child-1' })),
+    it('flattenNode 递归展平 + 坐标累加 + 过滤虚拟机器', async () => {
+        const { createNodeWithContent, flattenNode } = await import('@/domain/doc');
+        const child = createNodeWithContent('子', 24, 24, {
+            machines: [
+                { id: 'm1', machineId: 'lbr', x: 2, y: 2, rotation: 0 as const },
+                { id: 'm2', machineId: 'sin', x: 3, y: 3, rotation: 0 as const }, // 虚拟机器应被过滤
+            ],
+            connections: [],
+        });
+        const parent = createNodeWithContent('父', 24, 24, {
+            machines: [{ id: 'm0', machineId: 'lbr', x: 0, y: 0, rotation: 0 as const }],
+            connections: [],
+        });
+        const docWithChild = {
+            version: 1 as const,
+            nodes: {
+                [child.nodeId]: child,
+                [parent.nodeId]: {
+                    ...parent,
+                    children: [{ childNodeId: child.nodeId, x: 10, y: 0 }],
+                },
+            },
         };
-
-        const parentEmpty = RegistryEngine.createEmpty('父', 24, 24);
-        const parentRebuilt = engine.rebuildMasks(
-            parentEmpty,
-            [{ id: 'm0', machineId: 'lbr', x: 0, y: 0, rotation: 0 }], [],
-            24, 24,
-        );
-        const parent: import('@/types').BlueprintSnapshot = {
-            ...parentRebuilt,
-            machines: parentRebuilt.machines.map(m => ({ ...m, blueprintNodeId: 'parent-1' })),
-            children: [{ childNodeId: 'child-1', x: 10, y: 0 }],
-            childrenMask: emptyMask.Clone(),
-            totalMask: emptyMask.Clone(),
-        };
-
-        const registry = { 'child-1': child, 'parent-1': parent };
-        const result = flattenBlueprint('parent-1', registry);
-        expect(result.machines).toHaveLength(2);
+        const result = flattenNode(docWithChild, parent.nodeId);
+        expect(result.machines).toHaveLength(2); // sin 被过滤
         const childMachine = result.machines.find(m => m.x === 12 && m.y === 2);
         expect(childMachine).toBeDefined();
+        expect(childMachine!.blueprintNodeId).toBe(child.nodeId);
+    });
+
+    it('canInsertChild 拒绝自引用与祖先引用', async () => {
+        const { createNodeWithContent, canInsertChild, addChild } = await import('@/domain/doc');
+        const a = createNodeWithContent('A', 24, 24, { machines: [], connections: [] });
+        const b = createNodeWithContent('B', 24, 24, { machines: [], connections: [] });
+        let doc = { version: 1 as const, nodes: { [a.nodeId]: a, [b.nodeId]: b } };
+        doc = addChild(doc, a.nodeId, b.nodeId, 0, 0);
+        expect(canInsertChild(doc, a.nodeId, a.nodeId)).toBe(false);   // 自引用
+        expect(canInsertChild(doc, b.nodeId, a.nodeId)).toBe(false);   // A 是 B 的祖先
+        expect(canInsertChild(doc, a.nodeId, b.nodeId)).toBe(true);    // 重复引用允许（共享）
+        expect(canInsertChild(doc, a.nodeId, 'missing')).toBe(false);
     });
 });

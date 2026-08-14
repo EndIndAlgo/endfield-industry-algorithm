@@ -1,133 +1,113 @@
 import type { StateCreator } from 'zustand';
 import type { BlueprintSlice, GameState } from './types';
-import type { PlacedMachine, Connection, BlueprintSnapshot, ModeState } from '@/types';
-import { getBoundingBox } from '@/utils/grid';
-import { blueprintLibrary, RegistryEngine } from '@/engine';
-import { syncStoreFromViewing } from '@/utils/blueprintTree';
+import type { PlacedMachine, Connection, ModeState, BlueprintSummary } from '@/types';
 import { toaster } from '@/utils/toaster';
+import {
+    DEFAULT_BLUEPRINT_NAME,
+    createEmptyDoc,
+    createNodeWithContent,
+    getNode,
+    refCount,
+    findAncestorPath,
+    canInsertChild,
+    commitNode,
+    forkCommit,
+    addChild,
+    removeChild,
+    moveChild,
+    deleteNode,
+    flattenDescendants,
+    isContentEqual,
+} from '@/domain/doc';
+import { loadDoc, saveDoc } from '@/domain/persist';
 
-/** 同步 Zustand 中的 blueprintRegistry 到引擎最新状态 */
-function _syncRegistryToStore(set: (p: Partial<GameState>) => void): void {
-    set({ blueprintRegistry: blueprintLibrary.toObject() });
-}
-
-/** 从 store 状态重建当前 viewing 的 BlueprintSnapshot */
-function _rebuildSnapshot(get: () => GameState): BlueprintSnapshot | null {
-    const { machines, connections, currentViewingNodeId } = get();
-    if (!currentViewingNodeId) return null;
-    const existing = blueprintLibrary.read(currentViewingNodeId);
-    if (!existing) return null;
-
-    const ownMachines = machines.filter((m) => m.blueprintNodeId === currentViewingNodeId);
-    const ownConnections = connections.filter((c) => c.blueprintNodeId === currentViewingNodeId);
-
-    return blueprintLibrary.rebuildMasks(
-        existing,
-        ownMachines,
-        ownConnections,
-        get().gridWidth,
-        get().gridHeight,
-    );
+/** 提取工作视图中当前 viewing 节点的自有内容 */
+function _ownContent(get: () => GameState, viewingNodeId: string | null) {
+    if (!viewingNodeId) return null;
+    const { machines, connections } = get();
+    return {
+        machines: machines.filter((m) => m.blueprintNodeId === viewingNodeId),
+        connections: connections.filter((c) => c.blueprintNodeId === viewingNodeId),
+    };
 }
 
 export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlice> = (set, get) => ({
     uiView: 'editor',
-    blueprintRegistry: blueprintLibrary.toObject(),
+    doc: loadDoc() ?? createEmptyDoc(),
     currentViewingNodeId: null,
     currentAncestorPath: [],
 
     // ── 新建蓝图 ──
 
     createBlueprint: () => {
-        const { gridWidth, gridHeight } = get();
-        const snapshot = RegistryEngine.createEmpty('未命名蓝图', gridWidth, gridHeight);
-        blueprintLibrary.save(snapshot);
-        const nodeId = snapshot.nodeId;
-
-        _syncRegistryToStore(set);
-        set({ currentViewingNodeId: nodeId, currentAncestorPath: [] });
-        get().syncStoreFromViewing();
-        return nodeId;
+        const { gridWidth, gridHeight, doc } = get();
+        const node = createNodeWithContent(DEFAULT_BLUEPRINT_NAME, gridWidth, gridHeight, {
+            machines: [],
+            connections: [],
+        });
+        const nextDoc = { ...doc, nodes: { ...doc.nodes, [node.nodeId]: node } };
+        saveDoc(nextDoc);
+        set({
+            doc: nextDoc,
+            currentViewingNodeId: node.nodeId,
+            currentAncestorPath: [],
+            machines: [],
+            connections: [],
+            modeState: { kind: 'BUILD', placing: null },
+            history: { past: [], future: [] },
+        });
+        return node.nodeId;
     },
 
-    // ── 保存蓝图（共享时 Fork 写时复制，非共享原地保存）──
+    // ── 保存蓝图（检出式提交：共享时 fork 写时复制，非共享原地提交）──
 
     saveCurrentBlueprint: (name) => {
-        const snapshot = _rebuildSnapshot(get);
-        if (!snapshot) return;
+        const { doc, currentViewingNodeId, currentAncestorPath, gridWidth, gridHeight } = get();
+        if (!currentViewingNodeId || !getNode(doc, currentViewingNodeId)) return;
 
-        // 重建掩码（内容以 store 工作副本为准）
-        const rebuild = blueprintLibrary.rebuildMasks(
-            snapshot,
-            snapshot.machines,
-            snapshot.connections,
-            get().gridWidth,
-            get().gridHeight,
-        );
-        const nodeId = rebuild.nodeId;
+        const content = _ownContent(get, currentViewingNodeId)!;
 
-        // 未被共享（含根节点）：原地保存，nodeId 不变，
-        // 避免每次保存 fork 出孤儿根导致刷新后加载过期内容
-        if (blueprintLibrary.refCount(nodeId) <= 1) {
-            blueprintLibrary.save({ ...rebuild, name }, get().gridWidth, get().gridHeight);
-            // 子蓝图内容变化 → 重算所有引用此节点的父级掩码
-            blueprintLibrary.recalcDependents(nodeId);
-            _syncRegistryToStore(set);
+        // 未被共享（含根节点）：原地提交，nodeId 不变
+        if (refCount(doc, currentViewingNodeId) <= 1) {
+            const nextDoc = commitNode(doc, currentViewingNodeId, content, name, gridWidth, gridHeight);
+            saveDoc(nextDoc);
+            set({ doc: nextDoc });
             return;
         }
 
-        // 被多个父节点共享：写时复制。
-        // 先从不含本次编辑的旧版本 fork（保持其他调用方引用不变），再把编辑写入新版本
-        const forkNodeId = blueprintLibrary.fork(nodeId, get().gridWidth, get().gridHeight);
-        if (!forkNodeId) return;
+        // 被多个父节点共享：fork 自旧版本（保持其他调用方引用不变），再写入本次编辑
+        const { doc: forkedDoc, newNodeId } = forkCommit(doc, currentViewingNodeId, content, name, gridWidth, gridHeight);
 
-        blueprintLibrary.save(
-            { ...rebuild, nodeId: forkNodeId, name },
-            get().gridWidth,
-            get().gridHeight,
-        );
-
-        const { currentAncestorPath } = get();
+        // 当前父链的引用重指到新版本（保留原插入位置）
+        let nextDoc = forkedDoc;
         const parentNodeId = currentAncestorPath.length > 0
             ? currentAncestorPath[currentAncestorPath.length - 1]
             : null;
-
-        // 更新父节点的 childRef 指向新版本
         if (parentNodeId) {
-            const parent = blueprintLibrary.read(parentNodeId);
+            const parent = getNode(nextDoc, parentNodeId);
             if (parent) {
-                // 必须在 removeChild 之前读取旧引用位置（removeChild 会替换 children 数组）
-                const oldChildRef = parent.children.find(
-                    (c) => c.childNodeId === nodeId,
-                );
-                blueprintLibrary.removeChild(parentNodeId, nodeId);
-                blueprintLibrary.addChild(
-                    parentNodeId, forkNodeId,
-                    oldChildRef?.x ?? 0,
-                    oldChildRef?.y ?? 0,
-                );
+                const oldRef = parent.children.find((c) => c.childNodeId === currentViewingNodeId);
+                nextDoc = removeChild(nextDoc, parentNodeId, currentViewingNodeId);
+                nextDoc = addChild(nextDoc, parentNodeId, newNodeId, oldRef?.x ?? 0, oldRef?.y ?? 0);
             }
         }
 
-        _syncRegistryToStore(set);
-        // 用 loadBlueprint 加载 forked 版本到 store（正确更新 blueprintNodeId）
-        get().loadBlueprint(forkNodeId);
+        saveDoc(nextDoc);
+        set({ doc: nextDoc });
+        get().loadBlueprint(newNodeId);
     },
 
-    // ── 加载蓝图 ──
+    // ── 加载蓝图（进入检出：用节点已提交内容替换工作视图）──
 
     loadBlueprint: (nodeId) => {
-        const snapshot = blueprintLibrary.read(nodeId);
-        if (!snapshot) return;
+        const node = getNode(get().doc, nodeId);
+        if (!node) return;
 
-        const ancestorPath = blueprintLibrary.findAncestorPath(nodeId);
-
-        // Fork：拷贝 snapshot 的机器/连线到 store
-        const viewingMachines: PlacedMachine[] = snapshot.machines.map((m) => ({
+        const viewingMachines: PlacedMachine[] = node.machines.map((m) => ({
             ...m,
             blueprintNodeId: nodeId,
         }));
-        const viewingConnections: Connection[] = snapshot.connections.map((c) => ({
+        const viewingConnections: Connection[] = node.connections.map((c) => ({
             ...c,
             path: c.path.map((p) => ({ ...p })),
             blueprintNodeId: nodeId,
@@ -135,9 +115,10 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
 
         set({
             currentViewingNodeId: nodeId,
-            currentAncestorPath: ancestorPath,
+            currentAncestorPath: findAncestorPath(get().doc, nodeId),
             machines: viewingMachines,
             connections: viewingConnections,
+            history: { past: [], future: [] },
         });
 
         get().syncStoreFromViewing();
@@ -146,20 +127,27 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
     // ── 子蓝图导入 ──
 
     startInsertChild: (nodeId) => {
-        const childSnapshot = blueprintLibrary.read(nodeId);
-        if (!childSnapshot) return;
+        const node = getNode(get().doc, nodeId);
+        if (!node) return;
+
+        const childSummary: BlueprintSummary = {
+            nodeId,
+            name: node.name,
+            gridW: node.gridW,
+            gridH: node.gridH,
+        };
 
         set({
             modeState: {
                 kind: 'BLUEPRINT_MOVE',
                 childNodeId: nodeId,
-                childSnapshot,
+                childSummary,
                 moveAnchor: { x: 0, y: 0 },
                 isCopying: true,
                 isInserting: true,
                 isValidPosition: true,
                 previewOffset: null,
-            } as Extract<ModeState, { kind: 'BLUEPRINT_MOVE' }>,
+            },
         });
     },
 
@@ -168,12 +156,10 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
         if (ms.kind !== 'BLUEPRINT_MOVE') return;
 
         const { childNodeId } = ms;
-        const { currentViewingNodeId } = get();
+        const { currentViewingNodeId, doc } = get();
         if (!currentViewingNodeId) return;
 
-        const added = blueprintLibrary.addChild(currentViewingNodeId, childNodeId, ox, oy);
-        if (!added) {
-            // 环防护：addChild 拒绝自引用/祖先引用，提示用户并取消放置
+        if (!canInsertChild(doc, currentViewingNodeId, childNodeId)) {
             toaster.create({
                 title: '无法插入蓝图：会形成循环引用',
                 type: 'warning',
@@ -183,103 +169,133 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
             return;
         }
 
-        _syncRegistryToStore(set);
-        set({ modeState: { kind: 'BUILD', placing: null } });
+        get().takeSnapshot();
+        const nextDoc = addChild(doc, currentViewingNodeId, childNodeId, ox, oy);
+        saveDoc(nextDoc);
+        set({ doc: nextDoc, modeState: { kind: 'BUILD', placing: null } });
         get().syncStoreFromViewing();
     },
 
     commitMove: (nodeId, ox, oy) => {
-        const { currentViewingNodeId } = get();
+        const { currentViewingNodeId, doc } = get();
         if (!currentViewingNodeId) return;
 
-        blueprintLibrary.moveChild(currentViewingNodeId, nodeId, ox, oy);
-
-        _syncRegistryToStore(set);
-        set({ modeState: { kind: 'BUILD', placing: null } });
+        get().takeSnapshot();
+        const nextDoc = moveChild(doc, currentViewingNodeId, nodeId, ox, oy);
+        saveDoc(nextDoc);
+        set({ doc: nextDoc, modeState: { kind: 'BUILD', placing: null } });
         get().syncStoreFromViewing();
     },
 
     removeChild: (nodeId) => {
-        const { currentViewingNodeId } = get();
+        const { currentViewingNodeId, doc } = get();
         if (!currentViewingNodeId) return;
 
-        blueprintLibrary.removeChild(currentViewingNodeId, nodeId);
-        // 如果引用计数归零，从引擎删除
-        if (blueprintLibrary.refCount(nodeId) === 0) {
-            blueprintLibrary.delete(nodeId);
+        get().takeSnapshot();
+        let nextDoc = removeChild(doc, currentViewingNodeId, nodeId);
+        // 引用计数归零 → 一并删除节点
+        if (refCount(nextDoc, nodeId) === 0) {
+            nextDoc = deleteNode(nextDoc, nodeId);
         }
-
-        _syncRegistryToStore(set);
+        saveDoc(nextDoc);
+        set({ doc: nextDoc });
         get().syncStoreFromViewing();
     },
 
-    // ── 导航 ──
+    deleteBlueprint: (nodeId) => {
+        const { doc, currentViewingNodeId } = get();
+        if (refCount(doc, nodeId) > 0) return;
+
+        get().takeSnapshot();
+        const nextDoc = deleteNode(doc, nodeId);
+        saveDoc(nextDoc);
+        set({
+            doc: nextDoc,
+            ...(currentViewingNodeId === nodeId
+                ? {
+                    currentViewingNodeId: null,
+                    currentAncestorPath: [],
+                    machines: [],
+                    connections: [],
+                    modeState: { kind: 'BUILD', placing: null } as ModeState,
+                }
+                : {}),
+        });
+    },
+
+    // ── 导航（BreadcrumbNav 使用；离开前由调用方确认脏状态）──
 
     navigateInto: (nodeId) => {
-        if (!blueprintLibrary.read(nodeId)) return;
-        const { currentViewingNodeId, currentAncestorPath } = get();
-        set({
-            currentAncestorPath: [...currentAncestorPath, currentViewingNodeId!],
-            currentViewingNodeId: nodeId,
-        });
-        get().syncStoreFromViewing();
+        const node = getNode(get().doc, nodeId);
+        if (!node) return;
+        get().loadBlueprint(nodeId);
     },
 
     navigateToParent: () => {
         const { currentAncestorPath } = get();
         if (currentAncestorPath.length === 0) return;
-        const parentNodeId = currentAncestorPath[currentAncestorPath.length - 1];
-        set({
-            currentViewingNodeId: parentNodeId,
-            currentAncestorPath: currentAncestorPath.slice(0, -1),
-        });
-        get().syncStoreFromViewing();
+        get().loadBlueprint(currentAncestorPath[currentAncestorPath.length - 1]);
     },
 
-    // ── 同步 store ──
+    // ── 同步工作视图 ──
 
     syncStoreFromViewing: () => {
-        const { currentViewingNodeId, machines: storeMachines, connections: storeConns } = get();
-        const viewingOwnMachines = storeMachines.filter(
-            (m) => m.blueprintNodeId === currentViewingNodeId,
-        );
-        const viewingOwnConnections = storeConns.filter(
-            (c) => c.blueprintNodeId === currentViewingNodeId,
-        );
-        const { machines, connections } = syncStoreFromViewing(
-            currentViewingNodeId,
-            blueprintLibrary.toObject(),
-            viewingOwnMachines,
-            viewingOwnConnections,
-        );
-        set({ machines, connections });
+        const { currentViewingNodeId, machines, connections, doc } = get();
+        if (!currentViewingNodeId) return;
+
+        const ownMachines = machines.filter((m) => m.blueprintNodeId === currentViewingNodeId);
+        const ownConnections = connections.filter((c) => c.blueprintNodeId === currentViewingNodeId);
+        const desc = flattenDescendants(doc, currentViewingNodeId);
+
+        set({
+            machines: [...ownMachines, ...desc.machines],
+            connections: [...ownConnections, ...desc.connections],
+        });
     },
 
-    // ── 兼容旧接口 ──
+    /** 工作视图自有内容 vs 已提交内容（离开前确认用） */
+    isCheckoutDirty: () => {
+        const { currentViewingNodeId, doc } = get();
+        const node = getNode(doc, currentViewingNodeId);
+        const content = _ownContent(get, currentViewingNodeId);
+        if (!node || !content) return false;
+        return !isContentEqual(
+            { machines: content.machines, connections: content.connections },
+            { machines: node.machines, connections: node.connections },
+        );
+    },
+
+    // ── 兼容旧接口（分享导入 / 选区另存）──
 
     loadGame: (machines, connections, gridWidth, gridHeight, _blueprintId, blueprintName) => {
-        const snapshot = RegistryEngine.createEmpty(blueprintName, gridWidth, gridHeight);
-        const nodeId = snapshot.nodeId;
+        const node = createNodeWithContent(blueprintName, gridWidth, gridHeight, {
+            machines: machines.map((m) => ({ ...m, blueprintNodeId: '' })),
+            connections: connections.map((c) => ({
+                ...c,
+                path: c.path.map((p) => ({ ...p })),
+                blueprintNodeId: '',
+            })),
+        });
+        // 统一归属标记
+        const taggedMachines = node.machines.map((m) => ({ ...m, blueprintNodeId: node.nodeId }));
+        const taggedConnections = node.connections.map((c) => ({ ...c, blueprintNodeId: node.nodeId }));
 
-        const ownedMachines: PlacedMachine[] = machines.map((m) => ({
-            ...m,
-            blueprintNodeId: nodeId,
-        }));
-        const ownedConnections: Connection[] = connections.map((c) => ({
-            ...c,
-            blueprintNodeId: nodeId,
-        }));
+        const nextNode = {
+            ...node,
+            machines: taggedMachines,
+            connections: taggedConnections,
+        };
+        const { doc } = get();
+        const nextDoc = { ...doc, nodes: { ...doc.nodes, [node.nodeId]: nextNode } };
+        saveDoc(nextDoc);
 
-        const rebuilt = blueprintLibrary.rebuildMasks(snapshot, ownedMachines, ownedConnections, gridWidth, gridHeight);
-        blueprintLibrary.save(rebuilt, gridWidth, gridHeight);
-
-        _syncRegistryToStore(set);
         set({
-            machines: ownedMachines,
-            connections: ownedConnections,
+            doc: nextDoc,
+            machines: taggedMachines,
+            connections: taggedConnections,
             gridWidth,
             gridHeight,
-            currentViewingNodeId: nodeId,
+            currentViewingNodeId: node.nodeId,
             currentAncestorPath: [],
             modeState: { kind: 'BUILD', placing: null },
             history: { past: [], future: [] },
@@ -298,35 +314,4 @@ export const createBlueprintSlice: StateCreator<GameState, [], [], BlueprintSlic
     },
 
     setUiView: (view) => set({ uiView: view }),
-
-    /** @deprecated 使用 startInsertChild 替代 */
-    startInsertBlueprint: (blueprint) => {
-        const { machines: srcMachines, connections: srcConns } = blueprint.data;
-        if (srcMachines.length === 0 && srcConns.length === 0) return;
-
-        const bb = getBoundingBox(srcMachines, srcConns);
-        if (bb.width === 0 && bb.height === 0) return;
-
-        const anchor = { x: bb.minX, y: bb.minY };
-
-        const newMachines = srcMachines.map((m) => ({ ...m, id: crypto.randomUUID() }));
-        const newConnections = srcConns.map((c) => ({
-            ...c,
-            id: crypto.randomUUID(),
-            path: c.path.map((p) => ({ ...p })),
-        }));
-
-        set({
-            modeState: {
-                kind: 'MOVE_SELECTION',
-                moveAnchor: anchor,
-                movingMachinesSnapshot: newMachines,
-                movingConnectionsSnapshot: newConnections,
-                isCopying: true,
-                originSelectedMachineIds: [],
-                originSelectedConnectionIds: [],
-            },
-            uiView: 'editor',
-        });
-    },
 });

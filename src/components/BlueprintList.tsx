@@ -2,9 +2,8 @@ import { Box, Text, Flex, Heading, CloseButton, IconButton } from '@chakra-ui/re
 import { Tooltip } from '@/components/ui/tooltip';
 import { Pencil, Link, Copy, Trash2, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { type Blueprint, getBlueprints } from '@/utils/storage';
 import { useGameStore } from '@/store/gameStore';
-import { blueprintLibrary } from '@/engine';
+import { findAncestorPath, refCount } from '@/domain/doc';
 import { Icon } from '@iconify/react';
 
 interface BlueprintListProps {
@@ -16,18 +15,17 @@ interface TreeNode {
     name: string;
     version: number;
     updatedAt: number;
-    blueprintId: string;
     children: TreeNode[];
 }
 
 function buildTree(): TreeNode[] {
-    const { blueprintRegistry } = useGameStore.getState();
-    const entries = Object.values(blueprintRegistry);
+    const { doc } = useGameStore.getState();
+    const entries = Object.values(doc.nodes);
     if (entries.length === 0) return [];
 
     const childNodeIds = new Set<string>();
-    for (const snap of entries) {
-        for (const child of snap.children) {
+    for (const node of entries) {
+        for (const child of node.children) {
             childNodeIds.add(child.childNodeId);
         }
     }
@@ -44,10 +42,9 @@ function buildTree(): TreeNode[] {
             name: snapshot.name,
             version: snapshot.version,
             updatedAt: snapshot.updatedAt,
-            blueprintId: snapshot.blueprintId,
             children: snapshot.children
                 .map((c) => {
-                    const child = useGameStore.getState().blueprintRegistry[c.childNodeId];
+                    const child = useGameStore.getState().doc.nodes[c.childNodeId];
                     return child ? buildNode(child, visited) : null;
                 })
                 .filter(Boolean) as TreeNode[],
@@ -72,13 +69,12 @@ function flattenTree(nodes: TreeNode[]): TreeNode[] {
 export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
     const startInsertChild = useGameStore((s) => s.startInsertChild);
     const loadBlueprint = useGameStore((s) => s.loadBlueprint);
-    const removeChild = useGameStore((s) => s.removeChild);
+    const deleteBlueprint = useGameStore((s) => s.deleteBlueprint);
     const setUiView = useGameStore((s) => s.setUiView);
-    // 订阅 registry 变更以触发重渲染（数据来自 engine）
-    useGameStore((s) => s.blueprintRegistry);
+    // 订阅 doc 变更以触发重渲染
+    useGameStore((s) => s.doc);
     const currentViewingNodeId = useGameStore((s) => s.currentViewingNodeId);
 
-    const [oldBlueprints] = useState<Blueprint[]>(() => getBlueprints());
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState<'all' | 'root'>('all');
 
@@ -89,8 +85,9 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
 
     // 导入引用会创建 currentViewingNodeId → node 的边；
     // 当 node 是 viewing 自身或其祖先时会成环，需禁用
+    const { doc } = useGameStore.getState();
     const viewingAncestorIds = currentViewingNodeId
-        ? new Set(blueprintLibrary.findAncestorPath(currentViewingNodeId))
+        ? new Set(findAncestorPath(doc, currentViewingNodeId))
         : new Set<string>();
     const canImportRef = (nodeId: string): boolean =>
         nodeId !== currentViewingNodeId && !viewingAncestorIds.has(nodeId);
@@ -104,6 +101,15 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
     };
 
     const handleEdit = (nodeId: string) => {
+        if (nodeId === currentViewingNodeId) {
+            setUiView('editor');
+            return;
+        }
+        // 检出式：离开当前蓝图前确认未保存修改
+        if (useGameStore.getState().isCheckoutDirty()
+            && !window.confirm('当前蓝图有未保存的修改，切换蓝图将丢弃这些修改。继续？')) {
+            return;
+        }
         loadBlueprint(nodeId);
         setUiView('editor');
     };
@@ -118,12 +124,10 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
     };
 
     const handleDelete = (nodeId: string) => {
-        const refCount = blueprintLibrary.refCount(nodeId);
-        if (refCount > 0) return;
-        if (!confirm('确定要删除此蓝图吗？')) return;
-        if (currentViewingNodeId) {
-            removeChild(nodeId);
-        }
+        const doc = useGameStore.getState().doc;
+        if (refCount(doc, nodeId) > 0) return;
+        if (!confirm('确定要删除此蓝图吗？此操作不可撤销。')) return;
+        deleteBlueprint(nodeId);
     };
 
     const computeDepth = (node: TreeNode): number => {
@@ -196,8 +200,8 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
                 {displayNodes.map((node) => {
                     const depth = computeDepth(node);
                     const borderColor = borderColors[depth % borderColors.length];
-                    const refCount = blueprintLibrary.refCount(node.nodeId);
-                    const canDelete = refCount === 0;
+                    const nodeRefCount = refCount(useGameStore.getState().doc, node.nodeId);
+                    const canDelete = nodeRefCount === 0;
                     const hasChildren = node.children.length > 0;
                     const isExpanded = expanded.has(node.nodeId);
 
@@ -260,9 +264,9 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
                                                 {node.children.length} 个子蓝图
                                             </Text>
                                         )}
-                                        {refCount > 0 && (
+                                        {nodeRefCount > 0 && (
                                             <Text fontSize="xs" color="var(--gray)">
-                                                被 {refCount} 个蓝图引用
+                                                被 {nodeRefCount} 个蓝图引用
                                             </Text>
                                         )}
                                     </Flex>
@@ -303,7 +307,7 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
                                         <Copy size={16} />
                                     </IconButton>
                                 </Tooltip>
-                                <Tooltip content={canDelete ? '删除蓝图' : `被 ${refCount} 个蓝图引用，无法删除`}>
+                                <Tooltip content={canDelete ? '删除蓝图' : `被 ${nodeRefCount} 个蓝图引用，无法删除`}>
                                     <IconButton
                                         rounded="full"
                                         className="member-icon-btn"
@@ -325,12 +329,6 @@ export const BlueprintList = ({ onCreateNew }: BlueprintListProps) => {
                         </Flex>
                     );
                 })}
-
-                {oldBlueprints.length > 0 && (
-                    <Text fontSize="xs" color="var(--gray)" textAlign="center" mt={2}>
-                        旧格式蓝图已废弃，仅显示新格式蓝图
-                    </Text>
-                )}
             </Flex>
         </Box>
     );

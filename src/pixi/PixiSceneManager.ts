@@ -413,19 +413,17 @@ export class PixiSceneManager {
 
       case 'BLUEPRINT_SELECT': {
         // 子蓝图轮廓
-        if (ms.selectedChildNodeId && state.blueprintRegistry[ms.selectedChildNodeId]) {
+        if (ms.selectedChildNodeId && state.currentViewingNodeId) {
           // 找到子蓝图在当前 viewing node 中的位置
-          const viewingNode = state.currentViewingNodeId
-            ? state.blueprintRegistry[state.currentViewingNodeId]
-            : null;
+          const viewingNode = state.doc.nodes[state.currentViewingNodeId];
           const childRef = viewingNode?.children.find(
             c => c.childNodeId === ms.selectedChildNodeId,
           );
-          if (childRef) {
-            const snap = state.blueprintRegistry[ms.selectedChildNodeId];
+          const childNode = state.doc.nodes[ms.selectedChildNodeId];
+          if (childRef && childNode) {
             const outline = OverlayRenderer.createSubBlueprintOutline(
               childRef.x, childRef.y,
-              snap.totalMask.width, snap.totalMask.height,
+              childNode.gridW, childNode.gridH,
             );
             this.overlayLayer.addChild(outline);
             this.overlayGraphics.push(outline);
@@ -436,11 +434,10 @@ export class PixiSceneManager {
 
       case 'BLUEPRINT_MOVE': {
         // 蓝图移动预览
-        if (ms.previewOffset && state.blueprintRegistry[ms.childNodeId]) {
-          const snap = state.blueprintRegistry[ms.childNodeId];
+        if (ms.previewOffset && ms.childSummary) {
           const preview = OverlayRenderer.createBlueprintMovePreview(
             ms.previewOffset.x, ms.previewOffset.y,
-            snap.totalMask.width, snap.totalMask.height,
+            ms.childSummary.gridW, ms.childSummary.gridH,
           );
           this.overlayLayer.addChild(preview);
           this.overlayGraphics.push(preview);

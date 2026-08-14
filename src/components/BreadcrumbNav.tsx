@@ -6,23 +6,32 @@ import { useGameStore } from '@/store/gameStore';
 export const BreadcrumbNav: React.FC = () => {
     const currentViewingNodeId = useGameStore((s) => s.currentViewingNodeId);
     const currentAncestorPath = useGameStore((s) => s.currentAncestorPath);
-    const blueprintRegistry = useGameStore((s) => s.blueprintRegistry);
+    const doc = useGameStore((s) => s.doc);
     const loadBlueprint = useGameStore((s) => s.loadBlueprint);
 
     if (!currentViewingNodeId) return null;
 
-    const currentName = blueprintRegistry[currentViewingNodeId]?.name ?? '未命名';
+    const currentName = doc.nodes[currentViewingNodeId]?.name ?? '未命名';
 
     // 构建完整路径：[...ancestors, currentViewing]
     const pathItems = [
         ...currentAncestorPath.map((nodeId) => ({
             nodeId,
-            name: blueprintRegistry[nodeId]?.name ?? '?',
+            name: doc.nodes[nodeId]?.name ?? '?',
         })),
         { nodeId: currentViewingNodeId, name: currentName },
     ];
 
     if (pathItems.length <= 1) return null;
+
+    const handleNavigate = (nodeId: string) => {
+        // 检出式：离开当前蓝图前确认未保存修改
+        if (useGameStore.getState().isCheckoutDirty()
+            && !window.confirm('当前蓝图有未保存的修改，切换蓝图将丢弃这些修改。继续？')) {
+            return;
+        }
+        loadBlueprint(nodeId);
+    };
 
     return (
         <Flex
@@ -47,7 +56,7 @@ export const BreadcrumbNav: React.FC = () => {
                         _hover={i < pathItems.length - 1 ? { color: 'yellow.300' } : undefined}
                         onClick={() => {
                             if (i < pathItems.length - 1) {
-                                loadBlueprint(item.nodeId);
+                                handleNavigate(item.nodeId);
                             }
                         }}
                     >

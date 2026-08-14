@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { HistorySlice, GameState, HistorySnapshot } from './types';
+import { saveDoc } from '@/domain/persist';
 
 export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> = (set, get) => ({
     history: {
@@ -8,11 +9,11 @@ export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> =
     },
 
     takeSnapshot: () => {
-        const { machines, connections, history, blueprintRegistry } = get();
+        const { machines, connections, history, doc } = get();
         const snapshot: HistorySnapshot = {
             machines,
             connections,
-            blueprintRegistry: blueprintRegistry ? { ...blueprintRegistry } : undefined,
+            doc,
         };
         const maxHistory = 50;
         const past = [...history.past, snapshot];
@@ -40,18 +41,21 @@ export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> =
         const currentSnapshot: HistorySnapshot = {
             machines: get().machines,
             connections: get().connections,
-            blueprintRegistry: get().blueprintRegistry ? { ...get().blueprintRegistry } : undefined,
+            doc: get().doc,
         };
 
         set({
             machines: previous.machines,
             connections: previous.connections,
-            blueprintRegistry: previous.blueprintRegistry,
+            doc: previous.doc,
             history: {
                 past: newPast,
                 future: [currentSnapshot, ...history.future]
             }
         });
+
+        // doc 是唯一持久真相源：undo 恢复到旧 doc 后同步落盘
+        saveDoc(previous.doc);
     },
 
     redo: () => {
@@ -66,17 +70,19 @@ export const createHistorySlice: StateCreator<GameState, [], [], HistorySlice> =
         const currentSnapshot: HistorySnapshot = {
             machines: get().machines,
             connections: get().connections,
-            blueprintRegistry: get().blueprintRegistry ? { ...get().blueprintRegistry } : undefined,
+            doc: get().doc,
         };
 
         set({
             machines: next.machines,
             connections: next.connections,
-            blueprintRegistry: next.blueprintRegistry,
+            doc: next.doc,
             history: {
                 past: [...history.past, currentSnapshot],
                 future: newFuture
             }
         });
+
+        saveDoc(next.doc);
     },
 });

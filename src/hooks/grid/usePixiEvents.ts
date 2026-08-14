@@ -157,7 +157,6 @@ export function usePixiEvents(
         const gridPos = frac
           ? { x: Math.round(frac.x), y: Math.round(frac.y) }
           : callbacksRef.current.getGridPos({ clientX: e.global.x ?? 0, clientY: e.global.y ?? 0 });
-        s.takeSnapshot();
         s.commitInsert(gridPos.x, gridPos.y);
         return;
       }

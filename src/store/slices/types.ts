@@ -1,10 +1,11 @@
-import type { Point, PlacedMachine, Connection, Direction, PortType, ModeState, BlueprintRegistry } from '@/types';
+import type { Point, PlacedMachine, Connection, Direction, PortType, ModeState } from '@/types';
+import type { FactoryDoc } from '@/domain/doc';
 
 export interface HistorySnapshot {
     machines: PlacedMachine[];
     connections: Connection[];
-    /** 蓝图注册表（浅拷贝引用，undo/redo 时恢复） */
-    blueprintRegistry?: BlueprintRegistry;
+    /** 已提交文档（不可变更新，快照保留旧引用，结构共享零拷贝） */
+    doc: FactoryDoc;
 }
 
 export interface CanvasSlice {
@@ -62,10 +63,11 @@ export interface HistorySlice {
 
 export interface BlueprintSlice {
     uiView: 'list' | 'editor' | 'about' | 'settings';
-    blueprintRegistry: BlueprintRegistry;
+    /** 已提交真相源（唯一持久化对象） */
+    doc: FactoryDoc;
     currentViewingNodeId: string | null;
     currentAncestorPath: string[];
-    // 蓝图树操作
+    // 蓝图树操作（检出式：编辑在 store 工作视图，保存/导航才与 doc 交互）
     createBlueprint: () => string;
     saveCurrentBlueprint: (name: string) => void;
     loadBlueprint: (nodeId: string) => void;
@@ -73,15 +75,16 @@ export interface BlueprintSlice {
     commitInsert: (ox: number, oy: number) => void;
     commitMove: (nodeId: string, ox: number, oy: number) => void;
     removeChild: (nodeId: string) => void;
+    deleteBlueprint: (nodeId: string) => void;
     navigateInto: (nodeId: string) => void;
     navigateToParent: () => void;
     syncStoreFromViewing: () => void;
+    /** 当前工作视图与已提交内容是否不一致（离开前确认用） */
+    isCheckoutDirty: () => boolean;
     // 兼容旧接口
     loadGame: (machines: import('@/types').PlacedMachine[], connections: import('@/types').Connection[], gridWidth: number, gridHeight: number, blueprintId: string | null, blueprintName: string) => void;
     resetGame: () => void;
     setUiView: (view: 'list' | 'editor' | 'about' | 'settings') => void;
-    /** @deprecated 使用 startInsertChild 替代 */
-    startInsertBlueprint: (blueprint: { data: { machines: import('@/types').PlacedMachine[], connections: import('@/types').Connection[] } }) => void;
 }
 
 export interface GameState extends CanvasSlice, ModeSlice, MachinesSlice, ConnectionSlice, SelectionSlice, HistorySlice, BlueprintSlice {}

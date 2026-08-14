@@ -81,32 +81,15 @@ export interface Connection {
   blueprintNodeId?: string;
 }
 
-// ── 蓝图树数据模型 ──
+// ── 蓝图树数据模型（已提交节点见 domain/doc.ts 的 FactoryDoc） ──
 
-/** 子蓝图引用：父蓝图中放置的一个子蓝图实例 */
-export interface BlueprintChildRef {
-  childNodeId: string;           // → BlueprintSnapshot.nodeId
-  x: number; y: number;          // 子蓝图在父坐标系中的偏移
-}
-
-/** 蓝图快照（不可变版本） */
-export interface BlueprintSnapshot {
-  nodeId: string;                // 每次保存生成新 UUID，全局唯一
-  blueprintId: string;           // 跨版本稳定，标识"同一个蓝图"
+/** 子蓝图摘要（BLUEPRINT_MOVE 预览等只读用途） */
+export interface BlueprintSummary {
+  nodeId: string;
   name: string;
-  version: number;               // 每次保存 +1
-  machines: PlacedMachine[];     // 仅本节点直接拥有（含虚拟机器）
-  connections: Connection[];     // 仅本节点直接拥有
-  children: BlueprintChildRef[];
-  ownMask: Mask;                 // 本节点机器+连接的占用掩码
-  childrenMask: Mask;            // 所有子节点 totalMask 的 OR
-  totalMask: Mask;               // ownMask | childrenMask（不持久化，加载时重算）
-  createdAt: number;
-  updatedAt: number;
+  gridW: number;
+  gridH: number;
 }
-
-/** 全局蓝图注册表：nodeId → BlueprintSnapshot */
-export type BlueprintRegistry = Record<string, BlueprintSnapshot>;
 
 // ── 虚拟机器（蓝图对外接口引脚）──
 
@@ -196,7 +179,7 @@ export type ModeState =
   | {
       kind: 'BLUEPRINT_MOVE';
       childNodeId: string;                      // 被移动/插入的子蓝图 nodeId
-      childSnapshot: BlueprintSnapshot;          // 子蓝图快照
+      childSummary: BlueprintSummary;            // 子蓝图摘要（预览尺寸/名称）
       moveAnchor: Point;                        // 移动锚点
       previewOffset: Point | null;               // 当前预览偏移
       isCopying: boolean;                       // false=移动已有子蓝图, true=复制导入
