@@ -730,7 +730,7 @@ describe('蓝图树端到端流程', () => {
   });
 
   it('startFlattenCopy 展平目标蓝图（含后代）并进入 MOVE_SELECTION 复制态', () => {
-    const { createBlueprint, addMachine, saveCurrentBlueprint, startFlattenCopy } = useGameStore.getState();
+    const { createBlueprint, addMachine, saveCurrentBlueprint } = useGameStore.getState();
 
     const insertChild = (childNodeId: string, x: number, y: number) => {
       const childNode = useGameStore.getState().doc.nodes[childNodeId]!;
