@@ -9,7 +9,7 @@ import { preloadMachineTextures } from './TextureLoader';
 import { createModeHandlers, snapToCell, type NormalizedPointer } from './modeHandlers';
 import { getMachineConfig } from '@/config/machines';
 import { getRotatedDimensions, buildPowerGrid } from '@/utils/machineUtils';
-import { clampPan, findMachineAt } from '@/utils/grid';
+import { clampPan, findMachineAt, checkPlacementCollision } from '@/utils/grid';
 import { isViewingOwn } from '@/utils/blueprintGuard';
 import type { GameState } from '@/store/slices/types';
 import type { PlacedMachine, Connection, PortType, Point } from '@/types';
@@ -863,12 +863,30 @@ export class CanvasController {
             x: Math.round(hoverFrac.x - ms.placing.buildOffset.x),
             y: Math.round(hoverFrac.y - ms.placing.buildOffset.y),
           };
+          // 放置合法性实时检测（旧 DOM GhostPreview 的 checkPlacementCollision，迁移时丢失）：
+          // 越界/碰撞时 ghost 显示红边，给放置前反馈
+          const { width: ghostW, height: ghostH } = getRotatedDimensions(
+            config.width, config.height, ms.placing.previewRotation,
+          );
+          const isOutOfBounds = ghostPos.x < 0 || ghostPos.y < 0
+            || ghostPos.x + ghostW > state.gridWidth
+            || ghostPos.y + ghostH > state.gridHeight;
+          const isValid = !isOutOfBounds && !checkPlacementCollision(
+            ms.placing.selectedMachineId,
+            ghostPos.x,
+            ghostPos.y,
+            ms.placing.previewRotation,
+            state.machines,
+            state.connections,
+            state.gridWidth,
+            state.gridHeight,
+          );
           // 机器 ghost
           const ghost = OverlayRenderer.createGhostMachine(
             ms.placing.selectedMachineId,
             ms.placing.previewRotation,
             ghostPos,
-            true, // TODO: 碰撞检测
+            isValid,
           );
           this.overlayLayer.addChild(ghost);
           this.overlayGraphics.push(ghost);

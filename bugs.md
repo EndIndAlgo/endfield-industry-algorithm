@@ -31,6 +31,8 @@
 - **重复引用同一子蓝图**：fork 保存丢重复实例。startInsertChild 拒绝已直接引用的重复导入（多实例用展平复制）
 
 ### 渲染 ✅ 已修复
+- **机器黑边被端口盖住**：Pixi 版端口指示器贴边 px=0 且 zIndex 高于边框，1×1 物流机器（lbr/spl/mrg/iip 等）四边全是端口时 3px 黑边被整段覆盖；DOM 版端口是带边框父元素内的子元素、永远在黑边内侧。端口统一内缩 3px 到黑边内侧
+- **Ghost 放置预览丢失碰撞检测**：迁移时 isValid 硬编码 true（TODO 残留），越界/碰撞无红边反馈。恢复旧 DOM GhostPreview 的 checkPlacementCollision 实时检测，非法位置 ghost 显示红边
 - **attach 竞态误伤新一代**：preload 后 gen 失配走 `cleanup()` 销毁新一代共享状态（StrictMode）。改为与其它分支一致只丢弃本地 app
 - **液体连线压住 pbr 管道桥**：connectionLiquidLayer 位于 machineLayer 之上，液体线盖住桥体/机器端口。两层连线都移到机器层之下（与掩码 z 序语义一致）
 - **Ghost 供电范围未旋转**：2×3 机器旋转成 3×2 后范围框错位。改用旋转后尺寸

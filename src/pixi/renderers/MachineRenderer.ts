@@ -231,15 +231,19 @@ export class MachineRenderer {
     portH: number,
   ): { px: number; py: number } | null {
     const { center } = getPortCenter(p);
+    // 内缩 3px：端口指示器位于 3px 黑边内侧（DOM 版端口是带边框父元素内的子元素，
+    // 不可能盖住黑边；Pixi 版若贴边 px=0 且 zIndex 高于边框会整段盖住黑边，
+    // 1×1 物流机器四边全是端口时黑边几乎不可见）
+    const INSET = 3;
     switch (p.side) {
       case 'left':
-        return { px: 0, py: center - portH / 2 };
+        return { px: INSET, py: center - portH / 2 };
       case 'right':
-        return { px: pixW - portW, py: center - portH / 2 };
+        return { px: pixW - portW - INSET, py: center - portH / 2 };
       case 'top':
-        return { px: center - portW / 2, py: 0 };
+        return { px: center - portW / 2, py: INSET };
       case 'bottom':
-        return { px: center - portW / 2, py: pixH - portH };
+        return { px: center - portW / 2, py: pixH - portH - INSET };
       default:
         return null;
     }
